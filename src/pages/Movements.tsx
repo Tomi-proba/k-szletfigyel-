@@ -15,6 +15,13 @@ import type { Movement, Product, PurchaseLot, SaleStatus } from '../types'
 const SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
 const SALE_STATUS_OPTIONS: SaleStatus[] = ['pending', 'shipping', 'delivered']
 
+/** Search/filter values for the sale-status dropdown - a superset of
+ * SaleStatus, since a cancelled sale isn't itself a SaleStatus (see
+ * Movement.cancelled) but still needs to be searchable as one. */
+type SaleStatusFilter = SaleStatus | 'cancelled'
+const SALE_STATUS_FILTER_LABELS: Record<SaleStatusFilter, string> = { ...SALE_STATUS_LABELS, cancelled: 'Visszavonva' }
+const SALE_STATUS_FILTER_OPTIONS: SaleStatusFilter[] = [...SALE_STATUS_OPTIONS, 'cancelled']
+
 interface MovementRow {
   date: string
   productName: string
@@ -57,6 +64,11 @@ export function Movements() {
     const t = searchParams.get('tipus')
     return t === 'in' || t === 'out' ? t : ''
   })
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [saleStatusFilter, setSaleStatusFilter] = useState<'' | SaleStatusFilter>(() => {
+    const s = searchParams.get('statusz')
+    return (SALE_STATUS_FILTER_OPTIONS as string[]).includes(s ?? '') ? (s as SaleStatusFilter) : ''
+  })
   const [showDeleted, setShowDeleted] = useState(false)
   const [deleting, setDeleting] = useState<Movement | null>(null)
   const [editingVat, setEditingVat] = useState<Movement | null>(null)
@@ -73,10 +85,18 @@ export function Movements() {
       movements
         .filter((m) => m.date >= from && m.date <= to)
         .filter((m) => showDeleted || !m.deletedAt)
-        .filter((p) => !productFilter || p.productId === productFilter)
-        .filter((p) => !typeFilter || p.type === typeFilter)
+        .filter((m) => !productFilter || m.productId === productFilter)
+        .filter((m) => !typeFilter || m.type === typeFilter)
+        .filter((m) => !customerFilter || m.customerId === customerFilter)
+        .filter((m) => {
+          if (!saleStatusFilter) return true
+          // Sale status only exists on kimenő (sale) movements - searching by
+          // it should hide bejövő rows entirely, not leave them unfiltered.
+          if (m.type !== 'out') return false
+          return saleStatusFilter === 'cancelled' ? Boolean(m.cancelled) : !m.cancelled && m.saleStatus === saleStatusFilter
+        })
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt.localeCompare(a.createdAt))),
-    [movements, from, to, productFilter, typeFilter, showDeleted],
+    [movements, from, to, productFilter, typeFilter, customerFilter, saleStatusFilter, showDeleted],
   )
 
   function vatOf(m: Movement): { rate?: number; reclaimable?: boolean } {
@@ -143,7 +163,7 @@ export function Movements() {
     <div>
       <PageHeader
         title="Mozgásnapló"
-        subtitle="Összes rögzített bejövő és kimenő készletmozgás"
+        subtitle="Összes rögzített bejövő és kimenő készletmozgás - kimenő tételekre eladási státusz és vevő szerint is kereshetsz"
         actions={
           <>
             <Button variant="secondary" onClick={() => exportToExcel(`mozgasnaplo_${from}_${to}.xlsx`, 'Mozgásnapló', columns, rows)}>
@@ -183,6 +203,28 @@ export function Movements() {
               <option value="">Mind</option>
               <option value="in">Bejövő</option>
               <option value="out">Kimenő</option>
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
+            <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>
+              <option value="">Összes vevő</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Eladási státusz (csak kimenő)</span>
+            <Select value={saleStatusFilter} onChange={(e) => setSaleStatusFilter(e.target.value as '' | SaleStatusFilter)}>
+              <option value="">Mind</option>
+              {SALE_STATUS_FILTER_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {SALE_STATUS_FILTER_LABELS[s]}
+                </option>
+              ))}
             </Select>
           </label>
         </div>

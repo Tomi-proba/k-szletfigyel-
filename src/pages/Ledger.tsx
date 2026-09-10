@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
+import { computeInventoryPurchaseCost } from '../lib/costing'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
 import { computeCombinedVatSummary, listAutoVatRows } from '../lib/vat'
 import { VAT_CATEGORY, type LedgerEntry } from '../types'
@@ -58,7 +59,10 @@ export function Ledger() {
 
   const marginRows = useMemo(() => computeMarginReport(products, movements, from, to), [products, movements, from, to])
   const inventoryRevenue = marginRows.reduce((sum, r) => sum + r.revenue, 0)
-  const inventoryCost = marginRows.reduce((sum, r) => sum + r.cost, 0)
+  // Buying stock is an expense the moment it's purchased, not only once it
+  // eventually sells - so this is keyed off the purchase (lot) date, not
+  // COGS of whatever happened to sell in this same period.
+  const inventoryCost = useMemo(() => computeInventoryPurchaseCost(lots, from, to), [lots, from, to])
 
   // The P&L combines ALL ACTIVE ledger entries in range (not the category/
   // type/showDeleted filters above, which only narrow the entry list/

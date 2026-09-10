@@ -56,7 +56,11 @@ export interface FinancialSummary {
   ledgerExpenseTotal: number
   /** From inventory sales (computeMarginReport's revenue) in the same period. */
   inventoryRevenue: number
-  /** From inventory sales (computeMarginReport's cost/COGS) in the same period. */
+  /** Cost-basis value of stock PURCHASED in the same period (see
+   * computeInventoryPurchaseCost in lib/costing.ts) - buying goods into
+   * inventory is a real expense the moment it happens, not only once the
+   * goods eventually sell, so this is keyed off the purchase date, not any
+   * later sale date. */
   inventoryCost: number
   totalIncome: number
   totalExpense: number
@@ -64,8 +68,8 @@ export interface FinancialSummary {
 }
 
 /** A simple profit & loss for the period: the ledger's own categories plus
- * the stock margin data (sale revenue as income, cost of goods sold as an
- * expense line), combined into one bottom line. */
+ * the stock trading activity (sale revenue as income, purchase spend as an
+ * expense line - see inventoryCost above), combined into one bottom line. */
 export function computeFinancialSummary(
   entries: LedgerEntry[],
   inventoryRevenue: number,

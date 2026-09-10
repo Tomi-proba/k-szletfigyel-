@@ -51,6 +51,19 @@ export function lotUnitCost(lot: LotMoneyFields & LotVatFields): number {
   return base + nonReclaimableVatPerUnit
 }
 
+/** Total cost-basis value of stock PURCHASED (received into inventory) in a
+ * period - date of the batch itself, not date of any later sale. This is
+ * what makes a purchase automatically show up as an expense in the P&L the
+ * moment it's recorded, rather than being invisible until the goods
+ * eventually sell (see computeFinancialSummary in lib/ledger.ts, which
+ * feeds this in as its inventoryCost). Deleted lots (soft-deleted, e.g. a
+ * reversed purchase) never count. */
+export function computeInventoryPurchaseCost(lots: PurchaseLot[], fromISO: string, toISO: string): number {
+  return lots
+    .filter((l) => !l.deletedAt && l.date >= fromISO && l.date <= toISO)
+    .reduce((sum, l) => sum + lotUnitCost(l) * l.quantity, 0)
+}
+
 /** Rolls a new receipt into a single running weighted-average cost. */
 export function weightedAverageAfterReceipt(
   currentStock: number,

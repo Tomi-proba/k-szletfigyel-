@@ -1,20 +1,16 @@
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { useAlerts } from '../hooks/useAlerts'
 import { computeMarginReport } from '../lib/alerts'
 import { groupShippingByPeriod, groupShippingBySupplier, type ShippingPeriodGranularity } from '../lib/shipping'
-import { computeRevenueTotals, listRevenueRows } from '../lib/revenue'
 import { Button, Card, EmptyState, Input, PageHeader, Select } from '../components/ui'
-import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { formatCurrency, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 
 const SECTIONS = [
   { id: 'haszonkulcs', label: 'Haszonkulcs' },
   { id: 'szallitas', label: 'Szállítási költség' },
-  { id: 'bevetel', label: 'Bevétel kereső' },
-  { id: 'vevoi-tartozas', label: 'Vevői tartozás' },
 ]
 
 export function Reports() {
@@ -27,7 +23,7 @@ export function Reports() {
 
   return (
     <div>
-      <PageHeader title="Riportok" subtitle="Minden kimutatás és export egy helyen: haszonkulcs, szállítási költség, bevétel-visszakeresés, vevői tartozás." />
+      <PageHeader title="Riportok" subtitle="Haszonkulcs kimutatás és szállítási költség kimutatás egy helyen." />
 
       <nav className="mb-6 flex flex-wrap gap-2">
         {SECTIONS.map((s) => (
@@ -47,19 +43,9 @@ export function Reports() {
         <MarginReportSection />
       </section>
 
-      <section id="szallitas" className="mb-10 scroll-mt-4">
+      <section id="szallitas" className="scroll-mt-4">
         <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Szállítási költség kimutatás</h2>
         <ShippingReportSection />
-      </section>
-
-      <section id="bevetel" className="mb-10 scroll-mt-4">
-        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Bevétel kereső</h2>
-        <RevenueSearchSection />
-      </section>
-
-      <section id="vevoi-tartozas" className="scroll-mt-4">
-        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Vevői tartozás</h2>
-        <CustomerDebtSection />
       </section>
     </div>
   )
@@ -412,309 +398,6 @@ function ShippingReportSection() {
           </Card>
         )}
       </div>
-    </div>
-  )
-}
-
-interface RevenueRowExport {
-  date: string
-  source: string
-  description: string
-  productOrCategory: string
-  quantity: string
-  customerOrNote: string
-  amountHuf: number
-}
-
-function RevenueSearchSection() {
-  const movements = useStore((s) => s.movements)
-  const products = useStore((s) => s.products)
-  const customers = useStore((s) => s.customers)
-  const ledgerEntries = useStore((s) => s.ledgerEntries)
-
-  const [from, setFrom] = useState(todayISO())
-  const [to, setTo] = useState(todayISO())
-  const [sourceFilter, setSourceFilter] = useState<'' | 'sale' | 'ledger'>('')
-
-  const allRows = useMemo(
-    () => listRevenueRows(movements, products, customers, ledgerEntries, from, to),
-    [movements, products, customers, ledgerEntries, from, to],
-  )
-  const rows = useMemo(() => (sourceFilter ? allRows.filter((r) => r.sourceType === sourceFilter) : allRows), [allRows, sourceFilter])
-  const totals = useMemo(() => computeRevenueTotals(allRows), [allRows])
-
-  const exportRows: RevenueRowExport[] = rows.map((r) => ({
-    date: formatDate(r.date),
-    source: r.sourceType === 'sale' ? 'Eladás' : 'Pénzügyi napló',
-    description: r.description,
-    productOrCategory: r.sourceType === 'sale' ? (r.productName ?? '') : (r.category ?? ''),
-    quantity: r.sourceType === 'sale' && r.quantity !== undefined ? `${formatNumber(r.quantity)} ${r.unit ?? ''}`.trim() : '',
-    customerOrNote: r.sourceType === 'sale' ? (r.customerName ?? '') : (r.note ?? ''),
-    amountHuf: Math.round(r.amountHuf),
-  }))
-
-  const exportColumns: ExportColumn<RevenueRowExport>[] = [
-    { header: 'Dátum', accessor: (r) => r.date, width: 14 },
-    { header: 'Forrás', accessor: (r) => r.source, width: 16 },
-    { header: 'Megnevezés', accessor: (r) => r.description, width: 28 },
-    { header: 'Termék / Kategória', accessor: (r) => r.productOrCategory, width: 20 },
-    { header: 'Mennyiség', accessor: (r) => r.quantity, width: 14 },
-    { header: 'Vevő / Megjegyzés', accessor: (r) => r.customerOrNote, width: 22 },
-    { header: 'Összeg (Ft)', accessor: (r) => r.amountHuf, width: 14 },
-  ]
-
-  const isSingleDay = from === to
-
-  return (
-    <div>
-      <Card className="mb-5">
-        <div className="mb-3 flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setFrom(todayISO())
-              setTo(todayISO())
-            }}
-          >
-            Ma
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setFrom(isoDaysAgo(7))
-              setTo(todayISO())
-            }}
-          >
-            Utolsó 7 nap
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setFrom(isoDaysAgo(30))
-              setTo(todayISO())
-            }}
-          >
-            Utolsó 30 nap
-          </Button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Ettől (pontos napra: állítsd azonosra "Eddig"-gel)</span>
-            <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Eddig</span>
-            <Input type="date" value={to} min={from} max={todayISO()} onChange={(e) => setTo(e.target.value)} />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Forrás</span>
-            <Select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as '' | 'sale' | 'ledger')}>
-              <option value="">Mind (eladás + napló)</option>
-              <option value="sale">Csak eladás</option>
-              <option value="ledger">Csak pénzügyi napló</option>
-            </Select>
-          </label>
-        </div>
-        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-          {isSingleDay ? `Kiválasztott nap: ${formatDate(from)}.` : `Kiválasztott időszak: ${formatDate(from)} - ${formatDate(to)}.`} Egy adott
-          napra kereséshez állítsd "Ettől" és "Eddig" mezőt ugyanarra a dátumra.
-        </p>
-      </Card>
-
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Összes bevétel</div>
-          <div className="text-2xl font-bold text-[var(--color-success)]">{formatCurrency(totals.total)}</div>
-        </Card>
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Ebből eladásból</div>
-          <div className="text-xl font-bold text-[var(--color-text)]">{formatCurrency(totals.fromSales)}</div>
-        </Card>
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Ebből pénzügyi naplóból</div>
-          <div className="text-xl font-bold text-[var(--color-text)]">{formatCurrency(totals.fromLedger)}</div>
-        </Card>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-[var(--color-text)]">Tételes lista</h2>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => exportToExcel(`bevetelek_${from}_${to}.xlsx`, 'Bevételek', exportColumns, exportRows)}>
-            <FileSpreadsheet size={16} /> Excel
-          </Button>
-          <Button variant="secondary" onClick={() => exportToPdf(`bevetelek_${from}_${to}.pdf`, 'Bevételek', exportColumns, exportRows)}>
-            <FileText size={16} /> PDF
-          </Button>
-        </div>
-      </div>
-
-      {rows.length === 0 ? (
-        <EmptyState>Nincs bevétel a kiválasztott szűrésnek megfelelően.</EmptyState>
-      ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                <th className="px-4 py-3 font-medium">Dátum</th>
-                <th className="px-4 py-3 font-medium">Forrás</th>
-                <th className="px-4 py-3 font-medium">Megnevezés</th>
-                <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
-                <th className="px-4 py-3 font-medium">Vevő / Megjegyzés</th>
-                <th className="px-4 py-3 text-right font-medium">Összeg</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={`${r.sourceType}-${r.id}`} className="border-b border-[var(--color-border)] last:border-b-0">
-                  <td className="whitespace-nowrap px-4 py-3">{formatDate(r.date)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        r.sourceType === 'sale'
-                          ? 'bg-[var(--color-info-bg)] text-[var(--color-primary)]'
-                          : 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
-                      }`}
-                    >
-                      {r.sourceType === 'sale' ? 'Eladás' : 'Pénzügyi napló'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-[var(--color-text)]">{r.description}</div>
-                    {r.sourceType === 'ledger' && r.category && <div className="text-xs text-[var(--color-text-muted)]">{r.category}</div>}
-                    {r.sourceType === 'ledger' && r.note && <div className="text-xs text-[var(--color-text-muted)]">{r.note}</div>}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {r.sourceType === 'sale' && r.quantity !== undefined ? `${formatNumber(r.quantity)} ${r.unit ?? ''}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-text-muted)]">{r.sourceType === 'sale' ? (r.customerName ?? '—') : '—'}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[var(--color-success)]">
-                    {formatCurrency(r.amountHuf)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-interface CustomerDebtRow {
-  date: string
-  customerName: string
-  productName: string
-  quantity: string
-  amountHuf: number
-}
-
-function CustomerDebtSection() {
-  const alerts = useAlerts()
-
-  const rows: CustomerDebtRow[] = alerts.unpaidSales.map((s) => ({
-    date: formatDate(s.date),
-    customerName: s.customerName,
-    productName: s.productName,
-    quantity: `${formatNumber(s.quantity)} ${s.unit}`,
-    amountHuf: Math.round(s.amount),
-  }))
-  const totalDebt = alerts.customerBalances.reduce((sum, b) => sum + b.unpaidAmount, 0)
-
-  const columns: ExportColumn<CustomerDebtRow>[] = [
-    { header: 'Dátum', accessor: (r) => r.date, width: 14 },
-    { header: 'Vevő', accessor: (r) => r.customerName, width: 24 },
-    { header: 'Termék', accessor: (r) => r.productName, width: 26 },
-    { header: 'Mennyiség', accessor: (r) => r.quantity, width: 16 },
-    { header: 'Tartozás (Ft)', accessor: (r) => r.amountHuf, width: 16 },
-  ]
-
-  return (
-    <div>
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Összes tartozás</div>
-          <div className="text-2xl font-bold text-[var(--color-danger)]">{formatCurrency(totalDebt)}</div>
-        </Card>
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Érintett vevők</div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">{formatNumber(alerts.customerBalances.length)}</div>
-        </Card>
-        <Card>
-          <div className="text-sm text-[var(--color-text-muted)]">Kifizetetlen eladások</div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">{formatNumber(alerts.unpaidSales.length)}</div>
-        </Card>
-      </div>
-
-      <div className="mb-5">
-        <h3 className="mb-2 text-base font-semibold text-[var(--color-text)]">Vevőnkénti összesítés</h3>
-        {alerts.customerBalances.length === 0 ? (
-          <EmptyState>Nincs kifizetetlen vevői tartozás.</EmptyState>
-        ) : (
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[480px] text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                  <th className="px-4 py-3 font-medium">Vevő</th>
-                  <th className="px-4 py-3 text-right font-medium">Nyitott tételek</th>
-                  <th className="px-4 py-3 text-right font-medium">Tartozás</th>
-                </tr>
-              </thead>
-              <tbody>
-                {alerts.customerBalances.map((b) => (
-                  <tr key={b.customerId} className="border-b border-[var(--color-border)] last:border-b-0">
-                    <td className="px-4 py-3 font-medium text-[var(--color-text)]">{b.customerName}</td>
-                    <td className="px-4 py-3 text-right">{formatNumber(b.unpaidSalesCount)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-[var(--color-danger)]">{formatCurrency(b.unpaidAmount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-[var(--color-text)]">Tételes lista</h3>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => exportToExcel('vevoi_tartozas.xlsx', 'Vevői tartozás', columns, rows)}>
-            <FileSpreadsheet size={16} /> Excel
-          </Button>
-          <Button variant="secondary" onClick={() => exportToPdf('vevoi_tartozas.pdf', 'Vevői tartozás', columns, rows)}>
-            <FileText size={16} /> PDF
-          </Button>
-        </div>
-      </div>
-
-      {rows.length === 0 ? (
-        <EmptyState>Nincs kifizetetlen eladási tétel.</EmptyState>
-      ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                <th className="px-4 py-3 font-medium">Dátum</th>
-                <th className="px-4 py-3 font-medium">Vevő</th>
-                <th className="px-4 py-3 font-medium">Termék</th>
-                <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
-                <th className="px-4 py-3 text-right font-medium">Tartozás</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-b border-[var(--color-border)] last:border-b-0">
-                  <td className="whitespace-nowrap px-4 py-3">{r.date}</td>
-                  <td className="px-4 py-3">{r.customerName}</td>
-                  <td className="px-4 py-3">{r.productName}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{r.quantity}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[var(--color-danger)]">
-                    {formatCurrency(r.amountHuf)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
     </div>
   )
 }

@@ -1,0 +1,48 @@
+name: Build Windows desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/inventory-management-app-yjc3v5
+    paths:
+      - 'src/**'
+      - 'electron/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Copy build output into electron/dist
+        run: Copy-Item -Path dist -Destination electron/dist -Recurse
+        shell: pwsh
+
+      - name: Install electron dependencies
+        working-directory: electron
+        run: npm install
+
+      - name: Build Windows installer
+        working-directory: electron
+        run: npx electron-builder --win --x64 --publish=never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Keszletfigyelo-Windows-Setup
+          path: electron/dist-electron/*.exe
+          retention-days: 30

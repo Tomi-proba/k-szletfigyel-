@@ -19,6 +19,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
   const products = useStore((s) => s.products)
   const lots = useStore((s) => s.lots)
   const costingMethod = useStore((s) => s.settings.costingMethod)
+  const defaultVatRatePercentForNewProducts = useStore((s) => s.settings.defaultVatRatePercentForNewProducts)
   const productLots = useMemo(
     () => (product ? lots.filter((l) => l.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : []),
     [lots, product],
@@ -38,6 +39,9 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
   const [salePrice, setSalePrice] = useState(String(product?.salePrice ?? 0))
   const [supplierId, setSupplierId] = useState(product?.supplierId ?? '')
   const [locationId, setLocationId] = useState(product?.locationId ?? locations[0]?.id ?? '')
+  const [defaultVatRatePercent, setDefaultVatRatePercent] = useState(
+    product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : String(defaultVatRatePercentForNewProducts),
+  )
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
@@ -55,6 +59,10 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
     if ([stockNum, minNum, purchaseNum, saleNum].some((n) => !Number.isFinite(n) || n < 0)) {
       return setError('A készlet, a küszöb és az árak nem lehetnek negatívak.')
     }
+    const vatNum = defaultVatRatePercent.trim() === '' ? undefined : Number(defaultVatRatePercent)
+    if (vatNum !== undefined && (!Number.isFinite(vatNum) || vatNum < 0)) {
+      return setError('Az ÁFA kulcs nem lehet negatív.')
+    }
 
     const payload = {
       name: name.trim(),
@@ -67,6 +75,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
       salePrice: saleNum,
       supplierId: supplierId || undefined,
       locationId,
+      defaultVatRatePercent: vatNum,
     }
 
     if (product) {
@@ -144,6 +153,21 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
         </Field>
       </div>
 
+      <Field label="Alapértelmezett ÁFA kulcs (%, opcionális)">
+        <Input
+          type="number"
+          min={0}
+          step="any"
+          value={defaultVatRatePercent}
+          onChange={(e) => setDefaultVatRatePercent(e.target.value)}
+          placeholder="pl. 27"
+        />
+        <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+          Ez jelenik meg felajánlva beszerzés/eladás rögzítésekor - tételenként felülírható. Üresen hagyva a rendszer nem számol ÁFA-t
+          automatikusan, amíg a tételnél meg nem adod.
+        </span>
+      </Field>
+
       <Field label="Beszállító (opcionális)">
         <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
           <option value="">Nincs megadva</option>
@@ -169,6 +193,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                   <th className="px-3 py-2 text-right font-medium">Szállítás</th>
                   <th className="px-3 py-2 text-right font-medium">Egységköltség</th>
                   <th className="px-3 py-2 text-left font-medium">Fizetés</th>
+                  <th className="px-3 py-2 text-left font-medium">ÁFA</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,6 +225,18 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                         <span className="text-[var(--color-success)]">Kifizetve{lot.paidDate ? ` (${formatDate(lot.paidDate)})` : ''}</span>
                       ) : (
                         <span className="text-[var(--color-danger)]">Fizetendő: {formatDate(lot.dueDate)}</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      {lot.vatRatePercent === undefined ? (
+                        <span className="text-[var(--color-text-muted)]">nincs megadva</span>
+                      ) : (
+                        <>
+                          {lot.vatRatePercent}%
+                          <div className={`text-[10px] font-normal ${lot.vatReclaimable === false ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted)]'}`}>
+                            {lot.vatReclaimable === false ? 'nem visszaigényelhető' : 'visszaigényelhető'}
+                          </div>
+                        </>
                       )}
                     </td>
                   </tr>

@@ -57,6 +57,11 @@ export interface Product {
   supplierId?: string
   /** Which site holds this stock. Every product belongs to exactly one location. */
   locationId: string
+  /** ÁFA kulcs (%) suggested when recording a purchase or sale of this
+   * product - editable per transaction, see PurchaseLot.vatRatePercent and
+   * Movement.vatRatePercent. Omitted means no rate is suggested; the
+   * transaction then has to set one explicitly or goes untracked for VAT. */
+  defaultVatRatePercent?: number
   createdAt: string
   updatedAt: string
 }
@@ -97,6 +102,16 @@ export interface PurchaseLot {
   isPaid?: boolean
   /** The actual date the invoice was paid, set when isPaid becomes true. */
   paidDate?: string
+  /** ÁFA kulcs (%) actually applied to this batch - prefilled from the
+   * product's defaultVatRatePercent when the purchase was recorded, but
+   * overridable per batch and stored here so it's traceable after the
+   * fact. Omitted entirely means this batch isn't tracked for VAT. */
+  vatRatePercent?: number
+  /** Only meaningful when vatRatePercent is set. true (the default) means
+   * this VAT is reclaimable from the tax authority; false means it isn't,
+   * in which case its amount folds into the lot's unit cost instead (see
+   * lotUnitCost in lib/costing.ts) since it's then a real, unrecoverable cost. */
+  vatReclaimable?: boolean
 }
 
 export interface Movement {
@@ -128,10 +143,9 @@ export interface Movement {
    * periods even after later purchases or a method change shift the
    * product's current cost. */
   unitCost?: number
-  /** 'out' only, and only when sold to a tracked customer: the product's
-   * sale price at the moment of this sale, snapshotted so an outstanding
-   * balance doesn't silently change if the product's price is edited
-   * later. Absent for anonymous/walk-in sales (the common case). */
+  /** 'out' only: the product's sale price at the moment of this sale,
+   * snapshotted so a tracked customer's balance - and this sale's VAT
+   * amount - don't silently change if the product's price is edited later. */
   saleUnitPrice?: number
   /** 'out' only: which tracked customer this was sold to. Omitted for a
    * plain walk-in/cash sale - that's the default and needs no tracking. */
@@ -140,6 +154,12 @@ export interface Movement {
    * has paid for this sale yet. Sales without a customerId are always
    * effectively "paid" (cash sale) and this is left unset for them. */
   isPaid?: boolean
+  /** 'out' only: ÁFA kulcs (%) actually applied to this sale - prefilled
+   * from the product's defaultVatRatePercent, overridable per sale. Sale
+   * VAT is always owed to the tax authority (never reclaimable), so unlike
+   * PurchaseLot there's no separate reclaimable flag. Omitted means this
+   * sale isn't tracked for VAT. */
+  vatRatePercent?: number
 }
 
 export type LedgerEntryType = 'income' | 'expense'
@@ -207,6 +227,10 @@ export interface Settings {
    * the largest value actually widens the alert window; the others exist
    * so the UI can call out "3 nap múlva" style urgency steps. */
   paymentReminderDaysBefore: number[]
+  /** ÁFA kulcs (%) suggested on the product form when creating a brand new
+   * product - just a starting value for Product.defaultVatRatePercent,
+   * freely overridable there and again per transaction. */
+  defaultVatRatePercentForNewProducts: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -217,6 +241,7 @@ export const DEFAULT_SETTINGS: Settings = {
   slowMovingWindowDays: 60,
   slowMovingThresholdPercent: 70,
   paymentReminderDaysBefore: [7, 3, 1],
+  defaultVatRatePercentForNewProducts: 27,
 }
 
 export const DEFAULT_LOCATION_NAME = 'Fő telephely'

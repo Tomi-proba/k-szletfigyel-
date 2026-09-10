@@ -222,6 +222,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 18,
       supplierId: supMetal.id,
       locationId: locBelvaros.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -248,6 +249,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 18,
       supplierId: supMetal.id,
       locationId: locIpari.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -276,6 +278,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 2100,
       supplierId: supEpker.id,
       locationId: locBelvaros.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -303,6 +306,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 5400,
       supplierId: supFa.id,
       locationId: locIpari.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -360,6 +364,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 2600,
       supplierId: supEpker.id,
       locationId: locIpari.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -391,6 +396,7 @@ export function buildSeedData(): SeedResult {
       salePrice: 890,
       supplierId: supMetal.id,
       locationId: locBelvaros.id,
+      defaultVatRatePercent: 27,
     },
     0,
   )
@@ -488,6 +494,33 @@ export function buildSeedData(): SeedResult {
   }
   lots = attachLotDueDate(lots, cement.id, iso(addDays(now, 5)))
   lots = attachLotDueDate(lots, pvc.id, iso(subDays(now, 2)))
+
+  // A couple of purchase batches tracked for ÁFA - one reclaimable (the
+  // common case), one not (so the unit-cost impact and the "nem
+  // visszaigényelhető" summary bucket both have something to show).
+  const attachLotVat = (targetLots: PurchaseLot[], productId: string, vatRatePercent: number, vatReclaimable: boolean): PurchaseLot[] => {
+    const mostRecent = targetLots.filter((l) => l.productId === productId).sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    if (!mostRecent) return targetLots
+    return targetLots.map((l) => (l.id === mostRecent.id ? { ...l, vatRatePercent, vatReclaimable } : l))
+  }
+  lots = attachLotVat(lots, gipsz.id, 27, true)
+  lots = attachLotVat(lots, osb.id, 27, false)
+
+  // A handful of recent sales tracked for ÁFA (sale VAT is always payable,
+  // regardless of whether the sale is tied to a customer).
+  const attachSaleVat = (targetMovements: Movement[], productId: string, salePrice: number, vatRatePercent: number, count: number) => {
+    const candidates = targetMovements
+      .filter((m) => m.productId === productId && m.type === 'out')
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice(0, count)
+    for (const m of candidates) {
+      m.vatRatePercent = vatRatePercent
+      if (m.saleUnitPrice === undefined) m.saleUnitPrice = salePrice
+    }
+  }
+  attachSaleVat(movements, csavarBelvaros.id, csavarBelvaros.salePrice, 27, 6)
+  attachSaleVat(movements, gipsz.id, gipsz.salePrice, 27, 4)
+  attachSaleVat(movements, cement.id, cement.salePrice, 27, 4)
 
   // A handful of general ledger entries so the financial journal isn't
   // empty on first open - rent, payroll, a dividend, and a payable/

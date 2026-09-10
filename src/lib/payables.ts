@@ -3,7 +3,7 @@
 // customers owe it (see computeUnpaidSales in lib/alerts.ts). Kept as pure
 // functions over PurchaseLot/LedgerEntry data, same pattern as the rest of lib/.
 import type { LedgerEntry, Product, PurchaseLot, Supplier } from '../types'
-import { lotUnitCost } from './costing'
+import { lotGrossHuf } from './costing'
 import { ledgerEntryHuf } from './ledger'
 import { daysBetween, todayISO } from './dates'
 
@@ -61,7 +61,10 @@ export function computePayableObligations(
         dueDate: l.dueDate,
         payee: supplier?.name ?? 'Ismeretlen beszállító',
         description: `${product?.name ?? 'Törölt termék'} - beszerzés (${l.quantity} ${product?.unit ?? 'db'})`,
-        amount: Math.round(lotUnitCost(l) * l.quantity),
+        // The full invoice amount owed to the supplier - net + VAT (both
+        // reclaimable and not), since that's what actually has to be paid,
+        // not just the cost-basis part that ends up on the product.
+        amount: Math.round(lotGrossHuf(l)),
         ...classify(l.dueDate, reminderWindowDays, today),
       }
     })

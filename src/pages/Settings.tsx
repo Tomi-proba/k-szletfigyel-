@@ -147,6 +147,17 @@ export function Settings() {
           </Field>
         </Card>
 
+        <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">ÁFA</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ez a kulcs jelenik meg felajánlva, amikor új terméket veszel fel - termékenként, majd tételenként (beszerzés/eladás
+            rögzítésekor) is felülírható.
+          </p>
+          <Field label="Alapértelmezett ÁFA kulcs új termékeknél (%)">
+            <Input type="number" min={0} {...num('defaultVatRatePercentForNewProducts')} />
+          </Field>
+        </Card>
+
         {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 
         <div className="flex items-center gap-3">

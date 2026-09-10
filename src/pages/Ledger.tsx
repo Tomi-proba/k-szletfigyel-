@@ -2,7 +2,8 @@ import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, Trash2 } from 'l
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
-import { computeFinancialSummary, computeVatSummary, ledgerEntryHuf } from '../lib/ledger'
+import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
+import { computeCombinedVatSummary } from '../lib/vat'
 import { VAT_CATEGORY, type LedgerEntry } from '../types'
 import { Modal } from '../components/Modal'
 import { LedgerEntryForm } from '../components/LedgerEntryForm'
@@ -28,6 +29,7 @@ export function Ledger() {
   const categories = useStore((s) => s.ledgerCategories)
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
+  const lots = useStore((s) => s.lots)
   const deleteLedgerEntry = useStore((s) => s.deleteLedgerEntry)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
 
@@ -61,8 +63,12 @@ export function Ledger() {
     () => computeFinancialSummary(entriesInRange, inventoryRevenue, inventoryCost, from, to),
     [entriesInRange, inventoryRevenue, inventoryCost, from, to],
   )
-  const vatSummary = useMemo(() => computeVatSummary(entriesInRange, from, to), [entriesInRange, from, to])
-  const hasVatEntries = entriesInRange.some((e) => e.category === VAT_CATEGORY)
+  const vatSummary = useMemo(() => computeCombinedVatSummary(entriesInRange, lots, movements, from, to), [entriesInRange, lots, movements, from, to])
+  const hasVatEntries =
+    entriesInRange.some((e) => e.category === VAT_CATEGORY) ||
+    vatSummary.autoPurchaseReclaimable > 0 ||
+    vatSummary.autoPurchaseNonReclaimable > 0 ||
+    vatSummary.autoSalePayable > 0
 
   function toRow(e: LedgerEntry): LedgerRow {
     return {
@@ -200,7 +206,7 @@ export function Ledger() {
       {hasVatEntries && (
         <Card className="mb-5">
           <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <div className="text-sm text-[var(--color-text-muted)]">Befizetendő</div>
               <div className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(vatSummary.totalPayable)}</div>
@@ -217,6 +223,47 @@ export function Ledger() {
               </div>
             </div>
           </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                  <th className="py-2 pr-4 font-medium">Forrás</th>
+                  <th className="py-2 pr-4 text-right font-medium">Befizetendő</th>
+                  <th className="py-2 pr-4 text-right font-medium">Visszaigényelhető</th>
+                  <th className="py-2 text-right font-medium">Nem visszaigényelhető</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[var(--color-border)]">
+                  <td className="py-2 pr-4">Kézi napló tételek</td>
+                  <td className="py-2 pr-4 text-right">{vatSummary.manualPayable > 0 ? formatCurrency(vatSummary.manualPayable) : '—'}</td>
+                  <td className="py-2 pr-4 text-right">{vatSummary.manualReclaimable > 0 ? formatCurrency(vatSummary.manualReclaimable) : '—'}</td>
+                  <td className="py-2 text-right">—</td>
+                </tr>
+                <tr className="border-b border-[var(--color-border)]">
+                  <td className="py-2 pr-4">Automatikus (beszerzésből)</td>
+                  <td className="py-2 pr-4 text-right">—</td>
+                  <td className="py-2 pr-4 text-right">
+                    {vatSummary.autoPurchaseReclaimable > 0 ? formatCurrency(vatSummary.autoPurchaseReclaimable) : '—'}
+                  </td>
+                  <td className="py-2 text-right text-[var(--color-text-muted)]">
+                    {vatSummary.autoPurchaseNonReclaimable > 0 ? formatCurrency(vatSummary.autoPurchaseNonReclaimable) : '—'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4">Automatikus (értékesítésből)</td>
+                  <td className="py-2 pr-4 text-right">{vatSummary.autoSalePayable > 0 ? formatCurrency(vatSummary.autoSalePayable) : '—'}</td>
+                  <td className="py-2 pr-4 text-right">—</td>
+                  <td className="py-2 text-right">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+            A "nem visszaigényelhető" oszlop csak tájékoztató jellegű - nem csökkenti az egyenleget, mert az az érintett termékek
+            egységköltségébe került be valós, meg nem térülő kiadásként.
+          </p>
         </Card>
       )}
 

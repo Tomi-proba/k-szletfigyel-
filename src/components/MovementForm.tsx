@@ -40,6 +40,11 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [trackDueDate, setTrackDueDate] = useState(false)
   const [dueDate, setDueDate] = useState('')
   const [invoicePaid, setInvoicePaid] = useState(false)
+  const [vatRate, setVatRate] = useState(() => {
+    const defaultRate = products.find((p) => p.id === defaultProductId)?.defaultVatRatePercent
+    return defaultRate !== undefined ? String(defaultRate) : ''
+  })
+  const [vatReclaimable, setVatReclaimable] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -49,6 +54,16 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
   const shippingCostNumber = shippingCost.trim() === '' ? undefined : Number(shippingCost.replace(',', '.'))
   const exchangeRateNumber = exchangeRate.trim() === '' ? undefined : Number(exchangeRate.replace(',', '.'))
+  const vatRateNumber = vatRate.trim() === '' ? undefined : Number(vatRate.replace(',', '.'))
+
+  // Suggest the product's default ÁFA rate whenever the user picks a
+  // (possibly different) product - still freely overridable afterward.
+  function handleProductChange(nextProductId: string | null) {
+    setProductId(nextProductId)
+    const p = products.find((pr) => pr.id === nextProductId)
+    setVatRate(p?.defaultVatRatePercent !== undefined ? String(p.defaultVatRatePercent) : '')
+  }
+
   const previewHufUnitCost =
     unitPriceNumber !== undefined && qtyNumber > 0 && (currency === 'HUF' || (exchangeRateNumber ?? 0) > 0)
       ? lotUnitCost({
@@ -111,6 +126,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('Add meg a fizetési határidőt, vagy kapcsold ki a nyomon követést.')
       return
     }
+    if (vatRate.trim() !== '' && (!Number.isFinite(vatRateNumber) || (vatRateNumber ?? 0) < 0)) {
+      setError('Az ÁFA kulcs nem lehet negatív.')
+      return
+    }
 
     const result = recordMovement(
       {
@@ -127,6 +146,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
         dueDate: type === 'in' && trackDueDate ? dueDate : undefined,
         invoicePaid: type === 'in' && trackDueDate ? invoicePaid : undefined,
+        vatRatePercent: vatRateNumber,
+        vatReclaimable: type === 'in' ? vatReclaimable : undefined,
       },
       { allowNegativeStock },
     )
@@ -140,6 +161,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setNote('')
       resetCustomerSection()
       resetDueDateSection()
+      setVatRate(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
+      setVatReclaimable(true)
       setSuccessTick((t) => t + 1)
       onDone?.()
       return
@@ -160,7 +183,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       }}
     >
       <FieldGroup label="Termék">
-        <ProductPicker value={productId} onChange={setProductId} />
+        <ProductPicker value={productId} onChange={handleProductChange} />
       </FieldGroup>
 
       <FieldGroup label="Típus">
@@ -273,6 +296,51 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       )}
 
       {type === 'in' && (
+        <FieldGroup label="ÁFA (opcionális)">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="mb-3 block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">ÁFA kulcs (%)</span>
+              <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
+            </label>
+            {vatRate.trim() !== '' && (
+              <div>
+                <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Visszaigényelhető</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVatReclaimable(true)}
+                    className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                      vatReclaimable
+                        ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                        : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    Igen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVatReclaimable(false)}
+                    className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                      !vatReclaimable
+                        ? 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                        : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    Nem
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {vatRate.trim() !== '' && !vatReclaimable && (
+            <span className="block text-xs text-[var(--color-text-muted)]">
+              A nem visszaigényelhető ÁFA hozzáadódik a termék egységköltségéhez, mivel az valós, meg nem térülő kiadás.
+            </span>
+          )}
+        </FieldGroup>
+      )}
+
+      {type === 'in' && (
         <FieldGroup label="Beszállítói számla fizetési határideje">
           <Checkbox
             label="Fizetési határidő nyomon követése (kimenő kötelezettség)"
@@ -319,6 +387,15 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
             </div>
           )}
         </FieldGroup>
+      )}
+
+      {type === 'out' && (
+        <Field label="ÁFA kulcs (%, opcionális)">
+          <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            Minden eladásra vonatkozik, nem csak a vevőhöz rögzítettekre - mindig befizetendő ÁFA-ként kerül a pénzügyi naplóba.
+          </span>
+        </Field>
       )}
 
       {type === 'out' && (

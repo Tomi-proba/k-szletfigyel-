@@ -49,6 +49,13 @@ export interface RecordMovementInput {
   /** 'in' only, meaningful when dueDate is set. Defaults to false (unpaid)
    * when a due date is given and this is omitted. */
   invoicePaid?: boolean
+  /** ÁFA kulcs (%) actually applied to this batch/sale - typically prefilled
+   * in the UI from the product's defaultVatRatePercent, but freely
+   * overridable per transaction. Omit for no VAT tracking on this item. */
+  vatRatePercent?: number
+  /** 'in' only, meaningful when vatRatePercent is set. Defaults to true
+   * (reclaimable) when omitted. */
+  vatReclaimable?: boolean
 }
 
 export type RecordMovementResult =
@@ -92,6 +99,8 @@ interface AppState {
   setMovementPaid: (movementId: string, isPaid: boolean) => void
   setLotPaid: (lotId: string, isPaid: boolean) => void
   setLedgerEntryPaid: (entryId: string, isPaid: boolean) => void
+  updateLotVat: (lotId: string, input: { vatRatePercent?: number; vatReclaimable?: boolean }) => void
+  updateMovementVat: (movementId: string, vatRatePercent?: number) => void
 
   // Ledger (general income/expense journal)
   addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -183,8 +192,23 @@ export const useStore = create<AppState>()(
         })),
 
       recordMovement: (input, opts) => {
-        const { productId, type, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, customerId, isPaid, dueDate, invoicePaid } =
-          input
+        const {
+          productId,
+          type,
+          quantity,
+          date,
+          note,
+          unitPrice,
+          shippingCost,
+          currency,
+          exchangeRate,
+          customerId,
+          isPaid,
+          dueDate,
+          invoicePaid,
+          vatRatePercent,
+          vatReclaimable,
+        } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
         }
@@ -192,6 +216,9 @@ export const useStore = create<AppState>()(
           return { ok: false, reason: 'invalid-quantity' }
         }
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        if (vatRatePercent !== undefined && (!Number.isFinite(vatRatePercent) || vatRatePercent < 0)) {
           return { ok: false, reason: 'invalid-quantity' }
         }
         // A currency selection only means something alongside an actual
@@ -229,11 +256,14 @@ export const useStore = create<AppState>()(
           // has real history to draw on.
           const effectiveUnitPrice = unitPrice ?? product.purchasePrice
           const effectiveShipping = shippingCost ?? 0
+          const lotVatReclaimable = vatRatePercent !== undefined ? (vatReclaimable ?? true) : undefined
           const batchUnitCost = lotUnitCost({
             unitPrice: effectiveUnitPrice,
             shippingCost: effectiveShipping,
             quantity,
             exchangeRate: lotExchangeRate,
+            vatRatePercent,
+            vatReclaimable: lotVatReclaimable,
           })
 
           const lotIsPaid = dueDate ? (invoicePaid ?? false) : undefined
@@ -252,6 +282,8 @@ export const useStore = create<AppState>()(
             dueDate: dueDate || undefined,
             isPaid: lotIsPaid,
             paidDate: lotIsPaid ? todayISO() : undefined,
+            vatRatePercent,
+            vatReclaimable: lotVatReclaimable,
           }
           if (unitPrice !== undefined) movementUnitPrice = unitPrice
           if (effectiveShipping > 0) movementShippingCost = effectiveShipping
@@ -296,8 +328,12 @@ export const useStore = create<AppState>()(
               exchangeRate: type === 'in' && lotCurrency !== 'HUF' ? lotExchangeRate : undefined,
               unitCost: movementUnitCost,
               customerId: type === 'out' ? customerId : undefined,
-              saleUnitPrice: type === 'out' && customerId ? product.salePrice : undefined,
+              // Snapshotted for every sale (not just customer-tracked ones)
+              // so VAT and any later reporting always has the price that
+              // was actually charged, not today's (possibly changed) price.
+              saleUnitPrice: type === 'out' ? product.salePrice : undefined,
               isPaid: type === 'out' && customerId ? (isPaid ?? true) : undefined,
+              vatRatePercent: type === 'out' ? vatRatePercent : undefined,
             },
           ],
         }))
@@ -319,6 +355,20 @@ export const useStore = create<AppState>()(
           ledgerEntries: state.ledgerEntries.map((e) =>
             e.id === entryId ? { ...e, isPaid, paidDate: isPaid ? todayISO() : undefined, updatedAt: new Date().toISOString() } : e,
           ),
+        })),
+
+      updateLotVat: (lotId, input) =>
+        set((state) => ({
+          lots: state.lots.map((l) =>
+            l.id === lotId
+              ? { ...l, vatRatePercent: input.vatRatePercent, vatReclaimable: input.vatRatePercent !== undefined ? (input.vatReclaimable ?? true) : undefined }
+              : l,
+          ),
+        })),
+
+      updateMovementVat: (movementId, vatRatePercent) =>
+        set((state) => ({
+          movements: state.movements.map((m) => (m.id === movementId ? { ...m, vatRatePercent } : m)),
         })),
 
       deleteMovement: (id) =>

@@ -474,7 +474,20 @@ export function buildSeedData(): SeedResult {
   products.push(tomlo)
   movements.push(...hTomlo.movements)
 
-  const lots = deriveLots(movements, products)
+  let lots = deriveLots(movements, products)
+
+  // Attach a payment due date to each product's most recent "in" batch, so
+  // the payment-obligation alert has both an "upcoming" and an "overdue"
+  // example to show out of the box.
+  const attachLotDueDate = (targetLots: PurchaseLot[], productId: string, dueDate: string, isPaid = false): PurchaseLot[] => {
+    const mostRecent = targetLots
+      .filter((l) => l.productId === productId)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    if (!mostRecent) return targetLots
+    return targetLots.map((l) => (l.id === mostRecent.id ? { ...l, dueDate, isPaid } : l))
+  }
+  lots = attachLotDueDate(lots, cement.id, iso(addDays(now, 5)))
+  lots = attachLotDueDate(lots, pvc.id, iso(subDays(now, 2)))
 
   // A handful of general ledger entries so the financial journal isn't
   // empty on first open - rent, payroll, a dividend, and a payable/
@@ -486,7 +499,7 @@ export function buildSeedData(): SeedResult {
     category: string,
     description: string,
     amount: number,
-    extra?: Partial<Pick<LedgerEntry, 'vatRatePercent' | 'vatDirection' | 'note'>>,
+    extra?: Partial<Pick<LedgerEntry, 'vatRatePercent' | 'vatDirection' | 'note' | 'dueDate' | 'isPaid' | 'paidDate'>>,
   ): LedgerEntry => {
     const date = new Date(subMonths(now, monthsAgo))
     date.setDate(day)
@@ -514,6 +527,16 @@ export function buildSeedData(): SeedResult {
     mkLedgerEntry(1, 10, 'expense', 'Bérjárulék', 'Bérköltséghez kapcsolódó járulékok', 185000),
     mkLedgerEntry(0, 10, 'expense', 'Bérjárulék', 'Bérköltséghez kapcsolódó járulékok', 185000),
     mkLedgerEntry(0, 20, 'expense', 'Osztalék', 'Tulajdonosi osztalékfizetés', 500000),
+    // An unpaid, upcoming payment obligation - due in 2 days.
+    mkLedgerEntry(0, 1, 'expense', 'Bérleti díj', 'Ipari parki raktár bérleti díja', 210000, {
+      dueDate: iso(addDays(now, 2)),
+      isPaid: false,
+    }),
+    // An unpaid, overdue payment obligation.
+    mkLedgerEntry(0, 1, 'expense', 'Egyéb', 'Irodai internet és telefon szolgáltatás díja', 18500, {
+      dueDate: iso(subDays(now, 4)),
+      isPaid: false,
+    }),
     mkLedgerEntry(1, 20, 'expense', VAT_CATEGORY, 'Negyedéves ÁFA bevallás - fizetendő', 620000, {
       vatRatePercent: 27,
       vatDirection: 'payable',

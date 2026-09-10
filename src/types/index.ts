@@ -87,6 +87,16 @@ export interface PurchaseLot {
   /** HUF value of 1 unit of `currency` at the time of purchase - always 1 when currency is 'HUF'. */
   exchangeRate: number
   createdAt: string
+  /** When the supplier invoice for this batch is due, if the user chose to
+   * track it - an outgoing payment obligation, separate from the customer
+   * balances tracked on sales. Omitted when payment tracking isn't used for
+   * this batch. */
+  dueDate?: string
+  /** Whether the supplier invoice has been paid. Only meaningful when
+   * dueDate is set; false is what drives the payment-obligation alerts. */
+  isPaid?: boolean
+  /** The actual date the invoice was paid, set when isPaid becomes true. */
+  paidDate?: string
 }
 
 export interface Movement {
@@ -166,6 +176,15 @@ export interface LedgerEntry {
   /** Only set when category === VAT_CATEGORY. */
   vatRatePercent?: number
   vatDirection?: VatDirection
+  /** Payment due date for an outgoing (expense) obligation - rent, payroll,
+   * a supplier bill booked directly into the ledger, etc. Meaningless for
+   * income entries. Omitted when payment tracking isn't used for this entry. */
+  dueDate?: string
+  /** Whether this expense has been paid. Only meaningful when dueDate is
+   * set; false is what drives the payment-obligation alerts. */
+  isPaid?: boolean
+  /** The actual date the expense was paid, set when isPaid becomes true. */
+  paidDate?: string
   createdAt: string
   updatedAt: string
 }
@@ -183,6 +202,11 @@ export interface Settings {
   slowMovingWindowDays: number
   /** If consumption drops below this % of the prior period's consumption, flag as slow-moving. */
   slowMovingThresholdPercent: number
+  /** How many days before a payment's due date to start flagging it as
+   * "upcoming" - e.g. [7, 3, 1] warns a week, 3 days, and 1 day out. Only
+   * the largest value actually widens the alert window; the others exist
+   * so the UI can call out "3 nap múlva" style urgency steps. */
+  paymentReminderDaysBefore: number[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -192,6 +216,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reorderTargetDays: 30,
   slowMovingWindowDays: 60,
   slowMovingThresholdPercent: 70,
+  paymentReminderDaysBefore: [7, 3, 1],
 }
 
 export const DEFAULT_LOCATION_NAME = 'Fő telephely'

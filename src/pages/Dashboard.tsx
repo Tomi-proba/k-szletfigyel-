@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, CircleDollarSign, PackageMinus, TrendingDown } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, PackageMinus, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
@@ -51,6 +51,7 @@ export function Dashboard() {
     .slice(0, 5)
 
   const totalUnpaid = alerts.unpaidSales.reduce((sum, s) => sum + s.amount, 0)
+  const totalPayable = alerts.urgentPayables.reduce((sum, p) => sum + p.amount, 0)
 
   return (
     <div>
@@ -63,7 +64,7 @@ export function Dashboard() {
         </Card>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
             <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
             <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
@@ -73,6 +74,13 @@ export function Dashboard() {
               label={alerts.unpaidSales.length === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
               count={alerts.unpaidSales.length}
               tone="danger"
+            />
+            <SummaryCard
+              to="/riasztasok?szuro=fizetesi"
+              icon={CalendarClock}
+              label={alerts.urgentPayables.length === 0 ? 'Fizetési kötelezettség' : `Fizetendő: ${formatCurrency(totalPayable)}`}
+              count={alerts.urgentPayables.length}
+              tone="warning"
             />
           </div>
 

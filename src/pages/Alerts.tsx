@@ -1,11 +1,12 @@
 import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
-import { Button, Card, EmptyState, PageHeader } from '../components/ui'
+import { Button, Card, EmptyState, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 
-type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen'
+type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'alacsony', label: 'Alacsony készlet' },
@@ -13,6 +14,15 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'lassan', label: 'Lassan fogyó' },
   { key: 'athelyezes', label: 'Áthelyezés javasolt' },
   { key: 'kifizetetlen', label: 'Kifizetetlen eladás' },
+  { key: 'fizetesi', label: 'Fizetési kötelezettség' },
+]
+
+const PAYABLE_WINDOWS = [
+  { value: 0, label: 'Csak lejárt / a beállított emlékeztetőn belüli' },
+  { value: 7, label: 'Következő 7 napban esedékes' },
+  { value: 14, label: 'Következő 14 napban esedékes' },
+  { value: 30, label: 'Következő 30 napban esedékes' },
+  { value: -1, label: 'Összes, határidő szerint' },
 ]
 
 export function Alerts() {
@@ -20,15 +30,34 @@ export function Alerts() {
   const active = searchParams.get('szuro') as FilterKey | null
   const alerts = useAlerts()
   const setMovementPaid = useStore((s) => s.setMovementPaid)
+  const setLotPaid = useStore((s) => s.setLotPaid)
+  const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
+  const [payableWindow, setPayableWindow] = useState(0)
 
   function setFilter(key: FilterKey | null) {
     if (key) setSearchParams({ szuro: key })
     else setSearchParams({})
   }
 
+  function markPayablePaid(p: (typeof alerts.payables)[number]) {
+    if (p.sourceType === 'purchase') setLotPaid(p.id, true)
+    else setLedgerEntryPaid(p.id, true)
+  }
+
+  const visiblePayables = useMemo(() => {
+    if (payableWindow === -1) return alerts.payables
+    if (payableWindow === 0) return alerts.urgentPayables
+    return alerts.payables.filter((p) => p.daysUntilDue <= payableWindow)
+  }, [alerts.payables, alerts.urgentPayables, payableWindow])
+
   const showAll = !active
   const totalCount =
-    alerts.lowStock.length + alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length
+    alerts.lowStock.length +
+    alerts.needsReorder.length +
+    alerts.slowMoving.length +
+    alerts.transferSuggestions.length +
+    alerts.unpaidSales.length +
+    alerts.urgentPayables.length
 
   return (
     <div>
@@ -176,6 +205,60 @@ export function Alerts() {
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
                       <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                        <CheckCircle2 size={16} /> Kifizetve
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(showAll || active === 'fizetesi') && (
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-[var(--color-text)]">Fizetési kötelezettségek</h2>
+              <label className="text-sm">
+                <Select value={payableWindow} onChange={(e) => setPayableWindow(Number(e.target.value))} className="text-sm">
+                  {PAYABLE_WINDOWS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+            {visiblePayables.length === 0 ? (
+              <EmptyState>Nincs a szűrésnek megfelelő fizetési kötelezettség.</EmptyState>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visiblePayables.map((p) => (
+                  <Card
+                    key={`${p.sourceType}-${p.id}`}
+                    className={`border-l-4 ${p.urgency === 'overdue' ? 'border-l-[var(--color-danger)]' : 'border-l-[var(--color-warning)]'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[var(--color-text)]">{p.payee}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          p.urgency === 'overdue'
+                            ? 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                            : 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
+                        }`}
+                      >
+                        {p.urgency === 'overdue' ? `${Math.abs(p.daysUntilDue)} napja lejárt` : `${p.daysUntilDue} nap múlva esedékes`}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm text-[var(--color-text-muted)]">{p.description}</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      Határidő: {formatDate(p.dueDate)} · {p.sourceType === 'purchase' ? 'beszerzés' : 'napló tétel'}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className={`text-lg font-bold ${p.urgency === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--color-warning)]'}`}>
+                        {formatCurrency(p.amount)}
+                      </span>
+                      <Button variant="secondary" onClick={() => markPayablePaid(p)}>
                         <CheckCircle2 size={16} /> Kifizetve
                       </Button>
                     </div>

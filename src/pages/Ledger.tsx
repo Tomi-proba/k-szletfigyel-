@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
@@ -29,6 +29,7 @@ export function Ledger() {
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
   const deleteLedgerEntry = useStore((s) => s.deleteLedgerEntry)
+  const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
 
   const [from, setFrom] = useState(currentMonthRange().from)
   const [to, setTo] = useState(currentMonthRange().to)
@@ -281,6 +282,14 @@ export function Ledger() {
                   <td className="px-4 py-3">
                     <div className="text-[var(--color-text)]">{e.description}</div>
                     {e.note && <div className="text-xs text-[var(--color-text-muted)]">{e.note}</div>}
+                    {e.dueDate &&
+                      (e.isPaid ? (
+                        <div className="text-xs text-[var(--color-success)]">
+                          Kifizetve{e.paidDate ? ` (${formatDate(e.paidDate)})` : ''}
+                        </div>
+                      ) : (
+                        <div className="text-xs font-medium text-[var(--color-danger)]">Fizetési határidő: {formatDate(e.dueDate)}</div>
+                      ))}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <span className={e.type === 'income' ? 'font-semibold text-[var(--color-success)]' : 'font-semibold text-[var(--color-danger)]'}>
@@ -294,6 +303,16 @@ export function Ledger() {
                     )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {e.dueDate && !e.isPaid && (
+                      <button
+                        type="button"
+                        onClick={() => setLedgerEntryPaid(e.id, true)}
+                        aria-label="Megjelölés kifizetettként"
+                        className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setEditing(e)}

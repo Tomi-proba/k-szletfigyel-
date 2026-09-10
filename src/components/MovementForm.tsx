@@ -37,6 +37,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [trackCustomer, setTrackCustomer] = useState(false)
   const [customerId, setCustomerId] = useState('')
   const [isPaid, setIsPaid] = useState(true)
+  const [trackDueDate, setTrackDueDate] = useState(false)
+  const [dueDate, setDueDate] = useState('')
+  const [invoicePaid, setInvoicePaid] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -66,6 +69,12 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     setTrackCustomer(false)
     setCustomerId('')
     setIsPaid(true)
+  }
+
+  function resetDueDateSection() {
+    setTrackDueDate(false)
+    setDueDate('')
+    setInvoicePaid(false)
   }
 
   function trySubmit(allowNegativeStock = false) {
@@ -98,6 +107,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('Válassz vevőt, vagy kapcsold ki a vevőhöz rögzítést.')
       return
     }
+    if (type === 'in' && trackDueDate && !dueDate) {
+      setError('Add meg a fizetési határidőt, vagy kapcsold ki a nyomon követést.')
+      return
+    }
 
     const result = recordMovement(
       {
@@ -112,6 +125,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         exchangeRate: type === 'in' && unitPrice.trim() !== '' && currency !== 'HUF' ? exchangeRateNumber : undefined,
         customerId: type === 'out' && trackCustomer ? customerId : undefined,
         isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
+        dueDate: type === 'in' && trackDueDate ? dueDate : undefined,
+        invoicePaid: type === 'in' && trackDueDate ? invoicePaid : undefined,
       },
       { allowNegativeStock },
     )
@@ -124,6 +139,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setExchangeRate('')
       setNote('')
       resetCustomerSection()
+      resetDueDateSection()
       setSuccessTick((t) => t + 1)
       onDone?.()
       return
@@ -251,6 +267,55 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           {previewHufUnitCost !== null && (
             <div className="mt-2 rounded-lg bg-[var(--color-info-bg)] px-3 py-2 text-sm text-[var(--color-primary)]">
               ≈ {formatCurrency(previewHufUnitCost)} / {product?.unit ?? 'egység'} (Ft-ban, a megadott árfolyammal)
+            </div>
+          )}
+        </FieldGroup>
+      )}
+
+      {type === 'in' && (
+        <FieldGroup label="Beszállítói számla fizetési határideje">
+          <Checkbox
+            label="Fizetési határidő nyomon követése (kimenő kötelezettség)"
+            checked={trackDueDate}
+            onChange={(e) => {
+              setTrackDueDate(e.target.checked)
+              if (!e.target.checked) {
+                setDueDate('')
+                setInvoicePaid(false)
+              }
+            }}
+          />
+          {trackDueDate && (
+            <div className="rounded-lg border border-[var(--color-border)] p-3">
+              <label className="mb-3 block text-sm">
+                <span className="mb-1 block font-medium text-[var(--color-text)]">Fizetési határidő</span>
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </label>
+              <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvoicePaid(true)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    invoicePaid
+                      ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Kifizetve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvoicePaid(false)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    !invoicePaid
+                      ? 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Még nincs kifizetve
+                </button>
+              </div>
             </div>
           )}
         </FieldGroup>

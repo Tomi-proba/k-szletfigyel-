@@ -168,6 +168,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                   <th className="px-3 py-2 text-right font-medium">Áru ára</th>
                   <th className="px-3 py-2 text-right font-medium">Szállítás</th>
                   <th className="px-3 py-2 text-right font-medium">Egységköltség</th>
+                  <th className="px-3 py-2 text-left font-medium">Fizetés</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,6 +191,15 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                         <div className="text-[10px] font-normal text-[var(--color-text-muted)]">
                           árfolyam: {formatNumber(lot.exchangeRate)}
                         </div>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      {!lot.dueDate ? (
+                        <span className="text-[var(--color-text-muted)]">—</span>
+                      ) : lot.isPaid ? (
+                        <span className="text-[var(--color-success)]">Kifizetve{lot.paidDate ? ` (${formatDate(lot.paidDate)})` : ''}</span>
+                      ) : (
+                        <span className="text-[var(--color-danger)]">Fizetendő: {formatDate(lot.dueDate)}</span>
                       )}
                     </td>
                   </tr>

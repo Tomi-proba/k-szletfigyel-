@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { createId } from './id'
 import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
+import { todayISO } from '../lib/dates'
 import {
   DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
@@ -42,6 +43,12 @@ export interface RecordMovementInput {
   /** 'out' only, meaningful when customerId is set. Defaults to true (paid)
    * when a customer is attached and this is omitted. */
   isPaid?: boolean
+  /** 'in' only: due date of the supplier invoice for this batch, if the
+   * user wants it tracked as a payment obligation. */
+  dueDate?: string
+  /** 'in' only, meaningful when dueDate is set. Defaults to false (unpaid)
+   * when a due date is given and this is omitted. */
+  invoicePaid?: boolean
 }
 
 export type RecordMovementResult =
@@ -83,6 +90,8 @@ interface AppState {
   recordMovement: (input: RecordMovementInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   deleteMovement: (id: string) => void
   setMovementPaid: (movementId: string, isPaid: boolean) => void
+  setLotPaid: (lotId: string, isPaid: boolean) => void
+  setLedgerEntryPaid: (entryId: string, isPaid: boolean) => void
 
   // Ledger (general income/expense journal)
   addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -174,7 +183,8 @@ export const useStore = create<AppState>()(
         })),
 
       recordMovement: (input, opts) => {
-        const { productId, type, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, customerId, isPaid } = input
+        const { productId, type, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, customerId, isPaid, dueDate, invoicePaid } =
+          input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
         }
@@ -226,6 +236,7 @@ export const useStore = create<AppState>()(
             exchangeRate: lotExchangeRate,
           })
 
+          const lotIsPaid = dueDate ? (invoicePaid ?? false) : undefined
           newLot = {
             id: createId(),
             productId,
@@ -238,6 +249,9 @@ export const useStore = create<AppState>()(
             currency: lotCurrency,
             exchangeRate: lotExchangeRate,
             createdAt: new Date().toISOString(),
+            dueDate: dueDate || undefined,
+            isPaid: lotIsPaid,
+            paidDate: lotIsPaid ? todayISO() : undefined,
           }
           if (unitPrice !== undefined) movementUnitPrice = unitPrice
           if (effectiveShipping > 0) movementShippingCost = effectiveShipping
@@ -293,6 +307,18 @@ export const useStore = create<AppState>()(
       setMovementPaid: (movementId, isPaid) =>
         set((state) => ({
           movements: state.movements.map((m) => (m.id === movementId ? { ...m, isPaid } : m)),
+        })),
+
+      setLotPaid: (lotId, isPaid) =>
+        set((state) => ({
+          lots: state.lots.map((l) => (l.id === lotId ? { ...l, isPaid, paidDate: isPaid ? todayISO() : undefined } : l)),
+        })),
+
+      setLedgerEntryPaid: (entryId, isPaid) =>
+        set((state) => ({
+          ledgerEntries: state.ledgerEntries.map((e) =>
+            e.id === entryId ? { ...e, isPaid, paidDate: isPaid ? todayISO() : undefined, updatedAt: new Date().toISOString() } : e,
+          ),
         })),
 
       deleteMovement: (id) =>

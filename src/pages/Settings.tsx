@@ -11,6 +11,7 @@ export function Settings() {
   const clearAllData = useStore((s) => s.clearAllData)
 
   const [form, setForm] = useState(settings)
+  const [reminderDaysInput, setReminderDaysInput] = useState(settings.paymentReminderDaysBefore.join(', '))
   const [saved, setSaved] = useState(false)
   const [confirmDemo, setConfirmDemo] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -19,7 +20,7 @@ export function Settings() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const { costingMethod: _costingMethod, ...numericFields } = form
+    const { costingMethod: _costingMethod, paymentReminderDaysBefore: _paymentReminderDaysBefore, ...numericFields } = form
     if (Object.values(numericFields).some((v) => !Number.isFinite(v) || v < 0)) {
       setError('Egyik érték sem lehet negatív.')
       return
@@ -28,7 +29,17 @@ export function Settings() {
       setError('Az időszakok hossza nem lehet nulla nap.')
       return
     }
-    updateSettings(form)
+    const reminderDays = reminderDaysInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(Number)
+    if (reminderDays.length === 0 || reminderDays.some((n) => !Number.isInteger(n) || n <= 0)) {
+      setError('A fizetési emlékeztetők napjait pozitív egész számokkal add meg, vesszővel elválasztva (pl. 7, 3, 1).')
+      return
+    }
+    const paymentReminderDaysBefore = Array.from(new Set(reminderDays)).sort((a, b) => b - a)
+    updateSettings({ ...form, paymentReminderDaysBefore })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -125,6 +136,17 @@ export function Settings() {
           </p>
         </Card>
 
+        <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Fizetési határidő emlékeztetők</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            A kimenő fizetési kötelezettségek (beszállítói számlák, bérleti díj, egyéb kiadások) ennyi nappal a határidő előtt jelennek
+            meg "közelgő" riasztásként. A lejárt, ki nem fizetett tételek mindig megjelennek, függetlenül ettől.
+          </p>
+          <Field label="Emlékeztető napok (vesszővel elválasztva, pl. 7, 3, 1)">
+            <Input value={reminderDaysInput} onChange={(e) => setReminderDaysInput(e.target.value)} placeholder="7, 3, 1" />
+          </Field>
+        </Card>
+
         {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 
         <div className="flex items-center gap-3">
@@ -155,6 +177,7 @@ export function Settings() {
           onConfirm={() => {
             resetToDemoData()
             setForm(DEFAULT_SETTINGS)
+            setReminderDaysInput(DEFAULT_SETTINGS.paymentReminderDaysBefore.join(', '))
             setConfirmDemo(false)
           }}
           onCancel={() => setConfirmDemo(false)}
@@ -170,6 +193,7 @@ export function Settings() {
           onConfirm={() => {
             clearAllData()
             setForm(DEFAULT_SETTINGS)
+            setReminderDaysInput(DEFAULT_SETTINGS.paymentReminderDaysBefore.join(', '))
             setConfirmClear(false)
           }}
           onCancel={() => setConfirmClear(false)}

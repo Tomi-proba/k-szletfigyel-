@@ -44,7 +44,8 @@ export function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [quickMoveOpen, setQuickMoveOpen] = useState(false)
   const alerts = useAlerts()
-  const alertCount = alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length
+  const alertCount =
+    alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length + alerts.urgentPayables.length
   const location = useLocation()
   const isDashboard = location.pathname === '/'
 

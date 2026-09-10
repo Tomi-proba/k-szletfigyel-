@@ -5,7 +5,7 @@ import { VAT_CATEGORY } from '../types'
 import { todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency } from '../lib/format'
-import { Button, Field, FieldGroup, Input, Select, Textarea } from './ui'
+import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
 const CURRENCIES: { value: Currency; label: string }[] = [
   { value: 'HUF', label: 'HUF' },
@@ -36,6 +36,10 @@ export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
   const [note, setNote] = useState(entry?.note ?? '')
   const [vatRatePercent, setVatRatePercent] = useState(String(entry?.vatRatePercent ?? 27))
   const [vatDirection, setVatDirection] = useState<VatDirection>(entry?.vatDirection ?? 'payable')
+  const [trackDueDate, setTrackDueDate] = useState(Boolean(entry?.dueDate))
+  const [dueDate, setDueDate] = useState(entry?.dueDate ?? '')
+  const [obligationPaid, setObligationPaid] = useState(entry?.isPaid ?? false)
+  const [paidDate, setPaidDate] = useState(entry?.paidDate ?? todayISO())
   const [error, setError] = useState<string | null>(null)
 
   const isCustomCategory = categorySelect === CUSTOM_CATEGORY_SENTINEL
@@ -63,6 +67,10 @@ export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
     if (isVat && (!Number.isFinite(vatRateNumber) || vatRateNumber < 0)) {
       return setError('Az ÁFA kulcsa nem lehet negatív.')
     }
+    const trackingDueDate = type === 'expense' && trackDueDate
+    if (trackingDueDate && !dueDate) {
+      return setError('Add meg a fizetési határidőt, vagy kapcsold ki a nyomon követést.')
+    }
 
     const payload = {
       date,
@@ -75,6 +83,9 @@ export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
       note: note.trim() || undefined,
       vatRatePercent: isVat ? vatRateNumber : undefined,
       vatDirection: isVat ? vatDirection : undefined,
+      dueDate: trackingDueDate ? dueDate : undefined,
+      isPaid: trackingDueDate ? obligationPaid : undefined,
+      paidDate: trackingDueDate && obligationPaid ? paidDate : undefined,
     }
 
     if (entry) updateLedgerEntry(entry.id, payload)
@@ -208,6 +219,61 @@ export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
               </div>
             </div>
           </div>
+        </FieldGroup>
+      )}
+
+      {type === 'expense' && (
+        <FieldGroup label="Fizetési határidő (kimenő kötelezettség)">
+          <Checkbox
+            label="Fizetési határidő nyomon követése"
+            checked={trackDueDate}
+            onChange={(e) => {
+              setTrackDueDate(e.target.checked)
+              if (!e.target.checked) {
+                setDueDate('')
+                setObligationPaid(false)
+              }
+            }}
+          />
+          {trackDueDate && (
+            <div className="rounded-lg border border-[var(--color-border)] p-3">
+              <label className="mb-3 block text-sm">
+                <span className="mb-1 block font-medium text-[var(--color-text)]">Fizetési határidő</span>
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </label>
+              <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setObligationPaid(true)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    obligationPaid
+                      ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Kifizetve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setObligationPaid(false)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    !obligationPaid
+                      ? 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Még nincs kifizetve
+                </button>
+              </div>
+              {obligationPaid && (
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-text)]">Fizetés dátuma</span>
+                  <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
+                </label>
+              )}
+            </div>
+          )}
         </FieldGroup>
       )}
 

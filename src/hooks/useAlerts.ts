@@ -14,6 +14,8 @@ import {
   type TransferSuggestion,
   type UnpaidSale,
 } from '../lib/alerts'
+import { computePayableObligations, type PayableObligation } from '../lib/payables'
+import { todayISO } from '../lib/dates'
 import type { Product } from '../types'
 
 export interface ProductAlertInfo {
@@ -32,6 +34,10 @@ export interface AlertsData {
   transferSuggestions: TransferSuggestion[]
   unpaidSales: UnpaidSale[]
   customerBalances: CustomerBalance[]
+  /** Every unpaid, due-date-tracked purchase batch or ledger expense. */
+  payables: PayableObligation[]
+  /** The subset of payables that's actually alert-worthy (overdue or within the reminder window). */
+  urgentPayables: PayableObligation[]
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -41,6 +47,8 @@ export function useAlerts(): AlertsData {
   const suppliers = useStore((s) => s.suppliers)
   const customers = useStore((s) => s.customers)
   const locations = useStore((s) => s.locations)
+  const lots = useStore((s) => s.lots)
+  const ledgerEntries = useStore((s) => s.ledgerEntries)
   const settings = useStore((s) => s.settings)
 
   return useMemo(() => {
@@ -59,7 +67,9 @@ export function useAlerts(): AlertsData {
     const transferSuggestions = computeTransferSuggestions(products, movements, locations, settings, now)
     const unpaidSales = computeUnpaidSales(movements, products, customers)
     const customerBalances = computeCustomerBalances(unpaidSales)
+    const payables = computePayableObligations(lots, products, suppliers, ledgerEntries, settings.paymentReminderDaysBefore, todayISO())
+    const urgentPayables = payables.filter((p) => p.isAlertWorthy)
 
-    return { byProductId, all, lowStock, needsReorder, slowMoving, transferSuggestions, unpaidSales, customerBalances }
-  }, [products, movements, suppliers, customers, locations, settings])
+    return { byProductId, all, lowStock, needsReorder, slowMoving, transferSuggestions, unpaidSales, customerBalances, payables, urgentPayables }
+  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, settings])
 }

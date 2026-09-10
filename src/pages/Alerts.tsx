@@ -3,10 +3,11 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
+import type { SaleStatus } from '../types'
 import { Button, Card, EmptyState, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 
-type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi'
+type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'alacsony', label: 'Alacsony készlet' },
@@ -15,7 +16,10 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'athelyezes', label: 'Áthelyezés javasolt' },
   { key: 'kifizetetlen', label: 'Kifizetetlen eladás' },
   { key: 'fizetesi', label: 'Fizetési kötelezettség' },
+  { key: 'nyitott', label: 'Nyitott eladás' },
 ]
+
+const OPEN_SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
 
 const PAYABLE_WINDOWS = [
   { value: 0, label: 'Csak lejárt / a beállított emlékeztetőn belüli' },
@@ -33,6 +37,7 @@ export function Alerts() {
   const setLotPaid = useStore((s) => s.setLotPaid)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
   const [payableWindow, setPayableWindow] = useState(0)
+  const [openSaleStatusFilter, setOpenSaleStatusFilter] = useState<'' | SaleStatus>('')
 
   function setFilter(key: FilterKey | null) {
     if (key) setSearchParams({ szuro: key })
@@ -50,6 +55,11 @@ export function Alerts() {
     return alerts.payables.filter((p) => p.daysUntilDue <= payableWindow)
   }, [alerts.payables, alerts.urgentPayables, payableWindow])
 
+  const visibleOpenSales = useMemo(
+    () => (openSaleStatusFilter ? alerts.openSales.filter((s) => s.status === openSaleStatusFilter) : alerts.openSales),
+    [alerts.openSales, openSaleStatusFilter],
+  )
+
   const showAll = !active
   const totalCount =
     alerts.lowStock.length +
@@ -57,7 +67,8 @@ export function Alerts() {
     alerts.slowMoving.length +
     alerts.transferSuggestions.length +
     alerts.unpaidSales.length +
-    alerts.urgentPayables.length
+    alerts.urgentPayables.length +
+    alerts.openSales.length
 
   return (
     <div>
@@ -261,6 +272,41 @@ export function Alerts() {
                       <Button variant="secondary" onClick={() => markPayablePaid(p)}>
                         <CheckCircle2 size={16} /> Kifizetve
                       </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(showAll || active === 'nyitott') && (
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-[var(--color-text)]">Nyitott eladások</h2>
+              <label className="text-sm">
+                <Select value={openSaleStatusFilter} onChange={(e) => setOpenSaleStatusFilter(e.target.value as '' | SaleStatus)}>
+                  <option value="">Mind (kiadásra vár + kiszállítás alatt)</option>
+                  <option value="pending">Csak kiadásra vár</option>
+                  <option value="shipping">Csak kiszállítás alatt</option>
+                </Select>
+              </label>
+            </div>
+            {visibleOpenSales.length === 0 ? (
+              <EmptyState>Nincs folyamatban lévő eladás.</EmptyState>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visibleOpenSales.map((s) => (
+                  <Card key={s.movementId} className="border-l-4 border-l-[var(--color-primary)]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[var(--color-text)]">{s.productName}</span>
+                      <span className="rounded-full bg-[var(--color-info-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--color-primary)]">
+                        {OPEN_SALE_STATUS_LABELS[s.status]}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      {formatDate(s.date)} · {formatNumber(s.quantity)} {s.unit}
+                      {s.customerName && ` · ${s.customerName}`}
                     </div>
                   </Card>
                 ))}

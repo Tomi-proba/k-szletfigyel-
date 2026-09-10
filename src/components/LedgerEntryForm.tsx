@@ -5,6 +5,7 @@ import { VAT_CATEGORY } from '../types'
 import { todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency } from '../lib/format'
+import { HistoryPanel } from './HistoryPanel'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
 const CURRENCIES: { value: Currency; label: string }[] = [
@@ -284,6 +285,13 @@ export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
       <Field label="Megjegyzés (opcionális)">
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
+
+      {entry && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Előzmények</h3>
+          <HistoryPanel entityType="ledgerEntry" entityId={entry.id} />
+        </div>
+      )}
 
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 

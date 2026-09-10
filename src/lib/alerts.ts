@@ -2,7 +2,7 @@
 // plain data so it can be unit tested and reused (e.g. in reports/exports)
 // without depending on the zustand store or React.
 import { differenceInCalendarDays, formatISO, subYears } from 'date-fns'
-import type { Customer, Location, Movement, Product, Settings, Supplier } from '../types'
+import type { Customer, Location, Movement, Product, SaleStatus, Settings, Supplier } from '../types'
 import { isoDaysAgo, todayISO } from './dates'
 
 /** A calendar month difference is "significant" for the seasonality note at this threshold. */
@@ -53,9 +53,17 @@ export interface MarginReportRow {
   marginPercent: number
 }
 
+/** A movement counts toward stock/revenue calculations only while it's
+ * neither soft-deleted nor a cancelled (stornó'd) sale - both are kept in
+ * the data for auditability, but the correction/restock they trigger is
+ * what should actually be counted instead. */
+function isActiveMovement(m: Movement): boolean {
+  return !m.deletedAt && !m.cancelled
+}
+
 function sumMovementQty(movements: Movement[], productId: string, type: 'in' | 'out', fromISO: string, toISO: string): number {
   return movements
-    .filter((m) => m.productId === productId && m.type === type && m.date >= fromISO && m.date <= toISO)
+    .filter((m) => m.productId === productId && m.type === type && m.date >= fromISO && m.date <= toISO && isActiveMovement(m))
     .reduce((sum, m) => sum + m.quantity, 0)
 }
 
@@ -78,7 +86,7 @@ function getMonthToDateConsumption(movements: Movement[], productId: string, ref
 
 function buildSeasonalNote(product: Product, movements: Movement[], today: Date): string | null {
   const earliestMovement = movements
-    .filter((m) => m.productId === product.id)
+    .filter((m) => m.productId === product.id && isActiveMovement(m))
     .reduce<string | null>((min, m) => (min === null || m.date < min ? m.date : min), null)
   if (!earliestMovement) return null
 
@@ -191,7 +199,7 @@ export function computeTransferSuggestions(
   const locationName = (id: string) => locations.find((l) => l.id === id)?.name ?? 'Ismeretlen telephely'
 
   const groups = new Map<string, Product[]>()
-  for (const p of products) {
+  for (const p of products.filter((p) => !p.deletedAt)) {
     const key = productKeyOf(p)
     const arr = groups.get(key) ?? []
     arr.push(p)
@@ -238,8 +246,10 @@ export function computeTransferSuggestions(
 
 export function computeMarginReport(products: Product[], movements: Movement[], fromISO: string, toISO: string): MarginReportRow[] {
   const rows: MarginReportRow[] = []
-  for (const product of products) {
-    const outMovements = movements.filter((m) => m.productId === product.id && m.type === 'out' && m.date >= fromISO && m.date <= toISO)
+  for (const product of products.filter((p) => !p.deletedAt)) {
+    const outMovements = movements.filter(
+      (m) => m.productId === product.id && m.type === 'out' && m.date >= fromISO && m.date <= toISO && isActiveMovement(m),
+    )
     if (outMovements.length === 0) continue
     const quantitySold = outMovements.reduce((sum, m) => sum + m.quantity, 0)
     const revenue = quantitySold * product.salePrice
@@ -295,7 +305,7 @@ export function computeUnpaidSales(movements: Movement[], products: Product[], c
   const customerById = new Map(customers.map((c) => [c.id, c]))
 
   return movements
-    .filter((m) => m.type === 'out' && m.customerId && m.isPaid === false)
+    .filter((m) => m.type === 'out' && m.customerId && m.isPaid === false && isActiveMovement(m))
     .map((m) => {
       const product = productById.get(m.productId)
       const customer = customerById.get(m.customerId as string)
@@ -310,6 +320,40 @@ export function computeUnpaidSales(movements: Movement[], products: Product[], c
         amount: m.quantity * (m.saleUnitPrice ?? product?.salePrice ?? 0),
       }
     })
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+}
+
+export interface OpenSale {
+  movementId: string
+  date: string
+  productName: string
+  quantity: number
+  unit: string
+  customerName: string | null
+  status: SaleStatus
+  statusChangedAt?: string
+}
+
+/** Every sale still "in flight" - recorded but not yet delivered - for the
+ * Riasztások dashboard's open-sales section. Cancelled/deleted sales never
+ * count as open, and a sale without a saleStatus (recorded before this
+ * feature existed) is treated as already delivered, not open. */
+export function computeOpenSales(movements: Movement[], products: Product[], customers: Customer[]): OpenSale[] {
+  const productById = new Map(products.map((p) => [p.id, p]))
+  const customerById = new Map(customers.map((c) => [c.id, c]))
+
+  return movements
+    .filter((m) => m.type === 'out' && isActiveMovement(m) && (m.saleStatus === 'pending' || m.saleStatus === 'shipping'))
+    .map((m) => ({
+      movementId: m.id,
+      date: m.date,
+      productName: productById.get(m.productId)?.name ?? 'Törölt termék',
+      quantity: m.quantity,
+      unit: productById.get(m.productId)?.unit ?? '',
+      customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : null,
+      status: m.saleStatus as SaleStatus,
+      statusChangedAt: m.saleStatusChangedAt,
+    }))
     .sort((a, b) => (a.date < b.date ? 1 : -1))
 }
 

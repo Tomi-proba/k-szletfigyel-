@@ -5,7 +5,7 @@ import { addDays, formatISO, subDays, subMonths } from 'date-fns'
 import { createId } from './id'
 import { consumeFifo } from '../lib/costing'
 import { DEFAULT_LEDGER_CATEGORIES, VAT_CATEGORY } from '../types'
-import type { Customer, LedgerEntry, Location, Movement, Product, PurchaseLot, Supplier } from '../types'
+import type { AuditLogEntry, Customer, LedgerEntry, Location, Movement, Product, PurchaseLot, SaleStatus, Supplier } from '../types'
 
 interface SeedResult {
   locations: Location[]
@@ -16,6 +16,7 @@ interface SeedResult {
   lots: PurchaseLot[]
   ledgerEntries: LedgerEntry[]
   ledgerCategories: string[]
+  auditLog: AuditLogEntry[]
 }
 
 /** Walks each product's movements in date order, creating a PurchaseLot for
@@ -480,6 +481,57 @@ export function buildSeedData(): SeedResult {
   products.push(tomlo)
   movements.push(...hTomlo.movements)
 
+  // A discontinued item, soft-deleted so the "Törölt termékek megjelenítése"
+  // toggle on the Készlet page has a real example out of the box. It stays
+  // fully present in movements/reports, just hidden from normal browsing.
+  ragasztohab.deletedAt = subDays(now, 20).toISOString()
+
+  // Every historical "out" movement defaults to "delivered" (it's old, so
+  // presumably already handed over) - a few recent ones get bumped to
+  // "pending"/"shipping" below to demo the new open-sales alert section.
+  for (const m of movements) {
+    if (m.type === 'out' && m.saleStatus === undefined) {
+      m.saleStatus = 'delivered'
+      m.saleStatusChangedAt = m.createdAt
+    }
+  }
+  const setLatestSaleStatus = (productId: string, status: Exclude<SaleStatus, 'delivered'>): Movement | undefined => {
+    const target = movements.filter((m) => m.productId === productId && m.type === 'out').sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    if (target) {
+      target.saleStatus = status
+      target.saleStatusChangedAt = target.createdAt
+    }
+    return target
+  }
+  const pendingSale = setLatestSaleStatus(csavarBelvaros.id, 'pending')
+  setLatestSaleStatus(gipsz.id, 'shipping')
+
+  // One cancelled (stornó) sale, complete with its restocking correction
+  // movement - the cement sales that attachSaleVat below tags with VAT, so
+  // the ÁFA balance also has a "Stornózva" example to show.
+  const cancelTarget = movements
+    .filter((m) => m.productId === cement.id && m.type === 'out')
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[1]
+  if (cancelTarget) {
+    cancelTarget.cancelled = true
+    cancelTarget.cancelledAt = now.toISOString()
+    cancelTarget.cancelReason = 'Hibás termék'
+    const correctionMovement: Movement = {
+      id: createId(),
+      productId: cancelTarget.productId,
+      locationId: cancelTarget.locationId,
+      date: iso(now),
+      type: 'in',
+      quantity: cancelTarget.quantity,
+      note: 'Visszavétel - eladás visszavonása miatt',
+      createdAt: now.toISOString(),
+      unitPrice: cement.purchasePrice,
+      correctsMovementId: cancelTarget.id,
+    }
+    movements.push(correctionMovement)
+    cement.currentStock += cancelTarget.quantity
+  }
+
   let lots = deriveLots(movements, products)
 
   // Attach a payment due date to each product's most recent "in" batch, so
@@ -584,5 +636,61 @@ export function buildSeedData(): SeedResult {
 
   const ledgerCategories = Array.from(new Set([...DEFAULT_LEDGER_CATEGORIES, ...ledgerEntries.map((e) => e.category)]))
 
-  return { locations, suppliers, customers, products, movements, lots, ledgerEntries, ledgerCategories }
+  // A handful of illustrative audit entries so the Audit napló page and each
+  // entity's "Előzmények" panel aren't empty on first open. The bulk of the
+  // seeded movement history predates the audit log (same as real legacy data
+  // would) - only these recent, hand-picked edits get logged.
+  const osbNonReclaimableLot = lots.find((l) => l.productId === osb.id && l.vatReclaimable === false)
+  const auditLog: AuditLogEntry[] = [
+    {
+      id: createId(),
+      timestamp: subDays(now, 10).toISOString(),
+      entityType: 'supplier',
+      entityId: supMetal.id,
+      entityLabel: supMetal.name,
+      action: 'update',
+      description: `"${supMetal.name}" beszállító adatai módosultak`,
+      changes: [{ field: 'phone', label: 'Telefonszám', oldValue: '+36 30 111 2200', newValue: supMetal.phone ?? '—' }],
+    },
+    {
+      id: createId(),
+      timestamp: subDays(now, 3).toISOString(),
+      entityType: 'lot',
+      entityId: osbNonReclaimableLot?.id ?? createId(),
+      entityLabel: osb.name,
+      action: 'update',
+      description: 'Beszerzési tétel ÁFA adatai módosultak',
+      changes: [{ field: 'vatReclaimable', label: 'ÁFA visszaigényelhető', oldValue: 'Igen', newValue: 'Nem' }],
+    },
+    {
+      id: createId(),
+      timestamp: subDays(now, 1).toISOString(),
+      entityType: 'movement',
+      entityId: cancelTarget?.id ?? createId(),
+      entityLabel: cement.name,
+      action: 'cancel',
+      description: 'Eladás visszavonva (Hibás termék)',
+    },
+    {
+      id: createId(),
+      timestamp: now.toISOString(),
+      entityType: 'movement',
+      entityId: pendingSale?.id ?? createId(),
+      entityLabel: csavarBelvaros.name,
+      action: 'update',
+      description: 'Eladási státusz módosítva',
+      changes: [{ field: 'saleStatus', label: 'Eladási státusz', oldValue: '—', newValue: 'Kiadásra vár' }],
+    },
+    {
+      id: createId(),
+      timestamp: subDays(now, 20).toISOString(),
+      entityType: 'product',
+      entityId: ragasztohab.id,
+      entityLabel: ragasztohab.name,
+      action: 'delete',
+      description: `"${ragasztohab.name}" termék törölve`,
+    },
+  ]
+
+  return { locations, suppliers, customers, products, movements, lots, ledgerEntries, ledgerCategories, auditLog }
 }

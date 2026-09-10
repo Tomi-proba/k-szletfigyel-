@@ -417,7 +417,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
                 <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő kiválasztása</span>
                 <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
                   <option value="">Válassz vevőt…</option>
-                  {customers.map((c) => (
+                  {customers.filter((c) => !c.deletedAt).map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

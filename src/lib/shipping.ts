@@ -34,7 +34,7 @@ export function groupShippingBySupplier(
   const byId = new Map<string, ShippingBySupplierRow>()
 
   for (const lot of lots) {
-    if (!inRange(lot.date, fromISO, toISO)) continue
+    if (!inRange(lot.date, fromISO, toISO) || lot.deletedAt) continue
     const supplierId = productById.get(lot.productId)?.supplierId ?? '__none__'
     const row = byId.get(supplierId) ?? {
       supplierId,
@@ -89,7 +89,7 @@ export function groupShippingByPeriod(
   const byKey = new Map<string, ShippingByPeriodRow>()
 
   for (const lot of lots) {
-    if (!inRange(lot.date, fromISO, toISO)) continue
+    if (!inRange(lot.date, fromISO, toISO) || lot.deletedAt) continue
     const { key, label } = periodKeyAndLabel(lot.date, granularity)
     const row = byKey.get(key) ?? { periodKey: key, periodLabel: label, batchCount: 0, goodsValueHuf: 0, shippingHuf: 0, totalHuf: 0 }
     row.batchCount += 1

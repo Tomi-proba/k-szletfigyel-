@@ -4,6 +4,7 @@ import type { Product } from '../types'
 import { COMMON_UNITS } from '../types'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
+import { HistoryPanel } from './HistoryPanel'
 import { Button, Card, Field, Input, Select } from './ui'
 
 interface ProductFormProps {
@@ -28,6 +29,19 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
   // allocates a new array every call breaks zustand's useSyncExternalStore
   // snapshot caching and can trigger an infinite render loop.
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))).sort(), [products])
+  // Active suppliers/locations for new selections, plus the product's
+  // current one even if it's since been soft-deleted - so an existing
+  // assignment never silently disappears from the dropdown.
+  const supplierOptions = useMemo(() => {
+    const active = suppliers.filter((s) => !s.deletedAt)
+    const current = product?.supplierId ? suppliers.find((s) => s.id === product.supplierId) : undefined
+    return current && current.deletedAt ? [...active, current] : active
+  }, [suppliers, product])
+  const locationOptions = useMemo(() => {
+    const active = locations.filter((l) => !l.deletedAt)
+    const current = product ? locations.find((l) => l.id === product.locationId) : undefined
+    return current && current.deletedAt ? [...active, current] : active
+  }, [locations, product])
 
   const [name, setName] = useState(product?.name ?? '')
   const [sku, setSku] = useState(product?.sku ?? '')
@@ -38,7 +52,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
   const [purchasePrice, setPurchasePrice] = useState(String(product?.purchasePrice ?? 0))
   const [salePrice, setSalePrice] = useState(String(product?.salePrice ?? 0))
   const [supplierId, setSupplierId] = useState(product?.supplierId ?? '')
-  const [locationId, setLocationId] = useState(product?.locationId ?? locations[0]?.id ?? '')
+  const [locationId, setLocationId] = useState(product?.locationId ?? locationOptions[0]?.id ?? '')
   const [defaultVatRatePercent, setDefaultVatRatePercent] = useState(
     product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : String(defaultVatRatePercentForNewProducts),
   )
@@ -117,9 +131,10 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
         </Field>
         <Field label="Telephely">
           <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} required>
-            {locations.map((l) => (
+            {locationOptions.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
+                {l.deletedAt ? ' (törölt)' : ''}
               </option>
             ))}
           </Select>
@@ -171,9 +186,10 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
       <Field label="Beszállító (opcionális)">
         <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
           <option value="">Nincs megadva</option>
-          {suppliers.map((s) => (
+          {supplierOptions.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
+              {s.deletedAt ? ' (törölt)' : ''}
             </option>
           ))}
         </Select>
@@ -244,6 +260,13 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
               </tbody>
             </table>
           </Card>
+        </div>
+      )}
+
+      {product && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Előzmények</h3>
+          <HistoryPanel entityType="product" entityId={product.id} />
         </div>
       )}
 

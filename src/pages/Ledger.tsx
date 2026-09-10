@@ -1,14 +1,15 @@
-import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
+import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
-import { computeCombinedVatSummary } from '../lib/vat'
+import { computeCombinedVatSummary, listAutoVatRows } from '../lib/vat'
 import { VAT_CATEGORY, type LedgerEntry } from '../types'
 import { Modal } from '../components/Modal'
 import { LedgerEntryForm } from '../components/LedgerEntryForm'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Button, Card, EmptyState, Input, PageHeader, Select } from '../components/ui'
+import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
+import { Button, Card, Checkbox, EmptyState, Input, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
 import { currentMonthRange, currentQuarterRange, isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
@@ -28,15 +29,18 @@ export function Ledger() {
   const entries = useStore((s) => s.ledgerEntries)
   const categories = useStore((s) => s.ledgerCategories)
   const products = useStore((s) => s.products)
+  const suppliers = useStore((s) => s.suppliers)
   const movements = useStore((s) => s.movements)
   const lots = useStore((s) => s.lots)
   const deleteLedgerEntry = useStore((s) => s.deleteLedgerEntry)
+  const restoreLedgerEntry = useStore((s) => s.restoreLedgerEntry)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
 
   const [from, setFrom] = useState(currentMonthRange().from)
   const [to, setTo] = useState(currentMonthRange().to)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState<'' | 'income' | 'expense'>('')
+  const [showDeleted, setShowDeleted] = useState(false)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<LedgerEntry | null>(null)
   const [deleting, setDeleting] = useState<LedgerEntry | null>(null)
@@ -45,30 +49,37 @@ export function Ledger() {
     () =>
       entries
         .filter((e) => e.date >= from && e.date <= to)
+        .filter((e) => showDeleted || !e.deletedAt)
         .filter((e) => !categoryFilter || e.category === categoryFilter)
         .filter((e) => !typeFilter || e.type === typeFilter)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt.localeCompare(a.createdAt))),
-    [entries, from, to, categoryFilter, typeFilter],
+    [entries, from, to, categoryFilter, typeFilter, showDeleted],
   )
 
   const marginRows = useMemo(() => computeMarginReport(products, movements, from, to), [products, movements, from, to])
   const inventoryRevenue = marginRows.reduce((sum, r) => sum + r.revenue, 0)
   const inventoryCost = marginRows.reduce((sum, r) => sum + r.cost, 0)
 
-  // The P&L combines ALL ledger entries in range (not the category/type
-  // filter above, which only narrows the entry list/export) with inventory
-  // margin data, so it always reflects the whole period.
+  // The P&L combines ALL ACTIVE ledger entries in range (not the category/
+  // type/showDeleted filters above, which only narrow the entry list/
+  // export) with inventory margin data, so it always reflects the real
+  // period total - lib/ledger.ts's own filtering already drops deleted ones.
   const entriesInRange = useMemo(() => entries.filter((e) => e.date >= from && e.date <= to), [entries, from, to])
   const summary = useMemo(
     () => computeFinancialSummary(entriesInRange, inventoryRevenue, inventoryCost, from, to),
     [entriesInRange, inventoryRevenue, inventoryCost, from, to],
   )
   const vatSummary = useMemo(() => computeCombinedVatSummary(entriesInRange, lots, movements, from, to), [entriesInRange, lots, movements, from, to])
+  const autoVatRows = useMemo(
+    () => listAutoVatRows(lots, movements, products, suppliers, from, to),
+    [lots, movements, products, suppliers, from, to],
+  )
   const hasVatEntries =
-    entriesInRange.some((e) => e.category === VAT_CATEGORY) ||
+    entriesInRange.some((e) => e.category === VAT_CATEGORY && !e.deletedAt) ||
     vatSummary.autoPurchaseReclaimable > 0 ||
     vatSummary.autoPurchaseNonReclaimable > 0 ||
-    vatSummary.autoSalePayable > 0
+    vatSummary.autoSalePayable > 0 ||
+    autoVatRows.some((r) => r.cancelled)
 
   function toRow(e: LedgerEntry): LedgerRow {
     return {
@@ -177,6 +188,9 @@ export function Ledger() {
             </Select>
           </label>
         </div>
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+          <Checkbox label="Törölt tételek megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+        </div>
       </Card>
 
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -264,6 +278,47 @@ export function Ledger() {
             A "nem visszaigényelhető" oszlop csak tájékoztató jellegű - nem csökkenti az egyenleget, mert az az érintett termékek
             egységköltségébe került be valós, meg nem térülő kiadásként.
           </p>
+
+          {autoVatRows.length > 0 && (
+            <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+              <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Automatikus ÁFA tételek</h3>
+              <div className="max-h-64 overflow-y-auto overflow-x-auto">
+                <table className="w-full min-w-[520px] text-xs">
+                  <thead className="sticky top-0 bg-[var(--color-surface)]">
+                    <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                      <th className="py-2 pr-3 font-medium">Dátum</th>
+                      <th className="py-2 pr-3 font-medium">Megnevezés</th>
+                      <th className="py-2 pr-3 font-medium">Forrás</th>
+                      <th className="py-2 pr-3 text-right font-medium">Kulcs</th>
+                      <th className="py-2 text-right font-medium">ÁFA összeg</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoVatRows.map((r) => (
+                      <tr
+                        key={`${r.sourceType}-${r.id}`}
+                        className={`border-b border-[var(--color-border)] last:border-b-0 ${r.cancelled ? 'opacity-60' : ''}`}
+                      >
+                        <td className="whitespace-nowrap py-2 pr-3">{formatDate(r.date)}</td>
+                        <td className={`py-2 pr-3 ${r.cancelled ? 'line-through' : ''}`}>{r.description}</td>
+                        <td className="py-2 pr-3">
+                          {r.sourceType === 'sale'
+                            ? r.cancelled
+                              ? 'Stornózva (visszavont eladás miatt)'
+                              : 'Értékesítés'
+                            : r.sourceType === 'purchase-reclaimable'
+                              ? 'Beszerzés (visszaig.)'
+                              : 'Beszerzés (nem visszaig.)'}
+                        </td>
+                        <td className="py-2 pr-3 text-right">{r.vatRatePercent}%</td>
+                        <td className="py-2 text-right font-medium">{formatCurrency(r.amountHuf)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -315,70 +370,92 @@ export function Ledger() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e) => (
-                <tr key={e.id} className="border-b border-[var(--color-border)] last:border-b-0">
-                  <td className="whitespace-nowrap px-4 py-3">{formatDate(e.date)}</td>
-                  <td className="px-4 py-3">
-                    <div>{e.category}</div>
-                    {e.category === VAT_CATEGORY && (
-                      <div className="text-xs text-[var(--color-text-muted)]">
-                        {e.vatRatePercent}% · {e.vatDirection === 'payable' ? 'Befizetendő' : 'Visszaigényelhető'}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-[var(--color-text)]">{e.description}</div>
-                    {e.note && <div className="text-xs text-[var(--color-text-muted)]">{e.note}</div>}
-                    {e.dueDate &&
-                      (e.isPaid ? (
-                        <div className="text-xs text-[var(--color-success)]">
-                          Kifizetve{e.paidDate ? ` (${formatDate(e.paidDate)})` : ''}
+              {filtered.map((e) => {
+                const isDeleted = Boolean(e.deletedAt)
+                return (
+                  <tr key={e.id} className={`border-b border-[var(--color-border)] last:border-b-0 ${isDeleted ? 'opacity-60' : ''}`}>
+                    <td className="whitespace-nowrap px-4 py-3">{formatDate(e.date)}</td>
+                    <td className="px-4 py-3">
+                      <div>{e.category}</div>
+                      {e.category === VAT_CATEGORY && (
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          {e.vatRatePercent}% · {e.vatDirection === 'payable' ? 'Befizetendő' : 'Visszaigényelhető'}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className={`text-[var(--color-text)] ${isDeleted ? 'line-through' : ''}`}>{e.description}</div>
+                      {e.note && <div className="text-xs text-[var(--color-text-muted)]">{e.note}</div>}
+                      {isDeleted && <div className="text-xs font-medium text-[var(--color-text-muted)]">Törölve</div>}
+                      {e.correctsEntryId && (
+                        <div className="text-xs font-medium text-[var(--color-warning)]">
+                          Korrekció - #{e.correctsEntryId.slice(0, 8)} tételhez
+                        </div>
+                      )}
+                      {!isDeleted && e.dueDate &&
+                        (e.isPaid ? (
+                          <div className="text-xs text-[var(--color-success)]">
+                            Kifizetve{e.paidDate ? ` (${formatDate(e.paidDate)})` : ''}
+                          </div>
+                        ) : (
+                          <div className="text-xs font-medium text-[var(--color-danger)]">Fizetési határidő: {formatDate(e.dueDate)}</div>
+                        ))}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <span className={e.type === 'income' ? 'font-semibold text-[var(--color-success)]' : 'font-semibold text-[var(--color-danger)]'}>
+                        {e.type === 'income' ? '+' : '-'}
+                        {formatCurrency(ledgerEntryHuf(e))}
+                      </span>
+                      {e.currency !== 'HUF' && (
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          {formatMoney(e.amount, e.currency)} · árfolyam {formatNumber(e.exchangeRate)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      {isDeleted ? (
+                        <button
+                          type="button"
+                          onClick={() => restoreLedgerEntry(e.id)}
+                          aria-label="Tétel visszaállítása"
+                          className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                        >
+                          <RotateCcw size={16} />
+                        </button>
                       ) : (
-                        <div className="text-xs font-medium text-[var(--color-danger)]">Fizetési határidő: {formatDate(e.dueDate)}</div>
-                      ))}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <span className={e.type === 'income' ? 'font-semibold text-[var(--color-success)]' : 'font-semibold text-[var(--color-danger)]'}>
-                      {e.type === 'income' ? '+' : '-'}
-                      {formatCurrency(ledgerEntryHuf(e))}
-                    </span>
-                    {e.currency !== 'HUF' && (
-                      <div className="text-xs text-[var(--color-text-muted)]">
-                        {formatMoney(e.amount, e.currency)} · árfolyam {formatNumber(e.exchangeRate)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {e.dueDate && !e.isPaid && (
-                      <button
-                        type="button"
-                        onClick={() => setLedgerEntryPaid(e.id, true)}
-                        aria-label="Megjelölés kifizetettként"
-                        className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
-                      >
-                        <CheckCircle2 size={16} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setEditing(e)}
-                      aria-label="Tétel szerkesztése"
-                      className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleting(e)}
-                      aria-label="Tétel törlése"
-                      className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                        <>
+                          {e.dueDate && !e.isPaid && (
+                            <button
+                              type="button"
+                              onClick={() => setLedgerEntryPaid(e.id, true)}
+                              aria-label="Megjelölés kifizetettként"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                            >
+                              <CheckCircle2 size={16} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setEditing(e)}
+                            aria-label="Tétel szerkesztése"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleting(e)}
+                            aria-label="Tétel törlése"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </Card>
@@ -395,13 +472,15 @@ export function Ledger() {
         </Modal>
       )}
       {deleting && (
-        <ConfirmDialog
+        <DeleteChoiceDialog
           title="Tétel törlése"
-          message={`Biztosan törlöd a(z) "${deleting.description}" tételt?`}
-          confirmLabel="Törlés"
-          danger
-          onConfirm={() => {
-            deleteLedgerEntry(deleting.id)
+          description={`Hogyan töröljük a(z) "${deleting.description}" tételt?`}
+          onCorrection={() => {
+            deleteLedgerEntry(deleting.id, 'correction' satisfies DeleteLedgerEntryMode)
+            setDeleting(null)
+          }}
+          onSoftDelete={() => {
+            deleteLedgerEntry(deleting.id, 'soft-delete' satisfies DeleteLedgerEntryMode)
             setDeleting(null)
           }}
           onCancel={() => setDeleting(null)}

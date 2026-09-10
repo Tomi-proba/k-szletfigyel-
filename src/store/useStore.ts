@@ -4,9 +4,14 @@ import { createId } from './id'
 import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import { todayISO } from '../lib/dates'
+import { diffFields } from '../lib/audit'
 import {
   DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
+  type AuditAction,
+  type AuditEntityType,
+  type AuditFieldChange,
+  type AuditLogEntry,
   type Currency,
   type Customer,
   type LedgerEntry,
@@ -15,9 +20,24 @@ import {
   type MovementType,
   type Product,
   type PurchaseLot,
+  type SaleStatus,
   type Settings,
   type Supplier,
 } from '../types'
+
+/** Builds one audit log entry - every mutating action appends the result of
+ * this to state.auditLog. Kept as a plain function (not a store action) so
+ * it can be called freely inside other actions' `set()` updaters. */
+function auditEntry(
+  entityType: AuditEntityType,
+  entityId: string,
+  entityLabel: string,
+  action: AuditAction,
+  description: string,
+  changes?: AuditFieldChange[],
+): AuditLogEntry {
+  return { id: createId(), timestamp: new Date().toISOString(), entityType, entityId, entityLabel, action, description, changes }
+}
 
 export interface RecordMovementInput {
   productId: string
@@ -56,11 +76,22 @@ export interface RecordMovementInput {
   /** 'in' only, meaningful when vatRatePercent is set. Defaults to true
    * (reclaimable) when omitted. */
   vatReclaimable?: boolean
+  /** Internal: set when this movement exists specifically to reverse/
+   * correct another one (see cancelSale and deleteMovement's 'correction'
+   * mode) - points at the original movement's id. */
+  correctsMovementId?: string
 }
 
 export type RecordMovementResult =
   | { ok: true }
   | { ok: false; reason: 'invalid-quantity' | 'product-not-found' | 'insufficient-stock'; resultingStock?: number }
+
+export type DeleteMovementMode = 'correction' | 'soft-delete'
+export type DeleteLedgerEntryMode = 'correction' | 'soft-delete'
+
+export type CancelSaleResult =
+  | { ok: true; wasPaid: boolean }
+  | { ok: false; reason: 'not-found' | 'not-a-sale' | 'already-cancelled' }
 
 interface AppState {
   locations: Location[]
@@ -71,41 +102,50 @@ interface AppState {
   lots: PurchaseLot[]
   ledgerEntries: LedgerEntry[]
   ledgerCategories: string[]
+  auditLog: AuditLogEntry[]
   settings: Settings
 
   // Locations
   addLocation: (name: string) => void
   updateLocation: (id: string, name: string) => void
   deleteLocation: (id: string) => void
+  restoreLocation: (id: string) => void
 
   // Suppliers
   addSupplier: (input: Omit<Supplier, 'id'>) => void
   updateSupplier: (id: string, input: Omit<Supplier, 'id'>) => void
   deleteSupplier: (id: string) => void
+  restoreSupplier: (id: string) => void
 
   // Customers
   addCustomer: (input: Omit<Customer, 'id'>) => void
   updateCustomer: (id: string, input: Omit<Customer, 'id'>) => void
   deleteCustomer: (id: string) => void
+  restoreCustomer: (id: string) => void
 
   // Products
   addProduct: (input: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateProduct: (id: string, input: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void
   deleteProduct: (id: string) => void
+  restoreProduct: (id: string) => void
 
   // Movements
   recordMovement: (input: RecordMovementInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
-  deleteMovement: (id: string) => void
+  deleteMovement: (id: string, mode: DeleteMovementMode) => void
+  restoreMovement: (id: string) => void
   setMovementPaid: (movementId: string, isPaid: boolean) => void
   setLotPaid: (lotId: string, isPaid: boolean) => void
   setLedgerEntryPaid: (entryId: string, isPaid: boolean) => void
   updateLotVat: (lotId: string, input: { vatRatePercent?: number; vatReclaimable?: boolean }) => void
   updateMovementVat: (movementId: string, vatRatePercent?: number) => void
+  setSaleStatus: (movementId: string, status: SaleStatus) => void
+  cancelSale: (movementId: string, reason?: string) => CancelSaleResult
 
   // Ledger (general income/expense journal)
   addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateLedgerEntry: (id: string, input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
-  deleteLedgerEntry: (id: string) => void
+  deleteLedgerEntry: (id: string, mode: DeleteLedgerEntryMode) => void
+  restoreLedgerEntry: (id: string) => void
 
   // Settings
   updateSettings: (settings: Settings) => void
@@ -122,74 +162,184 @@ export const useStore = create<AppState>()(
       settings: DEFAULT_SETTINGS,
 
       addLocation: (name) =>
-        set((state) => ({
-          locations: [...state.locations, { id: createId(), name: name.trim() }],
-        })),
+        set((state) => {
+          const location: Location = { id: createId(), name: name.trim() }
+          return {
+            locations: [...state.locations, location],
+            auditLog: [...state.auditLog, auditEntry('location', location.id, location.name, 'create', `"${location.name}" telephely létrehozva`)],
+          }
+        }),
 
       updateLocation: (id, name) =>
-        set((state) => ({
-          locations: state.locations.map((l) => (l.id === id ? { ...l, name: name.trim() } : l)),
-        })),
+        set((state) => {
+          const existing = state.locations.find((l) => l.id === id)
+          if (!existing) return state
+          const trimmed = name.trim()
+          const changes = diffFields('location', { name: existing.name }, { name: trimmed })
+          return {
+            locations: state.locations.map((l) => (l.id === id ? { ...l, name: trimmed } : l)),
+            auditLog:
+              changes.length > 0
+                ? [...state.auditLog, auditEntry('location', id, trimmed, 'update', `"${trimmed}" telephely adatai módosultak`, changes)]
+                : state.auditLog,
+          }
+        }),
 
       deleteLocation: (id) =>
         set((state) => {
-          const inUse = state.products.some((p) => p.locationId === id)
-          if (inUse || state.locations.length <= 1) return state
-          return { locations: state.locations.filter((l) => l.id !== id) }
+          const location = state.locations.find((l) => l.id === id)
+          if (!location) return state
+          const activeLocations = state.locations.filter((l) => !l.deletedAt)
+          const inUse = state.products.some((p) => p.locationId === id && !p.deletedAt)
+          if (inUse || activeLocations.length <= 1) return state
+          return {
+            locations: state.locations.map((l) => (l.id === id ? { ...l, deletedAt: new Date().toISOString() } : l)),
+            auditLog: [...state.auditLog, auditEntry('location', id, location.name, 'delete', `"${location.name}" telephely törölve`)],
+          }
+        }),
+
+      restoreLocation: (id) =>
+        set((state) => {
+          const location = state.locations.find((l) => l.id === id)
+          if (!location || !location.deletedAt) return state
+          return {
+            locations: state.locations.map((l) => (l.id === id ? { ...l, deletedAt: undefined } : l)),
+            auditLog: [...state.auditLog, auditEntry('location', id, location.name, 'restore', `"${location.name}" telephely visszaállítva`)],
+          }
         }),
 
       addSupplier: (input) =>
-        set((state) => ({
-          suppliers: [...state.suppliers, { ...input, id: createId() }],
-        })),
+        set((state) => {
+          const supplier: Supplier = { ...input, id: createId() }
+          return {
+            suppliers: [...state.suppliers, supplier],
+            auditLog: [...state.auditLog, auditEntry('supplier', supplier.id, supplier.name, 'create', `"${supplier.name}" beszállító létrehozva`)],
+          }
+        }),
 
       updateSupplier: (id, input) =>
-        set((state) => ({
-          suppliers: state.suppliers.map((s) => (s.id === id ? { ...input, id } : s)),
-        })),
+        set((state) => {
+          const existing = state.suppliers.find((s) => s.id === id)
+          if (!existing) return state
+          const updated: Supplier = { ...input, id, deletedAt: existing.deletedAt }
+          const changes = diffFields('supplier', existing, updated)
+          return {
+            suppliers: state.suppliers.map((s) => (s.id === id ? updated : s)),
+            auditLog:
+              changes.length > 0
+                ? [...state.auditLog, auditEntry('supplier', id, updated.name, 'update', `"${updated.name}" beszállító adatai módosultak`, changes)]
+                : state.auditLog,
+          }
+        }),
 
       deleteSupplier: (id) =>
-        set((state) => ({
-          suppliers: state.suppliers.filter((s) => s.id !== id),
-          products: state.products.map((p) => (p.supplierId === id ? { ...p, supplierId: undefined } : p)),
-        })),
+        set((state) => {
+          const supplier = state.suppliers.find((s) => s.id === id)
+          if (!supplier) return state
+          return {
+            suppliers: state.suppliers.map((s) => (s.id === id ? { ...s, deletedAt: new Date().toISOString() } : s)),
+            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'delete', `"${supplier.name}" beszállító törölve`)],
+          }
+        }),
+
+      restoreSupplier: (id) =>
+        set((state) => {
+          const supplier = state.suppliers.find((s) => s.id === id)
+          if (!supplier || !supplier.deletedAt) return state
+          return {
+            suppliers: state.suppliers.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
+            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'restore', `"${supplier.name}" beszállító visszaállítva`)],
+          }
+        }),
 
       addCustomer: (input) =>
-        set((state) => ({
-          customers: [...state.customers, { ...input, id: createId() }],
-        })),
+        set((state) => {
+          const customer: Customer = { ...input, id: createId() }
+          return {
+            customers: [...state.customers, customer],
+            auditLog: [...state.auditLog, auditEntry('customer', customer.id, customer.name, 'create', `"${customer.name}" vevő létrehozva`)],
+          }
+        }),
 
       updateCustomer: (id, input) =>
-        set((state) => ({
-          customers: state.customers.map((c) => (c.id === id ? { ...input, id } : c)),
-        })),
+        set((state) => {
+          const existing = state.customers.find((c) => c.id === id)
+          if (!existing) return state
+          const updated: Customer = { ...input, id, deletedAt: existing.deletedAt }
+          const changes = diffFields('customer', existing, updated)
+          return {
+            customers: state.customers.map((c) => (c.id === id ? updated : c)),
+            auditLog:
+              changes.length > 0
+                ? [...state.auditLog, auditEntry('customer', id, updated.name, 'update', `"${updated.name}" vevő adatai módosultak`, changes)]
+                : state.auditLog,
+          }
+        }),
 
       deleteCustomer: (id) =>
-        set((state) => ({
-          customers: state.customers.filter((c) => c.id !== id),
-          movements: state.movements.map((m) => (m.customerId === id ? { ...m, customerId: undefined, isPaid: undefined } : m)),
-        })),
+        set((state) => {
+          const customer = state.customers.find((c) => c.id === id)
+          if (!customer) return state
+          return {
+            customers: state.customers.map((c) => (c.id === id ? { ...c, deletedAt: new Date().toISOString() } : c)),
+            auditLog: [...state.auditLog, auditEntry('customer', id, customer.name, 'delete', `"${customer.name}" vevő törölve`)],
+          }
+        }),
+
+      restoreCustomer: (id) =>
+        set((state) => {
+          const customer = state.customers.find((c) => c.id === id)
+          if (!customer || !customer.deletedAt) return state
+          return {
+            customers: state.customers.map((c) => (c.id === id ? { ...c, deletedAt: undefined } : c)),
+            auditLog: [...state.auditLog, auditEntry('customer', id, customer.name, 'restore', `"${customer.name}" vevő visszaállítva`)],
+          }
+        }),
 
       addProduct: (input) =>
         set((state) => {
           const now = new Date().toISOString()
+          const product: Product = { ...input, id: createId(), createdAt: now, updatedAt: now }
           return {
-            products: [...state.products, { ...input, id: createId(), createdAt: now, updatedAt: now }],
+            products: [...state.products, product],
+            auditLog: [...state.auditLog, auditEntry('product', product.id, product.name, 'create', `"${product.name}" termék létrehozva`)],
           }
         }),
 
       updateProduct: (id, input) =>
-        set((state) => ({
-          products: state.products.map((p) =>
-            p.id === id ? { ...input, id, createdAt: p.createdAt, updatedAt: new Date().toISOString() } : p,
-          ),
-        })),
+        set((state) => {
+          const existing = state.products.find((p) => p.id === id)
+          if (!existing) return state
+          const updated: Product = { ...input, id, createdAt: existing.createdAt, updatedAt: new Date().toISOString(), deletedAt: existing.deletedAt }
+          const changes = diffFields('product', existing, updated)
+          return {
+            products: state.products.map((p) => (p.id === id ? updated : p)),
+            auditLog:
+              changes.length > 0
+                ? [...state.auditLog, auditEntry('product', id, updated.name, 'update', `"${updated.name}" termék adatai módosultak`, changes)]
+                : state.auditLog,
+          }
+        }),
 
       deleteProduct: (id) =>
-        set((state) => ({
-          products: state.products.filter((p) => p.id !== id),
-          movements: state.movements.filter((m) => m.productId !== id),
-        })),
+        set((state) => {
+          const product = state.products.find((p) => p.id === id)
+          if (!product) return state
+          return {
+            products: state.products.map((p) => (p.id === id ? { ...p, deletedAt: new Date().toISOString() } : p)),
+            auditLog: [...state.auditLog, auditEntry('product', id, product.name, 'delete', `"${product.name}" termék törölve`)],
+          }
+        }),
+
+      restoreProduct: (id) =>
+        set((state) => {
+          const product = state.products.find((p) => p.id === id)
+          if (!product || !product.deletedAt) return state
+          return {
+            products: state.products.map((p) => (p.id === id ? { ...p, deletedAt: undefined } : p)),
+            auditLog: [...state.auditLog, auditEntry('product', id, product.name, 'restore', `"${product.name}" termék visszaállítva`)],
+          }
+        }),
 
       recordMovement: (input, opts) => {
         const {
@@ -208,6 +358,7 @@ export const useStore = create<AppState>()(
           invoicePaid,
           vatRatePercent,
           vatReclaimable,
+          correctsMovementId,
         } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
@@ -303,6 +454,7 @@ export const useStore = create<AppState>()(
 
         const movementId = createId()
         if (newLot) newLot.movementId = movementId
+        const movementLabel = `${product.name} (${quantity} ${product.unit})`
 
         set((state) => ({
           products: state.products.map((p) =>
@@ -334,59 +486,269 @@ export const useStore = create<AppState>()(
               saleUnitPrice: type === 'out' ? product.salePrice : undefined,
               isPaid: type === 'out' && customerId ? (isPaid ?? true) : undefined,
               vatRatePercent: type === 'out' ? vatRatePercent : undefined,
+              saleStatus: type === 'out' ? 'pending' : undefined,
+              saleStatusChangedAt: type === 'out' ? new Date().toISOString() : undefined,
+              correctsMovementId,
             },
+          ],
+          auditLog: [
+            ...state.auditLog,
+            auditEntry(
+              'movement',
+              movementId,
+              movementLabel,
+              'create',
+              correctsMovementId
+                ? `Korrekciós/visszavételi tétel rögzítve - ${movementLabel}`
+                : type === 'in'
+                  ? `Bejövő mozgás rögzítve - ${movementLabel}`
+                  : `Eladás rögzítve - ${movementLabel}`,
+            ),
           ],
         }))
         return { ok: true }
       },
 
       setMovementPaid: (movementId, isPaid) =>
-        set((state) => ({
-          movements: state.movements.map((m) => (m.id === movementId ? { ...m, isPaid } : m)),
-        })),
+        set((state) => {
+          const movement = state.movements.find((m) => m.id === movementId)
+          if (!movement) return state
+          const product = state.products.find((p) => p.id === movement.productId)
+          const changes = diffFields('movement', { isPaid: movement.isPaid }, { isPaid })
+          return {
+            movements: state.movements.map((m) => (m.id === movementId ? { ...m, isPaid } : m)),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry(
+                      'movement',
+                      movementId,
+                      product?.name ?? 'Eladás',
+                      'update',
+                      isPaid ? 'Eladás megjelölve kifizetettként' : 'Eladás megjelölve kifizetetlenként',
+                      changes,
+                    ),
+                  ]
+                : state.auditLog,
+          }
+        }),
 
       setLotPaid: (lotId, isPaid) =>
-        set((state) => ({
-          lots: state.lots.map((l) => (l.id === lotId ? { ...l, isPaid, paidDate: isPaid ? todayISO() : undefined } : l)),
-        })),
+        set((state) => {
+          const lot = state.lots.find((l) => l.id === lotId)
+          if (!lot) return state
+          const product = state.products.find((p) => p.id === lot.productId)
+          const changes = diffFields('lot', { isPaid: lot.isPaid }, { isPaid })
+          return {
+            lots: state.lots.map((l) => (l.id === lotId ? { ...l, isPaid, paidDate: isPaid ? todayISO() : undefined } : l)),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry(
+                      'lot',
+                      lotId,
+                      product?.name ?? 'Beszerzési tétel',
+                      'update',
+                      isPaid ? 'Beszállítói számla megjelölve kifizetettként' : 'Beszállítói számla megjelölve kifizetetlenként',
+                      changes,
+                    ),
+                  ]
+                : state.auditLog,
+          }
+        }),
 
       setLedgerEntryPaid: (entryId, isPaid) =>
-        set((state) => ({
-          ledgerEntries: state.ledgerEntries.map((e) =>
-            e.id === entryId ? { ...e, isPaid, paidDate: isPaid ? todayISO() : undefined, updatedAt: new Date().toISOString() } : e,
-          ),
-        })),
+        set((state) => {
+          const entry = state.ledgerEntries.find((e) => e.id === entryId)
+          if (!entry) return state
+          const changes = diffFields('ledgerEntry', { isPaid: entry.isPaid }, { isPaid })
+          return {
+            ledgerEntries: state.ledgerEntries.map((e) =>
+              e.id === entryId ? { ...e, isPaid, paidDate: isPaid ? todayISO() : undefined, updatedAt: new Date().toISOString() } : e,
+            ),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry(
+                      'ledgerEntry',
+                      entryId,
+                      entry.description,
+                      'update',
+                      isPaid ? 'Kiadás megjelölve kifizetettként' : 'Kiadás megjelölve kifizetetlenként',
+                      changes,
+                    ),
+                  ]
+                : state.auditLog,
+          }
+        }),
 
       updateLotVat: (lotId, input) =>
-        set((state) => ({
-          lots: state.lots.map((l) =>
-            l.id === lotId
-              ? { ...l, vatRatePercent: input.vatRatePercent, vatReclaimable: input.vatRatePercent !== undefined ? (input.vatReclaimable ?? true) : undefined }
-              : l,
-          ),
-        })),
+        set((state) => {
+          const lot = state.lots.find((l) => l.id === lotId)
+          if (!lot) return state
+          const product = state.products.find((p) => p.id === lot.productId)
+          const nextReclaimable = input.vatRatePercent !== undefined ? (input.vatReclaimable ?? true) : undefined
+          const changes = diffFields(
+            'lot',
+            { vatRatePercent: lot.vatRatePercent, vatReclaimable: lot.vatReclaimable },
+            { vatRatePercent: input.vatRatePercent, vatReclaimable: nextReclaimable },
+          )
+          return {
+            lots: state.lots.map((l) => (l.id === lotId ? { ...l, vatRatePercent: input.vatRatePercent, vatReclaimable: nextReclaimable } : l)),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry('lot', lotId, product?.name ?? 'Beszerzési tétel', 'update', 'Beszerzési tétel ÁFA adatai módosultak', changes),
+                  ]
+                : state.auditLog,
+          }
+        }),
 
       updateMovementVat: (movementId, vatRatePercent) =>
-        set((state) => ({
-          movements: state.movements.map((m) => (m.id === movementId ? { ...m, vatRatePercent } : m)),
-        })),
-
-      deleteMovement: (id) =>
         set((state) => {
-          const movement = state.movements.find((m) => m.id === id)
+          const movement = state.movements.find((m) => m.id === movementId)
           if (!movement) return state
-          // Reverses the stock quantity and removes the lot an 'in'
-          // movement created. Doesn't restore quantity to whichever lots
-          // an 'out' movement consumed - once later sales have potentially
+          const product = state.products.find((p) => p.id === movement.productId)
+          const changes = diffFields('movement', { vatRatePercent: movement.vatRatePercent }, { vatRatePercent })
+          return {
+            movements: state.movements.map((m) => (m.id === movementId ? { ...m, vatRatePercent } : m)),
+            auditLog:
+              changes.length > 0
+                ? [...state.auditLog, auditEntry('movement', movementId, product?.name ?? 'Mozgás', 'update', 'Mozgás ÁFA kulcsa módosult', changes)]
+                : state.auditLog,
+          }
+        }),
+
+      setSaleStatus: (movementId, status) =>
+        set((state) => {
+          const movement = state.movements.find((m) => m.id === movementId)
+          if (!movement || movement.type !== 'out' || movement.deletedAt || movement.cancelled || movement.saleStatus === status) return state
+          const product = state.products.find((p) => p.id === movement.productId)
+          const changes = diffFields('movement', { saleStatus: movement.saleStatus }, { saleStatus: status })
+          return {
+            movements: state.movements.map((m) =>
+              m.id === movementId ? { ...m, saleStatus: status, saleStatusChangedAt: new Date().toISOString() } : m,
+            ),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('movement', movementId, product?.name ?? 'Eladás', 'update', 'Eladási státusz módosítva', changes),
+            ],
+          }
+        }),
+
+      cancelSale: (movementId, reason) => {
+        const movement = get().movements.find((m) => m.id === movementId)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (movement.type !== 'out') return { ok: false, reason: 'not-a-sale' }
+        if (movement.cancelled) return { ok: false, reason: 'already-cancelled' }
+
+        const product = get().products.find((p) => p.id === movement.productId)
+        // A cash/walk-in sale (no tracked customer) is always treated as
+        // already paid - only a tracked customer's isPaid flag can say
+        // otherwise (see Movement.isPaid's own doc comment).
+        const wasPaid = movement.customerId ? movement.isPaid === true : true
+        const trimmedReason = reason?.trim() || undefined
+
+        set((state) => ({
+          movements: state.movements.map((m) =>
+            m.id === movementId ? { ...m, cancelled: true, cancelledAt: new Date().toISOString(), cancelReason: trimmedReason } : m,
+          ),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry(
+              'movement',
+              movementId,
+              product?.name ?? 'Eladás',
+              'cancel',
+              `Eladás visszavonva${trimmedReason ? ` (${trimmedReason})` : ''}`,
+            ),
+          ],
+        }))
+
+        // Restock via a synthetic correction 'in' movement at the sale's own
+        // snapshotted cost basis, reusing recordMovement's lot-creation and
+        // weighted-average update - cleaner and better-defined than trying
+        // to reverse-engineer which original lot(s) the sale drew from.
+        get().recordMovement({
+          productId: movement.productId,
+          type: 'in',
+          quantity: movement.quantity,
+          date: todayISO(),
+          note: 'Visszavétel - eladás visszavonása miatt',
+          unitPrice: movement.unitCost ?? 0,
+          correctsMovementId: movementId,
+        })
+
+        return { ok: true, wasPaid }
+      },
+
+      deleteMovement: (id, mode) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return
+        const product = get().products.find((p) => p.id === movement.productId)
+        const label = `${product?.name ?? 'Törölt termék'} (${movement.quantity} db)`
+
+        if (mode === 'correction') {
+          const reverseType: MovementType = movement.type === 'in' ? 'out' : 'in'
+          get().recordMovement(
+            {
+              productId: movement.productId,
+              type: reverseType,
+              quantity: movement.quantity,
+              date: todayISO(),
+              note: `Korrekció - érvényteleníti a(z) #${id.slice(0, 8)} mozgást`,
+              unitPrice: reverseType === 'in' ? (movement.unitCost ?? 0) : undefined,
+              correctsMovementId: id,
+            },
+            { allowNegativeStock: true },
+          )
+          set((state) => ({
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('movement', id, label, 'correction', `Korrekciós tétel létrehozva a(z) #${id.slice(0, 8)} mozgáshoz`),
+            ],
+          }))
+          return
+        }
+
+        set((state) => {
+          // Reverses the stock quantity and soft-deletes the lot an 'in'
+          // movement created. Doesn't restore quantity to whichever lots an
+          // 'out' movement consumed - once later sales have potentially
           // drawn from the same lots, unwinding that precisely isn't
           // well-defined, same as the weighted-average case.
           const reverseDelta = movement.type === 'in' ? -movement.quantity : movement.quantity
+          const now = new Date().toISOString()
           return {
-            movements: state.movements.filter((m) => m.id !== id),
-            lots: movement.type === 'in' ? state.lots.filter((l) => l.movementId !== id) : state.lots,
-            products: state.products.map((p) =>
-              p.id === movement.productId ? { ...p, currentStock: p.currentStock + reverseDelta } : p,
-            ),
+            movements: state.movements.map((m) => (m.id === id ? { ...m, deletedAt: now } : m)),
+            lots: movement.type === 'in' ? state.lots.map((l) => (l.movementId === id ? { ...l, deletedAt: now } : l)) : state.lots,
+            products: state.products.map((p) => (p.id === movement.productId ? { ...p, currentStock: p.currentStock + reverseDelta } : p)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('movement', id, label, 'delete', `Mozgás törölve (${movement.type === 'in' ? 'bejövő' : 'kimenő'})`),
+            ],
+          }
+        })
+      },
+
+      restoreMovement: (id) =>
+        set((state) => {
+          const movement = state.movements.find((m) => m.id === id)
+          if (!movement || !movement.deletedAt) return state
+          const product = state.products.find((p) => p.id === movement.productId)
+          const reapplyDelta = movement.type === 'in' ? movement.quantity : -movement.quantity
+          return {
+            movements: state.movements.map((m) => (m.id === id ? { ...m, deletedAt: undefined } : m)),
+            lots: movement.type === 'in' ? state.lots.map((l) => (l.movementId === id ? { ...l, deletedAt: undefined } : l)) : state.lots,
+            products: state.products.map((p) => (p.id === movement.productId ? { ...p, currentStock: p.currentStock + reapplyDelta } : p)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('movement', id, product?.name ?? 'Törölt termék', 'restore', 'Mozgás visszaállítva'),
+            ],
           }
         }),
 
@@ -394,27 +756,98 @@ export const useStore = create<AppState>()(
         set((state) => {
           const category = input.category.trim()
           const now = new Date().toISOString()
+          const entry: LedgerEntry = { ...input, category, id: createId(), createdAt: now, updatedAt: now }
           return {
             ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
-            ledgerEntries: [...state.ledgerEntries, { ...input, category, id: createId(), createdAt: now, updatedAt: now }],
+            ledgerEntries: [...state.ledgerEntries, entry],
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('ledgerEntry', entry.id, entry.description, 'create', `"${entry.description}" napló tétel létrehozva`),
+            ],
           }
         }),
 
       updateLedgerEntry: (id, input) =>
         set((state) => {
+          const existing = state.ledgerEntries.find((e) => e.id === id)
+          if (!existing) return state
           const category = input.category.trim()
+          const updated: LedgerEntry = {
+            ...input,
+            category,
+            id,
+            createdAt: existing.createdAt,
+            updatedAt: new Date().toISOString(),
+            deletedAt: existing.deletedAt,
+          }
+          const changes = diffFields('ledgerEntry', existing, updated)
           return {
             ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
-            ledgerEntries: state.ledgerEntries.map((e) =>
-              e.id === id ? { ...input, category, id, createdAt: e.createdAt, updatedAt: new Date().toISOString() } : e,
-            ),
+            ledgerEntries: state.ledgerEntries.map((e) => (e.id === id ? updated : e)),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry('ledgerEntry', id, updated.description, 'update', `"${updated.description}" napló tétel módosult`, changes),
+                  ]
+                : state.auditLog,
           }
         }),
 
-      deleteLedgerEntry: (id) =>
-        set((state) => ({
-          ledgerEntries: state.ledgerEntries.filter((e) => e.id !== id),
-        })),
+      deleteLedgerEntry: (id, mode) =>
+        set((state) => {
+          const entry = state.ledgerEntries.find((e) => e.id === id)
+          if (!entry) return state
+
+          if (mode === 'correction') {
+            const now = new Date().toISOString()
+            const correction: LedgerEntry = {
+              id: createId(),
+              date: todayISO(),
+              type: entry.type === 'income' ? 'expense' : 'income',
+              category: entry.category,
+              description: `Korrekció - érvényteleníti a(z) #${id.slice(0, 8)} tételt (${entry.description})`,
+              amount: entry.amount,
+              currency: entry.currency,
+              exchangeRate: entry.exchangeRate,
+              note: `Eredeti tétel: ${entry.description}`,
+              correctsEntryId: id,
+              createdAt: now,
+              updatedAt: now,
+            }
+            return {
+              ledgerEntries: [...state.ledgerEntries, correction],
+              auditLog: [
+                ...state.auditLog,
+                auditEntry(
+                  'ledgerEntry',
+                  correction.id,
+                  correction.description,
+                  'correction',
+                  `Korrekciós tétel létrehozva a(z) #${id.slice(0, 8)} tételhez`,
+                ),
+              ],
+            }
+          }
+
+          return {
+            ledgerEntries: state.ledgerEntries.map((e) => (e.id === id ? { ...e, deletedAt: new Date().toISOString() } : e)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('ledgerEntry', id, entry.description, 'delete', `"${entry.description}" napló tétel törölve`),
+            ],
+          }
+        }),
+
+      restoreLedgerEntry: (id) =>
+        set((state) => {
+          const entry = state.ledgerEntries.find((e) => e.id === id)
+          if (!entry || !entry.deletedAt) return state
+          return {
+            ledgerEntries: state.ledgerEntries.map((e) => (e.id === id ? { ...e, deletedAt: undefined } : e)),
+            auditLog: [...state.auditLog, auditEntry('ledgerEntry', id, entry.description, 'restore', `"${entry.description}" napló tétel visszaállítva`)],
+          }
+        }),
 
       updateSettings: (settings) => set({ settings }),
 
@@ -432,6 +865,7 @@ export const useStore = create<AppState>()(
             lots: [],
             ledgerEntries: [],
             ledgerCategories: [...DEFAULT_LEDGER_CATEGORIES],
+            auditLog: [],
             settings: DEFAULT_SETTINGS,
           }
         }),

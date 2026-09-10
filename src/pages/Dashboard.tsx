@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, PackageMinus, TrendingDown } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, PackageMinus, Truck, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
@@ -64,7 +64,7 @@ export function Dashboard() {
         </Card>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
             <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
             <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
@@ -82,6 +82,7 @@ export function Dashboard() {
               count={alerts.urgentPayables.length}
               tone="warning"
             />
+            <SummaryCard to="/riasztasok?szuro=nyitott" icon={Truck} label="Nyitott eladás" count={alerts.openSales.length} tone="info" />
           </div>
 
           {alerts.transferSuggestions.length > 0 && (

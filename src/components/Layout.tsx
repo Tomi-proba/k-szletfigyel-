@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   BarChart3,
   ClipboardList,
+  History,
   LayoutDashboard,
   Menu,
   MapPin,
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/telephelyek', label: 'Telephelyek', icon: MapPin },
   { to: '/riportok', label: 'Riportok', icon: BarChart3 },
   { to: '/penzugyi-naplo', label: 'Pénzügyi napló', icon: Scale },
+  { to: '/audit-naplo', label: 'Audit napló', icon: History },
   { to: '/beallitasok', label: 'Beállítások', icon: SettingsIcon },
 ]
 
@@ -45,7 +47,12 @@ export function Layout() {
   const [quickMoveOpen, setQuickMoveOpen] = useState(false)
   const alerts = useAlerts()
   const alertCount =
-    alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length + alerts.urgentPayables.length
+    alerts.needsReorder.length +
+    alerts.slowMoving.length +
+    alerts.transferSuggestions.length +
+    alerts.unpaidSales.length +
+    alerts.urgentPayables.length +
+    alerts.openSales.length
   const location = useLocation()
   const isDashboard = location.pathname === '/'
 

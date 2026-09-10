@@ -1,10 +1,11 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Supplier } from '../types'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Button, Card, EmptyState, Field, Input, PageHeader } from '../components/ui'
+import { HistoryPanel } from '../components/HistoryPanel'
+import { Button, Card, Checkbox, EmptyState, Field, Input, PageHeader } from '../components/ui'
 
 function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () => void }) {
   const addSupplier = useStore((s) => s.addSupplier)
@@ -41,6 +42,14 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
       <Field label="Átlagos szállítási idő (nap)">
         <Input type="number" min={0} value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} required />
       </Field>
+
+      {supplier && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Előzmények</h3>
+          <HistoryPanel entityType="supplier" entityId={supplier.id} />
+        </div>
+      )}
+
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onDone}>
@@ -56,9 +65,13 @@ export function Suppliers() {
   const suppliers = useStore((s) => s.suppliers)
   const products = useStore((s) => s.products)
   const deleteSupplier = useStore((s) => s.deleteSupplier)
+  const restoreSupplier = useStore((s) => s.restoreSupplier)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [deleting, setDeleting] = useState<Supplier | null>(null)
+  const [showDeleted, setShowDeleted] = useState(false)
+
+  const visibleSuppliers = suppliers.filter((s) => showDeleted || !s.deletedAt)
 
   return (
     <div>
@@ -72,26 +85,46 @@ export function Suppliers() {
         }
       />
 
-      {suppliers.length === 0 ? (
+      <div className="mb-4">
+        <Checkbox label="Törölt beszállítók megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+      </div>
+
+      {visibleSuppliers.length === 0 ? (
         <EmptyState>Még nincs rögzített beszállító.</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {suppliers.map((s) => {
+          {visibleSuppliers.map((s) => {
             const productCount = products.filter((p) => p.supplierId === s.id).length
+            const isDeleted = Boolean(s.deletedAt)
             return (
-              <Card key={s.id} className="flex flex-col gap-2">
-                <div className="font-semibold text-[var(--color-text)]">{s.name}</div>
+              <Card key={s.id} className={`flex flex-col gap-2 ${isDeleted ? 'opacity-60' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className={`font-semibold text-[var(--color-text)] ${isDeleted ? 'line-through' : ''}`}>{s.name}</div>
+                  {isDeleted && (
+                    <span className="whitespace-nowrap rounded-full bg-black/10 px-2.5 py-1 text-xs font-medium text-[var(--color-text-muted)]">
+                      Törölve
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-[var(--color-text-muted)]">{s.phone || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">{s.email || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">Szállítási idő: {s.leadTimeDays} nap</div>
                 <div className="text-xs text-[var(--color-text-muted)]">{productCount} termékhez rendelve</div>
                 <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  <Button variant="secondary" onClick={() => setEditing(s)}>
-                    <Pencil size={16} /> Szerkesztés
-                  </Button>
-                  <Button variant="danger" onClick={() => setDeleting(s)}>
-                    <Trash2 size={16} />
-                  </Button>
+                  {isDeleted ? (
+                    <Button variant="secondary" onClick={() => restoreSupplier(s.id)}>
+                      <RotateCcw size={16} /> Visszaállítás
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={() => setEditing(s)}>
+                        <Pencil size={16} /> Szerkesztés
+                      </Button>
+                      <Button variant="danger" onClick={() => setDeleting(s)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </Card>
             )
@@ -112,7 +145,7 @@ export function Suppliers() {
       {deleting && (
         <ConfirmDialog
           title="Beszállító törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" beszállítót? A hozzá rendelt termékeknél a beszállító mező üresre vált.`}
+          message={`Biztosan törlöd a(z) "${deleting.name}" beszállítót? A hozzá rendelt termékek megtartják a hivatkozást, és a beszállító bármikor visszaállítható.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

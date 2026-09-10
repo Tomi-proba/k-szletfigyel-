@@ -1,11 +1,12 @@
-import { CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useAlerts } from '../hooks/useAlerts'
 import type { Customer } from '../types'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Button, Card, EmptyState, Field, Input, PageHeader } from '../components/ui'
+import { HistoryPanel } from '../components/HistoryPanel'
+import { Button, Card, Checkbox, EmptyState, Field, Input, PageHeader } from '../components/ui'
 import { formatCurrency, formatDate } from '../lib/format'
 
 function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () => void }) {
@@ -46,6 +47,14 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
       <Field label="Megjegyzés">
         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
+
+      {customer && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Előzmények</h3>
+          <HistoryPanel entityType="customer" entityId={customer.id} />
+        </div>
+      )}
+
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onDone}>
@@ -60,14 +69,17 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
 export function Customers() {
   const customers = useStore((s) => s.customers)
   const deleteCustomer = useStore((s) => s.deleteCustomer)
+  const restoreCustomer = useStore((s) => s.restoreCustomer)
   const setMovementPaid = useStore((s) => s.setMovementPaid)
   const alerts = useAlerts()
 
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState<Customer | null>(null)
+  const [showDeleted, setShowDeleted] = useState(false)
 
   const balanceByCustomer = new Map(alerts.customerBalances.map((b) => [b.customerId, b]))
+  const visibleCustomers = customers.filter((c) => showDeleted || !c.deletedAt)
 
   return (
     <div>
@@ -109,32 +121,51 @@ export function Customers() {
         </Card>
       )}
 
-      {customers.length === 0 ? (
+      <div className="mb-4">
+        <Checkbox label="Törölt vevők megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+      </div>
+
+      {visibleCustomers.length === 0 ? (
         <EmptyState>Még nincs rögzített vevő.</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {customers.map((c) => {
+          {visibleCustomers.map((c) => {
             const balance = balanceByCustomer.get(c.id)
+            const isDeleted = Boolean(c.deletedAt)
             return (
-              <Card key={c.id} className="flex flex-col gap-2">
+              <Card key={c.id} className={`flex flex-col gap-2 ${isDeleted ? 'opacity-60' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="font-semibold text-[var(--color-text)]">{c.name}</div>
-                  {balance && (
-                    <span className="whitespace-nowrap rounded-full bg-[var(--color-danger-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-danger)]">
-                      {formatCurrency(balance.unpaidAmount)} tartozás
+                  <div className={`font-semibold text-[var(--color-text)] ${isDeleted ? 'line-through' : ''}`}>{c.name}</div>
+                  {isDeleted ? (
+                    <span className="whitespace-nowrap rounded-full bg-black/10 px-2.5 py-1 text-xs font-medium text-[var(--color-text-muted)]">
+                      Törölve
                     </span>
+                  ) : (
+                    balance && (
+                      <span className="whitespace-nowrap rounded-full bg-[var(--color-danger-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-danger)]">
+                        {formatCurrency(balance.unpaidAmount)} tartozás
+                      </span>
+                    )
                   )}
                 </div>
                 <div className="text-sm text-[var(--color-text-muted)]">{c.phone || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">{c.email || '—'}</div>
                 {c.notes && <div className="text-xs text-[var(--color-text-muted)]">{c.notes}</div>}
                 <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  <Button variant="secondary" onClick={() => setEditing(c)}>
-                    <Pencil size={16} /> Szerkesztés
-                  </Button>
-                  <Button variant="danger" onClick={() => setDeleting(c)}>
-                    <Trash2 size={16} />
-                  </Button>
+                  {isDeleted ? (
+                    <Button variant="secondary" onClick={() => restoreCustomer(c.id)}>
+                      <RotateCcw size={16} /> Visszaállítás
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={() => setEditing(c)}>
+                        <Pencil size={16} /> Szerkesztés
+                      </Button>
+                      <Button variant="danger" onClick={() => setDeleting(c)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </Card>
             )
@@ -155,7 +186,7 @@ export function Customers() {
       {deleting && (
         <ConfirmDialog
           title="Vevő törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" vevőt? A hozzá rögzített eladások megmaradnak a mozgásnaplóban, de vevő nélkül.`}
+          message={`Biztosan törlöd a(z) "${deleting.name}" vevőt? A hozzá rögzített eladások megmaradnak a mozgásnaplóban, és a vevő bármikor visszaállítható.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

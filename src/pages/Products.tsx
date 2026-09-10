@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { ProductForm } from '../components/ProductForm'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
-import { Button, Card, EmptyState, Input, PageHeader, Select } from '../components/ui'
+import { Button, Card, Checkbox, EmptyState, Input, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatNumber } from '../lib/format'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { getStockStatus, type StockStatus } from '../lib/alerts'
@@ -33,12 +33,14 @@ export function Products() {
   const suppliers = useStore((s) => s.suppliers)
   const locations = useStore((s) => s.locations)
   const deleteProduct = useStore((s) => s.deleteProduct)
+  const restoreProduct = useStore((s) => s.restoreProduct)
   const alerts = useAlerts()
 
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [showDeleted, setShowDeleted] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Product | null>(null)
@@ -48,12 +50,13 @@ export function Products() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return products
+      .filter((p) => showDeleted || !p.deletedAt)
       .filter((p) => !categoryFilter || p.category === categoryFilter)
       .filter((p) => !supplierFilter || p.supplierId === supplierFilter)
       .filter((p) => !locationFilter || p.locationId === locationFilter)
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name, 'hu'))
-  }, [products, search, categoryFilter, supplierFilter, locationFilter])
+  }, [products, search, categoryFilter, supplierFilter, locationFilter, showDeleted])
 
   const supplierName = (id?: string) => suppliers.find((s) => s.id === id)?.name ?? '—'
   const locationName = (id: string) => locations.find((l) => l.id === id)?.name ?? '—'
@@ -140,6 +143,9 @@ export function Products() {
             </Select>
           )}
         </div>
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+          <Checkbox label="Törölt termékek megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+        </div>
       </Card>
 
       {filtered.length === 0 ? (
@@ -148,17 +154,24 @@ export function Products() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((product) => {
             const info = alerts.byProductId.get(product.id)
+            const isDeleted = Boolean(product.deletedAt)
             return (
-              <Card key={product.id} className="flex flex-col gap-3">
+              <Card key={product.id} className={`flex flex-col gap-3 ${isDeleted ? 'opacity-60' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-semibold text-[var(--color-text)]">{product.name}</div>
+                    <div className={`font-semibold text-[var(--color-text)] ${isDeleted ? 'line-through' : ''}`}>{product.name}</div>
                     <div className="text-xs text-[var(--color-text-muted)]">
                       {product.sku && `${product.sku} · `}
                       {product.category}
                     </div>
                   </div>
-                  {info && <StatusBadge status={info.status} />}
+                  {isDeleted ? (
+                    <span className="whitespace-nowrap rounded-full bg-black/10 px-2.5 py-1 text-xs font-medium text-[var(--color-text-muted)]">
+                      Törölve
+                    </span>
+                  ) : (
+                    info && <StatusBadge status={info.status} />
+                  )}
                 </div>
 
                 {locations.length > 1 && (
@@ -181,12 +194,20 @@ export function Products() {
                 </div>
 
                 <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  <Button variant="secondary" onClick={() => setEditing(product)}>
-                    <Pencil size={16} /> Szerkesztés
-                  </Button>
-                  <Button variant="danger" onClick={() => setDeleting(product)}>
-                    <Trash2 size={16} />
-                  </Button>
+                  {isDeleted ? (
+                    <Button variant="secondary" onClick={() => restoreProduct(product.id)}>
+                      <RotateCcw size={16} /> Visszaállítás
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={() => setEditing(product)}>
+                        <Pencil size={16} /> Szerkesztés
+                      </Button>
+                      <Button variant="danger" onClick={() => setDeleting(product)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </Card>
             )
@@ -209,7 +230,7 @@ export function Products() {
       {deleting && (
         <ConfirmDialog
           title="Termék törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" terméket? A hozzá tartozó mozgásnapló bejegyzések is törlődnek.`}
+          message={`Biztosan törlöd a(z) "${deleting.name}" terméket? A mozgásnapló bejegyzései megmaradnak, és a termék bármikor visszaállítható a "Törölt termékek megjelenítése" nézetből.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

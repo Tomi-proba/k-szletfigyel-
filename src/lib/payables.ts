@@ -51,7 +51,7 @@ export function computePayableObligations(
   const reminderWindowDays = reminderDaysBefore.length > 0 ? Math.max(...reminderDaysBefore) : 0
 
   const fromLots: PayableObligation[] = lots
-    .filter((l): l is PurchaseLot & { dueDate: string } => Boolean(l.dueDate) && l.isPaid === false)
+    .filter((l): l is PurchaseLot & { dueDate: string } => Boolean(l.dueDate) && l.isPaid === false && !l.deletedAt)
     .map((l) => {
       const product = productById.get(l.productId)
       const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
@@ -70,7 +70,7 @@ export function computePayableObligations(
     })
 
   const fromLedger: PayableObligation[] = ledgerEntries
-    .filter((e): e is LedgerEntry & { dueDate: string } => e.type === 'expense' && Boolean(e.dueDate) && e.isPaid === false)
+    .filter((e): e is LedgerEntry & { dueDate: string } => e.type === 'expense' && Boolean(e.dueDate) && e.isPaid === false && !e.deletedAt)
     .map((e) => ({
       id: e.id,
       sourceType: 'ledger' as const,

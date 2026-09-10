@@ -23,3 +23,7 @@ export function formatNumber(value: number): string {
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('hu-HU')
 }
+
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('hu-HU')
+}

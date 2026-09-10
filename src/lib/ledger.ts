@@ -8,8 +8,12 @@ export function ledgerEntryHuf(entry: Pick<LedgerEntry, 'amount' | 'exchangeRate
   return entry.amount * entry.exchangeRate
 }
 
+// Soft-deleted entries never count toward totals (they stay visible only via
+// an explicit "show deleted" toggle on the raw list, never in aggregates). A
+// correction entry (see deleteLedgerEntry) is a normal active entry and
+// needs no special-casing here - it nets against the original by itself.
 function inRange(entry: LedgerEntry, fromISO: string, toISO: string): boolean {
-  return entry.date >= fromISO && entry.date <= toISO
+  return entry.date >= fromISO && entry.date <= toISO && !entry.deletedAt
 }
 
 export interface VatSummary {

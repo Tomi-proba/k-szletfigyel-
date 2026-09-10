@@ -2,12 +2,14 @@ import { useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import {
   computeCustomerBalances,
+  computeOpenSales,
   computeProductInsight,
   computeSlowMoving,
   computeTransferSuggestions,
   computeUnpaidSales,
   getStockStatus,
   type CustomerBalance,
+  type OpenSale,
   type ProductInsight,
   type SlowMovingResult,
   type StockStatus,
@@ -38,6 +40,8 @@ export interface AlertsData {
   payables: PayableObligation[]
   /** The subset of payables that's actually alert-worthy (overdue or within the reminder window). */
   urgentPayables: PayableObligation[]
+  /** Sales recorded but not yet delivered (pending/shipping) - see computeOpenSales. */
+  openSales: OpenSale[]
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -53,7 +57,8 @@ export function useAlerts(): AlertsData {
 
   return useMemo(() => {
     const now = new Date()
-    const all: ProductAlertInfo[] = products.map((product) => {
+    const activeProducts = products.filter((p) => !p.deletedAt)
+    const all: ProductAlertInfo[] = activeProducts.map((product) => {
       const insight = computeProductInsight(product, movements, suppliers, settings, now)
       const slowMoving = computeSlowMoving(product, movements, settings, now)
       const status = getStockStatus(insight.isLowStock, slowMoving.isSlowMoving)
@@ -69,7 +74,20 @@ export function useAlerts(): AlertsData {
     const customerBalances = computeCustomerBalances(unpaidSales)
     const payables = computePayableObligations(lots, products, suppliers, ledgerEntries, settings.paymentReminderDaysBefore, todayISO())
     const urgentPayables = payables.filter((p) => p.isAlertWorthy)
+    const openSales = computeOpenSales(movements, products, customers)
 
-    return { byProductId, all, lowStock, needsReorder, slowMoving, transferSuggestions, unpaidSales, customerBalances, payables, urgentPayables }
+    return {
+      byProductId,
+      all,
+      lowStock,
+      needsReorder,
+      slowMoving,
+      transferSuggestions,
+      unpaidSales,
+      customerBalances,
+      payables,
+      urgentPayables,
+      openSales,
+    }
   }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, settings])
 }

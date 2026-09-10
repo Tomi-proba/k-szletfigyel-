@@ -1,10 +1,11 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Location } from '../types'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Button, Card, Field, Input, PageHeader } from '../components/ui'
+import { HistoryPanel } from '../components/HistoryPanel'
+import { Button, Card, Checkbox, Field, Input, PageHeader } from '../components/ui'
 
 function LocationForm({ location, onDone }: { location?: Location; onDone: () => void }) {
   const addLocation = useStore((s) => s.addLocation)
@@ -25,6 +26,14 @@ function LocationForm({ location, onDone }: { location?: Location; onDone: () =>
       <Field label="Telephely neve">
         <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
       </Field>
+
+      {location && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Előzmények</h3>
+          <HistoryPanel entityType="location" entityId={location.id} />
+        </div>
+      )}
+
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onDone}>
@@ -40,9 +49,14 @@ export function Locations() {
   const locations = useStore((s) => s.locations)
   const products = useStore((s) => s.products)
   const deleteLocation = useStore((s) => s.deleteLocation)
+  const restoreLocation = useStore((s) => s.restoreLocation)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Location | null>(null)
   const [deleting, setDeleting] = useState<Location | null>(null)
+  const [showDeleted, setShowDeleted] = useState(false)
+
+  const activeLocationCount = locations.filter((l) => !l.deletedAt).length
+  const visibleLocations = locations.filter((l) => showDeleted || !l.deletedAt)
 
   return (
     <div>
@@ -56,21 +70,46 @@ export function Locations() {
         }
       />
 
+      <div className="mb-4">
+        <Checkbox label="Törölt telephelyek megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {locations.map((l) => {
+        {visibleLocations.map((l) => {
           const productCount = products.filter((p) => p.locationId === l.id).length
-          const canDelete = productCount === 0 && locations.length > 1
+          const canDelete = productCount === 0 && activeLocationCount > 1
+          const isDeleted = Boolean(l.deletedAt)
           return (
-            <Card key={l.id} className="flex flex-col gap-2">
-              <div className="font-semibold text-[var(--color-text)]">{l.name}</div>
+            <Card key={l.id} className={`flex flex-col gap-2 ${isDeleted ? 'opacity-60' : ''}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className={`font-semibold text-[var(--color-text)] ${isDeleted ? 'line-through' : ''}`}>{l.name}</div>
+                {isDeleted && (
+                  <span className="whitespace-nowrap rounded-full bg-black/10 px-2.5 py-1 text-xs font-medium text-[var(--color-text-muted)]">
+                    Törölve
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-[var(--color-text-muted)]">{productCount} termék ezen a telephelyen</div>
               <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                <Button variant="secondary" onClick={() => setEditing(l)}>
-                  <Pencil size={16} /> Szerkesztés
-                </Button>
-                <Button variant="danger" disabled={!canDelete} title={!canDelete ? 'Csak üres telephely törölhető' : undefined} onClick={() => setDeleting(l)}>
-                  <Trash2 size={16} />
-                </Button>
+                {isDeleted ? (
+                  <Button variant="secondary" onClick={() => restoreLocation(l.id)}>
+                    <RotateCcw size={16} /> Visszaállítás
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={() => setEditing(l)}>
+                      <Pencil size={16} /> Szerkesztés
+                    </Button>
+                    <Button
+                      variant="danger"
+                      disabled={!canDelete}
+                      title={!canDelete ? 'Csak üres telephely törölhető, és legalább egynek aktívnak kell maradnia' : undefined}
+                      onClick={() => setDeleting(l)}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </>
+                )}
               </div>
             </Card>
           )

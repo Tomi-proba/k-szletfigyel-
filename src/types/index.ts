@@ -14,12 +14,20 @@ export type CostingMethod = 'average' | 'fifo'
  * using the exchange rate recorded alongside it on the PurchaseLot. */
 export type Currency = 'HUF' | 'USD' | 'EUR'
 
-export interface Location {
+/** Nothing in this app is ever hard-deleted - every entity that a user can
+ * remove instead gets a deletedAt timestamp (soft delete). Default views
+ * filter these out; a "show deleted" toggle brings them back, greyed out
+ * and restorable, so the audit trail never has a hole in it. */
+export interface SoftDeletable {
+  deletedAt?: string
+}
+
+export interface Location extends SoftDeletable {
   id: string
   name: string
 }
 
-export interface Supplier {
+export interface Supplier extends SoftDeletable {
   id: string
   name: string
   phone?: string
@@ -28,7 +36,7 @@ export interface Supplier {
   leadTimeDays: number
 }
 
-export interface Customer {
+export interface Customer extends SoftDeletable {
   id: string
   name: string
   phone?: string
@@ -36,7 +44,7 @@ export interface Customer {
   notes?: string
 }
 
-export interface Product {
+export interface Product extends SoftDeletable {
   id: string
   name: string
   /** Optional article/SKU number. */
@@ -72,7 +80,7 @@ export interface Product {
  * oldest-first when costingMethod is 'fifo' (see lib/costing.ts). Kept
  * even in 'average' mode so switching methods later has real history to
  * work from. */
-export interface PurchaseLot {
+export interface PurchaseLot extends SoftDeletable {
   id: string
   productId: string
   /** The 'in' movement that created this lot, so deleting that movement
@@ -114,7 +122,13 @@ export interface PurchaseLot {
   vatReclaimable?: boolean
 }
 
-export interface Movement {
+/** Fulfillment state of an outgoing sale, manually advanced by the user.
+ * 'pending' - recorded, not yet shipped/handed over.
+ * 'shipping' - on its way to the customer / staged for pickup.
+ * 'delivered' - the customer has it - cancelling from here needs extra confirmation. */
+export type SaleStatus = 'pending' | 'shipping' | 'delivered'
+
+export interface Movement extends SoftDeletable {
   id: string
   productId: string
   /** Denormalized at creation time so history stays correct even if the
@@ -160,6 +174,26 @@ export interface Movement {
    * PurchaseLot there's no separate reclaimable flag. Omitted means this
    * sale isn't tracked for VAT. */
   vatRatePercent?: number
+  /** 'out' only: fulfillment status, defaulted to 'pending' at creation and
+   * advanced manually - see setSaleStatus in the store. */
+  saleStatus?: SaleStatus
+  /** When saleStatus last changed. */
+  saleStatusChangedAt?: string
+  /** 'out' only: true once this sale has been cancelled (stornó) - see
+   * cancelSale in the store. The movement itself is never removed; a
+   * cancelled sale stays visible (struck through) for full auditability,
+   * and its stock effect is reversed via a separate correction 'in'
+   * movement (see correctsMovementId on THAT movement) rather than by
+   * mutating this one's quantity. */
+  cancelled?: boolean
+  cancelledAt?: string
+  /** Free-text reason for the cancellation, e.g. "hibás termék", "ügyfél lemondta". */
+  cancelReason?: string
+  /** Set on a movement that exists specifically to reverse/correct another
+   * one (a stock restock from cancelSale, or a manually created correction
+   * from deleteMovement's "korrekciós tétel" option) - points at the
+   * original movement's id so the pair stays traceable both ways. */
+  correctsMovementId?: string
 }
 
 export type LedgerEntryType = 'income' | 'expense'
@@ -180,7 +214,7 @@ export const DEFAULT_LEDGER_CATEGORIES = ['ÁFA', 'Bérköltség', 'Bérjárulé
 /** A general income/expense entry, independent of stock movements or
  * customers - rent, payroll, dividends, VAT, or anything else that needs
  * booking for a simple profit & loss view (see lib/ledger.ts). */
-export interface LedgerEntry {
+export interface LedgerEntry extends SoftDeletable {
   id: string
   date: string
   type: LedgerEntryType
@@ -205,6 +239,12 @@ export interface LedgerEntry {
   isPaid?: boolean
   /** The actual date the expense was paid, set when isPaid becomes true. */
   paidDate?: string
+  /** Set on an entry created specifically to reverse/neutralize another one
+   * (the "korrekciós tétel" offered by deleteLedgerEntry) - points at the
+   * original entry's id. The original stays untouched and active; this
+   * entry (opposite type, same category and amount) is what nets it to
+   * zero in the category/P&L totals while keeping both fully visible. */
+  correctsEntryId?: string
   createdAt: string
   updatedAt: string
 }
@@ -247,3 +287,36 @@ export const DEFAULT_SETTINGS: Settings = {
 export const DEFAULT_LOCATION_NAME = 'Fő telephely'
 
 export const COMMON_UNITS = ['db', 'm²', 'fm', 'kg', 'l', 'csomag', 'raklap'] as const
+
+// --- Audit log -------------------------------------------------------------
+// A single, append-only log covering every entity in the app (see
+// lib/audit.ts for the diffing/labeling logic that builds these entries).
+// Powers both the standalone Audit napló page and each entity's own
+// "Előzmények" panel (just filtered by entityType + entityId).
+
+export type AuditEntityType = 'product' | 'lot' | 'movement' | 'customer' | 'supplier' | 'location' | 'ledgerEntry'
+
+export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'cancel' | 'correction'
+
+export interface AuditFieldChange {
+  field: string
+  /** Human-readable label for `field`, already localized - so the UI never
+   * has to re-derive it from the raw key. */
+  label: string
+  oldValue: string
+  newValue: string
+}
+
+export interface AuditLogEntry {
+  id: string
+  timestamp: string
+  entityType: AuditEntityType
+  entityId: string
+  /** A human-readable name for the record at the time of the event (e.g.
+   * the product's name) - kept even if the entity is later renamed or
+   * deleted, so the log entry still reads sensibly. */
+  entityLabel: string
+  action: AuditAction
+  description: string
+  changes?: AuditFieldChange[]
+}

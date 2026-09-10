@@ -27,16 +27,19 @@ export interface AutoVatTotals {
 }
 
 /** Sums the automatically tracked VAT for a period straight from lots and
- * movements - no product/supplier lookups needed, just totals. */
+ * movements - no product/supplier lookups needed, just totals. Soft-deleted
+ * records never count, and neither does a cancelled (stornó'd) sale - its
+ * VAT still shows up in listAutoVatRows (marked "Stornózva") for the audit
+ * trail, but has zero effect on the actual balance. */
 export function computeAutoVatTotals(lots: PurchaseLot[], movements: Movement[], fromISO: string, toISO: string): AutoVatTotals {
   const totals: AutoVatTotals = { purchaseReclaimable: 0, purchaseNonReclaimable: 0, sale: 0 }
   for (const l of lots) {
-    if (l.vatRatePercent === undefined || !inRange(l.date, fromISO, toISO)) continue
+    if (l.vatRatePercent === undefined || !inRange(l.date, fromISO, toISO) || l.deletedAt) continue
     if (l.vatReclaimable === false) totals.purchaseNonReclaimable += lotVatAmountHuf(l)
     else totals.purchaseReclaimable += lotVatAmountHuf(l)
   }
   for (const m of movements) {
-    if (m.type !== 'out' || m.vatRatePercent === undefined || !inRange(m.date, fromISO, toISO)) continue
+    if (m.type !== 'out' || m.vatRatePercent === undefined || !inRange(m.date, fromISO, toISO) || m.deletedAt || m.cancelled) continue
     totals.sale += movementVatAmountHuf(m)
   }
   return totals
@@ -53,10 +56,17 @@ export interface AutoVatRow {
   /** The net amount (goods+shipping, or sale revenue) the rate was applied to. */
   netHuf: number
   amountHuf: number
+  /** True for a sale that was later cancelled (stornó) - the row stays
+   * visible here for auditability, but its amount is excluded from
+   * computeAutoVatTotals's balance (see there). Always false for purchases. */
+  cancelled: boolean
 }
 
 /** Every individual tracked purchase batch / sale that carries a VAT rate,
- * as one row per item - the detail behind computeAutoVatTotals, for display. */
+ * as one row per item - the detail behind computeAutoVatTotals, for display.
+ * Deleted lots/movements are left out entirely; a cancelled sale is kept
+ * (flagged) so it stays visible and traceable even though it no longer
+ * contributes to the balance. */
 export function listAutoVatRows(
   lots: PurchaseLot[],
   movements: Movement[],
@@ -69,7 +79,7 @@ export function listAutoVatRows(
   const supplierById = new Map(suppliers.map((s) => [s.id, s]))
 
   const purchaseRows: AutoVatRow[] = lots
-    .filter((l) => l.vatRatePercent !== undefined && inRange(l.date, fromISO, toISO))
+    .filter((l) => l.vatRatePercent !== undefined && inRange(l.date, fromISO, toISO) && !l.deletedAt)
     .map((l) => {
       const product = productById.get(l.productId)
       const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
@@ -81,11 +91,12 @@ export function listAutoVatRows(
         vatRatePercent: l.vatRatePercent as number,
         netHuf: lotNetHuf(l),
         amountHuf: lotVatAmountHuf(l),
+        cancelled: false,
       }
     })
 
   const saleRows: AutoVatRow[] = movements
-    .filter((m) => m.type === 'out' && m.vatRatePercent !== undefined && inRange(m.date, fromISO, toISO))
+    .filter((m) => m.type === 'out' && m.vatRatePercent !== undefined && inRange(m.date, fromISO, toISO) && !m.deletedAt)
     .map((m) => {
       const product = productById.get(m.productId)
       return {
@@ -96,6 +107,7 @@ export function listAutoVatRows(
         vatRatePercent: m.vatRatePercent as number,
         netHuf: m.quantity * (m.saleUnitPrice ?? 0),
         amountHuf: movementVatAmountHuf(m),
+        cancelled: Boolean(m.cancelled),
       }
     })
 

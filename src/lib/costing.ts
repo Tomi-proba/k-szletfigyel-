@@ -81,7 +81,7 @@ export interface FifoConsumptionResult {
 /** Consumes `quantity` units of `productId` from the oldest lots first. */
 export function consumeFifo(lots: PurchaseLot[], productId: string, quantity: number, fallbackUnitCost: number): FifoConsumptionResult {
   const candidates = lots
-    .filter((l) => l.productId === productId && l.remainingQuantity > 0)
+    .filter((l) => l.productId === productId && l.remainingQuantity > 0 && !l.deletedAt)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt.localeCompare(b.createdAt)))
 
   let remaining = quantity

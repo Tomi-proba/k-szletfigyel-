@@ -20,6 +20,7 @@ export function ProductPicker({ value, onChange, locationFilter }: ProductPicker
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
     return products
+      .filter((p) => !p.deletedAt)
       .filter((p) => (locationFilter ? p.locationId === locationFilter : true))
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
       .slice(0, 50)

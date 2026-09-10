@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore'
 import type { Product } from '../types'
 import { COMMON_UNITS } from '../types'
 import { lotUnitCost } from '../lib/costing'
-import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
 import { Button, Card, Field, Input, Select } from './ui'
 
 interface ProductFormProps {
@@ -182,9 +182,16 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                         <span className="text-[var(--color-text-muted)]">elfogyott</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right">{formatCurrency(lot.unitPrice)}</td>
-                    <td className="px-3 py-2 text-right">{lot.shippingCost > 0 ? formatCurrency(lot.shippingCost) : '—'}</td>
-                    <td className="px-3 py-2 text-right font-medium">{formatCurrency(lotUnitCost(lot))}</td>
+                    <td className="px-3 py-2 text-right">{formatMoney(lot.unitPrice, lot.currency)}</td>
+                    <td className="px-3 py-2 text-right">{lot.shippingCost > 0 ? formatMoney(lot.shippingCost, lot.currency) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-medium">
+                      {formatCurrency(lotUnitCost(lot))}
+                      {lot.currency !== 'HUF' && (
+                        <div className="text-[10px] font-normal text-[var(--color-text-muted)]">
+                          árfolyam: {formatNumber(lot.exchangeRate)}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

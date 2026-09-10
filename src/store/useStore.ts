@@ -5,6 +5,7 @@ import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import {
   DEFAULT_SETTINGS,
+  type Currency,
   type Customer,
   type Location,
   type Movement,
@@ -23,10 +24,16 @@ export interface RecordMovementInput {
   note?: string
   /** 'in' only: unit price actually paid for this batch (goods only), if
    * different from the product's current cost. Omit to book it in at the
-   * existing cost. Always creates a PurchaseLot either way. */
+   * existing cost. Always creates a PurchaseLot either way. In `currency`
+   * if given, otherwise HUF. */
   unitPrice?: number
-  /** 'in' only: total shipping/freight cost for this whole batch. */
+  /** 'in' only: total shipping/freight cost for this whole batch, in `currency`. */
   shippingCost?: number
+  /** 'in' only: currency unitPrice/shippingCost are in. Defaults to HUF. */
+  currency?: Currency
+  /** 'in' only, required when currency isn't HUF: HUF value of 1 unit of
+   * that currency at the time of purchase. */
+  exchangeRate?: number
   /** 'out' only: attach the sale to a tracked customer instead of treating
    * it as an anonymous walk-in/cash sale. */
   customerId?: string
@@ -158,7 +165,7 @@ export const useStore = create<AppState>()(
         })),
 
       recordMovement: (input, opts) => {
-        const { productId, type, quantity, date, note, unitPrice, shippingCost, customerId, isPaid } = input
+        const { productId, type, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, customerId, isPaid } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
         }
@@ -168,6 +175,14 @@ export const useStore = create<AppState>()(
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) {
           return { ok: false, reason: 'invalid-quantity' }
         }
+        // A currency selection only means something alongside an actual
+        // price entry; ignore it when booking in at the existing (HUF) cost.
+        const enteringNewPrice = unitPrice !== undefined
+        const lotCurrency: Currency = enteringNewPrice ? (currency ?? 'HUF') : 'HUF'
+        if (enteringNewPrice && lotCurrency !== 'HUF' && (!Number.isFinite(exchangeRate) || (exchangeRate ?? 0) <= 0)) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        const lotExchangeRate = enteringNewPrice && lotCurrency !== 'HUF' ? (exchangeRate as number) : 1
         const product = get().products.find((p) => p.id === productId)
         if (!product) return { ok: false, reason: 'product-not-found' }
 
@@ -195,7 +210,12 @@ export const useStore = create<AppState>()(
           // has real history to draw on.
           const effectiveUnitPrice = unitPrice ?? product.purchasePrice
           const effectiveShipping = shippingCost ?? 0
-          const batchUnitCost = lotUnitCost({ unitPrice: effectiveUnitPrice, shippingCost: effectiveShipping, quantity })
+          const batchUnitCost = lotUnitCost({
+            unitPrice: effectiveUnitPrice,
+            shippingCost: effectiveShipping,
+            quantity,
+            exchangeRate: lotExchangeRate,
+          })
 
           newLot = {
             id: createId(),
@@ -206,6 +226,8 @@ export const useStore = create<AppState>()(
             remainingQuantity: quantity,
             unitPrice: effectiveUnitPrice,
             shippingCost: effectiveShipping,
+            currency: lotCurrency,
+            exchangeRate: lotExchangeRate,
             createdAt: new Date().toISOString(),
           }
           if (unitPrice !== undefined) movementUnitPrice = unitPrice
@@ -247,6 +269,8 @@ export const useStore = create<AppState>()(
               createdAt: new Date().toISOString(),
               unitPrice: movementUnitPrice,
               shippingCost: movementShippingCost,
+              currency: type === 'in' && lotCurrency !== 'HUF' ? lotCurrency : undefined,
+              exchangeRate: type === 'in' && lotCurrency !== 'HUF' ? lotExchangeRate : undefined,
               unitCost: movementUnitCost,
               customerId: type === 'out' ? customerId : undefined,
               saleUnitPrice: type === 'out' && customerId ? product.salePrice : undefined,

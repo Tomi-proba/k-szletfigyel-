@@ -1,11 +1,19 @@
 import { Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
-import type { MovementType } from '../types'
+import type { Currency, MovementType } from '../types'
 import { todayISO } from '../lib/dates'
+import { lotUnitCost } from '../lib/costing'
+import { formatCurrency } from '../lib/format'
 import { ProductPicker } from './ProductPicker'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
+
+const CURRENCIES: { value: Currency; label: string }[] = [
+  { value: 'HUF', label: 'HUF' },
+  { value: 'USD', label: 'USD ($)' },
+  { value: 'EUR', label: 'EUR (€)' },
+]
 
 interface MovementFormProps {
   onDone?: () => void
@@ -22,6 +30,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
   const [shippingCost, setShippingCost] = useState('')
+  const [currency, setCurrency] = useState<Currency>('HUF')
+  const [exchangeRate, setExchangeRate] = useState('')
   const [date, setDate] = useState(todayISO())
   const [note, setNote] = useState('')
   const [trackCustomer, setTrackCustomer] = useState(false)
@@ -35,6 +45,16 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const qtyNumber = Number(quantity.replace(',', '.'))
   const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
   const shippingCostNumber = shippingCost.trim() === '' ? undefined : Number(shippingCost.replace(',', '.'))
+  const exchangeRateNumber = exchangeRate.trim() === '' ? undefined : Number(exchangeRate.replace(',', '.'))
+  const previewHufUnitCost =
+    unitPriceNumber !== undefined && qtyNumber > 0 && (currency === 'HUF' || (exchangeRateNumber ?? 0) > 0)
+      ? lotUnitCost({
+          unitPrice: unitPriceNumber,
+          shippingCost: shippingCostNumber ?? 0,
+          quantity: qtyNumber,
+          exchangeRate: currency === 'HUF' ? 1 : (exchangeRateNumber ?? 0),
+        })
+      : null
 
   function step(delta: number) {
     const current = Number.isFinite(qtyNumber) ? qtyNumber : 0
@@ -70,6 +90,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('A szállítási költség nem lehet negatív.')
       return
     }
+    if (type === 'in' && unitPrice.trim() !== '' && currency !== 'HUF' && (!Number.isFinite(exchangeRateNumber) || (exchangeRateNumber ?? 0) <= 0)) {
+      setError('Add meg az árfolyamot (1 egység hány forint).')
+      return
+    }
     if (type === 'out' && trackCustomer && !customerId) {
       setError('Válassz vevőt, vagy kapcsold ki a vevőhöz rögzítést.')
       return
@@ -84,6 +108,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         note,
         unitPrice: type === 'in' ? unitPriceNumber : undefined,
         shippingCost: type === 'in' ? shippingCostNumber : undefined,
+        currency: type === 'in' && unitPrice.trim() !== '' ? currency : undefined,
+        exchangeRate: type === 'in' && unitPrice.trim() !== '' && currency !== 'HUF' ? exchangeRateNumber : undefined,
         customerId: type === 'out' && trackCustomer ? customerId : undefined,
         isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
       },
@@ -94,6 +120,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setQuantity('')
       setUnitPrice('')
       setShippingCost('')
+      setCurrency('HUF')
+      setExchangeRate('')
       setNote('')
       resetCustomerSection()
       setSuccessTick((t) => t + 1)
@@ -175,25 +203,57 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       </FieldGroup>
 
       {type === 'in' && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Áru egységára (Ft, opcionális)">
-            <Input
-              inputMode="decimal"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              placeholder={product ? String(product.purchasePrice) : '0'}
-            />
-            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-              Csak akkor add meg, ha most más áron vetted, mint eddig. Üresen hagyva a jelenlegi ár marad érvényben.
-            </span>
-          </Field>
-          <Field label="Szállítási költség (Ft, opcionális)">
-            <Input inputMode="decimal" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" />
-            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-              A teljes tételre összesen, nem darabonként. Elkülönítve kerül nyilvántartásba az áru árától.
-            </span>
-          </Field>
-        </div>
+        <FieldGroup label="Beszerzési ár (opcionális)">
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {CURRENCIES.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setCurrency(c.value)}
+                className={`rounded-lg border py-2 text-sm font-semibold transition-colors ${
+                  currency === c.value
+                    ? 'border-[var(--color-primary)] bg-[var(--color-info-bg)] text-[var(--color-primary)]'
+                    : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="mb-3 block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Áru egységára ({currency}, opcionális)</span>
+              <Input
+                inputMode="decimal"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+                placeholder={product && currency === 'HUF' ? String(product.purchasePrice) : '0'}
+              />
+            </label>
+            <label className="mb-3 block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Szállítási költség ({currency}, opcionális)</span>
+              <Input inputMode="decimal" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" />
+            </label>
+          </div>
+
+          {currency !== 'HUF' && (
+            <label className="mb-1 block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Árfolyam (1 {currency} = ? Ft)</span>
+              <Input inputMode="decimal" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="pl. 390" />
+            </label>
+          )}
+
+          <span className="block text-xs text-[var(--color-text-muted)]">
+            A szállítás a teljes tételre összesen értendő, nem darabonként - elkülönítve kerül nyilvántartásba az áru árától. Üresen
+            hagyva az ár mezőt, a jelenlegi beszerzési ár marad érvényben.
+          </span>
+          {previewHufUnitCost !== null && (
+            <div className="mt-2 rounded-lg bg-[var(--color-info-bg)] px-3 py-2 text-sm text-[var(--color-primary)]">
+              ≈ {formatCurrency(previewHufUnitCost)} / {product?.unit ?? 'egység'} (Ft-ban, a megadott árfolyammal)
+            </div>
+          )}
+        </FieldGroup>
       )}
 
       {type === 'out' && (

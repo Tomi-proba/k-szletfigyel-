@@ -9,6 +9,11 @@ export type MovementType = 'in' | 'out'
  * 'fifo' - each purchase batch is its own cost layer, consumed oldest-first. */
 export type CostingMethod = 'average' | 'fifo'
 
+/** Currency a purchase batch was invoiced in. Internal costing (product
+ * cost, margin reports) always works in HUF - a non-HUF entry is converted
+ * using the exchange rate recorded alongside it on the PurchaseLot. */
+export type Currency = 'HUF' | 'USD' | 'EUR'
+
 export interface Location {
   id: string
   name: string
@@ -73,10 +78,14 @@ export interface PurchaseLot {
   quantity: number
   /** How much of this batch hasn't been sold yet (FIFO consumption). */
   remainingQuantity: number
-  /** Price of the goods themselves, per unit - excludes shipping. */
+  /** Price of the goods themselves, per unit, in `currency` - excludes shipping. */
   unitPrice: number
-  /** Total shipping/freight cost for this whole batch (not per unit). */
+  /** Total shipping/freight cost for this whole batch, in `currency` (not per unit). */
   shippingCost: number
+  /** Currency unitPrice and shippingCost above are recorded in. */
+  currency: Currency
+  /** HUF value of 1 unit of `currency` at the time of purchase - always 1 when currency is 'HUF'. */
+  exchangeRate: number
   createdAt: string
 }
 
@@ -99,6 +108,10 @@ export interface Movement {
   /** 'in' only: total shipping/freight cost for this batch, kept separate
    * from unitPrice so the two can be reported independently. */
   shippingCost?: number
+  /** 'in' only: currency unitPrice/shippingCost were entered in, if not HUF. */
+  currency?: Currency
+  /** 'in' only: HUF value of 1 unit of `currency` at the time, if currency was set. */
+  exchangeRate?: number
   /** 'out' only: the cost basis per unit at the moment this movement was
    * recorded (weighted-average or FIFO-consumed, per Settings.costingMethod
    * at the time) - snapshotted so margin reports stay accurate for past

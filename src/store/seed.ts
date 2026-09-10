@@ -38,6 +38,8 @@ function deriveLots(movements: Movement[], products: Product[]): PurchaseLot[] {
           remainingQuantity: m.quantity,
           unitPrice: product.purchasePrice,
           shippingCost: 0,
+          currency: 'HUF',
+          exchangeRate: 1,
           createdAt: m.createdAt,
         })
       } else {

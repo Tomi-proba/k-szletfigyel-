@@ -3,11 +3,14 @@
 // they stay independently testable.
 import type { PurchaseLot } from '../types'
 
-/** A lot's per-unit cost including its share of shipping - goods price and
- * freight are tracked separately (shippingCost is a total for the whole
- * batch) but blend into one number for costing purposes. */
-export function lotUnitCost(lot: Pick<PurchaseLot, 'unitPrice' | 'shippingCost' | 'quantity'>): number {
-  return lot.unitPrice + (lot.quantity > 0 ? lot.shippingCost / lot.quantity : 0)
+/** A lot's per-unit cost in HUF, including its share of shipping and its
+ * currency conversion - goods price and freight are tracked separately
+ * (shippingCost is a total for the whole batch, and both are recorded in
+ * whatever currency the invoice used) but blend into one HUF number for
+ * costing purposes. */
+export function lotUnitCost(lot: Pick<PurchaseLot, 'unitPrice' | 'shippingCost' | 'quantity' | 'exchangeRate'>): number {
+  const perUnitInCurrency = lot.unitPrice + (lot.quantity > 0 ? lot.shippingCost / lot.quantity : 0)
+  return perUnitInCurrency * lot.exchangeRate
 }
 
 /** Rolls a new receipt into a single running weighted-average cost. */

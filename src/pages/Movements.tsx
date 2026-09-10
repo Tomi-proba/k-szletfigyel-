@@ -1,0 +1,192 @@
+import { FileSpreadsheet, FileText, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useStore } from '../store/useStore'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button, Card, EmptyState, Input, PageHeader, Select } from '../components/ui'
+import { formatDate, formatNumber } from '../lib/format'
+import { isoDaysAgo, todayISO } from '../lib/dates'
+import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
+import type { Movement } from '../types'
+
+interface MovementRow {
+  date: string
+  productName: string
+  sku: string
+  locationName: string
+  type: string
+  quantity: number
+  unit: string
+  note: string
+}
+
+export function Movements() {
+  const movements = useStore((s) => s.movements)
+  const products = useStore((s) => s.products)
+  const locations = useStore((s) => s.locations)
+  const deleteMovement = useStore((s) => s.deleteMovement)
+
+  const [from, setFrom] = useState(isoDaysAgo(30))
+  const [to, setTo] = useState(todayISO())
+  const [productFilter, setProductFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'' | 'in' | 'out'>('')
+  const [deleting, setDeleting] = useState<Movement | null>(null)
+
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
+  const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
+
+  const filtered = useMemo(
+    () =>
+      movements
+        .filter((m) => m.date >= from && m.date <= to)
+        .filter((p) => !productFilter || p.productId === productFilter)
+        .filter((p) => !typeFilter || p.type === typeFilter)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt.localeCompare(a.createdAt))),
+    [movements, from, to, productFilter, typeFilter],
+  )
+
+  function toRow(m: Movement): MovementRow {
+    const product = productById.get(m.productId)
+    return {
+      date: formatDate(m.date),
+      productName: product?.name ?? 'Törölt termék',
+      sku: product?.sku ?? '',
+      locationName: locationById.get(m.locationId)?.name ?? '',
+      type: m.type === 'in' ? 'Bejövő' : 'Kimenő',
+      quantity: m.quantity,
+      unit: product?.unit ?? '',
+      note: m.note ?? '',
+    }
+  }
+
+  const columns: ExportColumn<MovementRow>[] = [
+    { header: 'Dátum', accessor: (r) => r.date, width: 14 },
+    { header: 'Termék', accessor: (r) => r.productName, width: 28 },
+    { header: 'Cikkszám', accessor: (r) => r.sku, width: 14 },
+    ...(locations.length > 1 ? [{ header: 'Telephely', accessor: (r: MovementRow) => r.locationName, width: 18 }] : []),
+    { header: 'Típus', accessor: (r) => r.type, width: 10 },
+    { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
+    { header: 'Egység', accessor: (r) => r.unit, width: 10 },
+    { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },
+  ]
+
+  const rows = filtered.map(toRow)
+
+  return (
+    <div>
+      <PageHeader
+        title="Mozgásnapló"
+        subtitle="Összes rögzített bejövő és kimenő készletmozgás"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => exportToExcel(`mozgasnaplo_${from}_${to}.xlsx`, 'Mozgásnapló', columns, rows)}>
+              <FileSpreadsheet size={16} /> Excel
+            </Button>
+            <Button variant="secondary" onClick={() => exportToPdf(`mozgasnaplo_${from}_${to}.pdf`, 'Mozgásnapló', columns, rows)}>
+              <FileText size={16} /> PDF
+            </Button>
+          </>
+        }
+      />
+
+      <Card className="mb-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Ettől</span>
+            <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Eddig</span>
+            <Input type="date" value={to} min={from} max={todayISO()} onChange={(e) => setTo(e.target.value)} />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Termék</span>
+            <Select value={productFilter} onChange={(e) => setProductFilter(e.target.value)}>
+              <option value="">Összes termék</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Típus</span>
+            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'in' | 'out' | '')}>
+              <option value="">Mind</option>
+              <option value="in">Bejövő</option>
+              <option value="out">Kimenő</option>
+            </Select>
+          </label>
+        </div>
+      </Card>
+
+      {filtered.length === 0 ? (
+        <EmptyState>Nincs a szűrésnek megfelelő mozgás.</EmptyState>
+      ) : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                <th className="px-4 py-3 font-medium">Dátum</th>
+                <th className="px-4 py-3 font-medium">Termék</th>
+                {locations.length > 1 && <th className="px-4 py-3 font-medium">Telephely</th>}
+                <th className="px-4 py-3 font-medium">Típus</th>
+                <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
+                <th className="px-4 py-3 font-medium">Megjegyzés</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((m) => {
+                const product = productById.get(m.productId)
+                return (
+                  <tr key={m.id} className="border-b border-[var(--color-border)] last:border-b-0">
+                    <td className="whitespace-nowrap px-4 py-3">{formatDate(m.date)}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[var(--color-text)]">{product?.name ?? 'Törölt termék'}</div>
+                      {product?.sku && <div className="text-xs text-[var(--color-text-muted)]">{product.sku}</div>}
+                    </td>
+                    {locations.length > 1 && <td className="px-4 py-3">{locationById.get(m.locationId)?.name}</td>}
+                    <td className="px-4 py-3">
+                      <span className={m.type === 'in' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}>
+                        {m.type === 'in' ? 'Bejövő' : 'Kimenő'}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                      {formatNumber(m.quantity)} {product?.unit}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-text-muted)]">{m.note}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDeleting(m)}
+                        aria-label="Mozgás törlése"
+                        className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Mozgás törlése"
+          message="Biztosan törlöd ezt a mozgást? A készlet visszaáll az eredeti értékre."
+          confirmLabel="Törlés"
+          danger
+          onConfirm={() => {
+            deleteMovement(deleting.id)
+            setDeleting(null)
+          }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  )
+}

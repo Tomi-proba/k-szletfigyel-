@@ -1,6 +1,8 @@
 {
   "name": "keszletfigyelo-desktop",
   "version": "1.0.0",
+  "description": "Keszletkezelo alkalmazas kisebb kereskedeseknek",
+  "author": "Keszletfigyelo",
   "private": true,
   "main": "main.js",
   "devDependencies": {

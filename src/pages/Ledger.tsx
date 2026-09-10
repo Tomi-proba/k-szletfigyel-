@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'
+import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { computeMarginReport } from '../lib/alerts'
 import { computeInventoryPurchaseCost } from '../lib/costing'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
@@ -37,8 +38,7 @@ export function Ledger() {
   const restoreLedgerEntry = useStore((s) => s.restoreLedgerEntry)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
 
-  const [from, setFrom] = useState(currentMonthRange().from)
-  const [to, setTo] = useState(currentMonthRange().to)
+  const { from, to, setFrom, setTo, setRange } = usePersistedDateRange('keszletfigyelo-penzugyi-naplo-daterange', currentMonthRange)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState<'' | 'income' | 'expense'>('')
   const [showDeleted, setShowDeleted] = useState(false)
@@ -127,33 +127,13 @@ export function Ledger() {
 
       <Card className="mb-5">
         <div className="mb-3 flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const r = currentMonthRange()
-              setFrom(r.from)
-              setTo(r.to)
-            }}
-          >
+          <Button variant="secondary" onClick={() => setRange(currentMonthRange())}>
             Ez a hónap
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const r = currentQuarterRange()
-              setFrom(r.from)
-              setTo(r.to)
-            }}
-          >
+          <Button variant="secondary" onClick={() => setRange(currentQuarterRange())}>
             Ez a negyedév
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setFrom(isoDaysAgo(30))
-              setTo(todayISO())
-            }}
-          >
+          <Button variant="secondary" onClick={() => setRange({ from: isoDaysAgo(30), to: todayISO() })}>
             Utolsó 30 nap
           </Button>
         </div>

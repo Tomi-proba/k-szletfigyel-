@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createId } from './id'
 import { buildSeedData } from './seed'
+import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import {
   DEFAULT_SETTINGS,
   type Customer,
@@ -9,6 +10,7 @@ import {
   type Movement,
   type MovementType,
   type Product,
+  type PurchaseLot,
   type Settings,
   type Supplier,
 } from '../types'
@@ -19,10 +21,12 @@ export interface RecordMovementInput {
   quantity: number
   date: string
   note?: string
-  /** 'in' only: unit price actually paid for this batch, if different from
-   * the product's current average cost. Omit to book it in at the
-   * existing cost (no change to the running average). */
+  /** 'in' only: unit price actually paid for this batch (goods only), if
+   * different from the product's current cost. Omit to book it in at the
+   * existing cost. Always creates a PurchaseLot either way. */
   unitPrice?: number
+  /** 'in' only: total shipping/freight cost for this whole batch. */
+  shippingCost?: number
   /** 'out' only: attach the sale to a tracked customer instead of treating
    * it as an anonymous walk-in/cash sale. */
   customerId?: string
@@ -41,6 +45,7 @@ interface AppState {
   customers: Customer[]
   products: Product[]
   movements: Movement[]
+  lots: PurchaseLot[]
   settings: Settings
 
   // Locations
@@ -153,11 +158,14 @@ export const useStore = create<AppState>()(
         })),
 
       recordMovement: (input, opts) => {
-        const { productId, type, quantity, date, note, unitPrice, customerId, isPaid } = input
+        const { productId, type, quantity, date, note, unitPrice, shippingCost, customerId, isPaid } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
         }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) {
           return { ok: false, reason: 'invalid-quantity' }
         }
         const product = get().products.find((p) => p.id === productId)
@@ -170,24 +178,54 @@ export const useStore = create<AppState>()(
           return { ok: false, reason: 'insufficient-stock', resultingStock }
         }
 
-        // Incoming batches can arrive at a different price each time
-        // (import goods, exchange-rate swings, supplier changes). Rather
-        // than overwrite the product's cost outright, fold the new batch
-        // into a weighted-average unit cost - the standard "moving
-        // average" costing method. Outgoing movements snapshot that cost
-        // at the time of sale so later purchases don't retroactively
-        // change past margin figures.
+        const { costingMethod } = get().settings
         let nextPurchasePrice = product.purchasePrice
         let movementUnitPrice: number | undefined
+        let movementShippingCost: number | undefined
         let movementUnitCost: number | undefined
-        if (type === 'in' && unitPrice !== undefined && unitPrice !== product.purchasePrice) {
-          const existingValue = product.currentStock * product.purchasePrice
-          const incomingValue = quantity * unitPrice
-          nextPurchasePrice = Math.round(((existingValue + incomingValue) / resultingStock) * 100) / 100
-          movementUnitPrice = unitPrice
-        } else if (type === 'out') {
-          movementUnitCost = product.purchasePrice
+        let newLot: PurchaseLot | undefined
+        let lotsAfterConsumption = get().lots
+
+        if (type === 'in') {
+          // Incoming batches can arrive at a different price each time
+          // (import goods, exchange-rate swings, supplier changes), so
+          // every batch becomes its own PurchaseLot - goods price and
+          // shipping tracked separately, blended for costing. Lots are
+          // kept regardless of costingMethod so switching methods later
+          // has real history to draw on.
+          const effectiveUnitPrice = unitPrice ?? product.purchasePrice
+          const effectiveShipping = shippingCost ?? 0
+          const batchUnitCost = lotUnitCost({ unitPrice: effectiveUnitPrice, shippingCost: effectiveShipping, quantity })
+
+          newLot = {
+            id: createId(),
+            productId,
+            movementId: '', // filled in below once the movement id is known
+            date,
+            quantity,
+            remainingQuantity: quantity,
+            unitPrice: effectiveUnitPrice,
+            shippingCost: effectiveShipping,
+            createdAt: new Date().toISOString(),
+          }
+          if (unitPrice !== undefined) movementUnitPrice = unitPrice
+          if (effectiveShipping > 0) movementShippingCost = effectiveShipping
+
+          nextPurchasePrice =
+            costingMethod === 'average'
+              ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, quantity, batchUnitCost)
+              : Math.round(batchUnitCost * 100) / 100
+        } else {
+          // Lots are always consumed FIFO to keep the ledger accurate, even
+          // in 'average' mode - only which number gets snapshotted onto the
+          // movement (and used for margin reporting) depends on the setting.
+          const fifoResult = consumeFifo(get().lots, productId, quantity, product.purchasePrice)
+          lotsAfterConsumption = fifoResult.updatedLots
+          movementUnitCost = Math.round((costingMethod === 'fifo' ? fifoResult.unitCost : product.purchasePrice) * 100) / 100
         }
+
+        const movementId = createId()
+        if (newLot) newLot.movementId = movementId
 
         set((state) => ({
           products: state.products.map((p) =>
@@ -195,10 +233,11 @@ export const useStore = create<AppState>()(
               ? { ...p, currentStock: resultingStock, purchasePrice: nextPurchasePrice, updatedAt: new Date().toISOString() }
               : p,
           ),
+          lots: newLot ? [...lotsAfterConsumption, newLot] : lotsAfterConsumption,
           movements: [
             ...state.movements,
             {
-              id: createId(),
+              id: movementId,
               productId,
               locationId: product.locationId,
               date,
@@ -207,6 +246,7 @@ export const useStore = create<AppState>()(
               note: note?.trim() || undefined,
               createdAt: new Date().toISOString(),
               unitPrice: movementUnitPrice,
+              shippingCost: movementShippingCost,
               unitCost: movementUnitCost,
               customerId: type === 'out' ? customerId : undefined,
               saleUnitPrice: type === 'out' && customerId ? product.salePrice : undefined,
@@ -226,13 +266,15 @@ export const useStore = create<AppState>()(
         set((state) => {
           const movement = state.movements.find((m) => m.id === id)
           if (!movement) return state
-          // Reverses the stock quantity only. Un-blending a weighted-average
-          // cost precisely after the fact isn't well-defined once later
-          // movements have layered on top of it, so the product's current
-          // average cost is intentionally left as-is.
+          // Reverses the stock quantity and removes the lot an 'in'
+          // movement created. Doesn't restore quantity to whichever lots
+          // an 'out' movement consumed - once later sales have potentially
+          // drawn from the same lots, unwinding that precisely isn't
+          // well-defined, same as the weighted-average case.
           const reverseDelta = movement.type === 'in' ? -movement.quantity : movement.quantity
           return {
             movements: state.movements.filter((m) => m.id !== id),
+            lots: movement.type === 'in' ? state.lots.filter((l) => l.movementId !== id) : state.lots,
             products: state.products.map((p) =>
               p.id === movement.productId ? { ...p, currentStock: p.currentStock + reverseDelta } : p,
             ),
@@ -252,6 +294,7 @@ export const useStore = create<AppState>()(
             customers: [],
             products: [],
             movements: [],
+            lots: [],
             settings: DEFAULT_SETTINGS,
           }
         }),

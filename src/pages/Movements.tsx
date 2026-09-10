@@ -16,6 +16,8 @@ interface MovementRow {
   type: string
   quantity: number
   unit: string
+  goodsUnitPrice: string
+  shippingCost: string
   customerName: string
   paymentStatus: string
   note: string
@@ -58,6 +60,8 @@ export function Movements() {
       type: m.type === 'in' ? 'Bejövő' : 'Kimenő',
       quantity: m.quantity,
       unit: product?.unit ?? '',
+      goodsUnitPrice: m.type === 'in' && m.unitPrice !== undefined ? String(m.unitPrice) : '',
+      shippingCost: m.type === 'in' && m.shippingCost !== undefined ? String(m.shippingCost) : '',
       customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : '',
       paymentStatus: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : '',
       note: m.note ?? '',
@@ -72,6 +76,8 @@ export function Movements() {
     { header: 'Típus', accessor: (r) => r.type, width: 10 },
     { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
+    { header: 'Áru egységára', accessor: (r) => r.goodsUnitPrice, width: 14 },
+    { header: 'Szállítási költség', accessor: (r) => r.shippingCost, width: 16 },
     { header: 'Vevő', accessor: (r) => r.customerName, width: 22 },
     { header: 'Fizetve', accessor: (r) => r.paymentStatus, width: 14 },
     { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },

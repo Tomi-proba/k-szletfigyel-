@@ -19,8 +19,8 @@ export function Settings() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const values = Object.values(form)
-    if (values.some((v) => !Number.isFinite(v) || v < 0)) {
+    const { costingMethod: _costingMethod, ...numericFields } = form
+    if (Object.values(numericFields).some((v) => !Number.isFinite(v) || v < 0)) {
       setError('Egyik érték sem lehet negatív.')
       return
     }
@@ -45,6 +45,43 @@ export function Settings() {
       <PageHeader title="Beállítások" subtitle="Riasztási küszöbértékek testreszabása" />
 
       <form onSubmit={handleSubmit} className="max-w-xl">
+        <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Beszerzési költség számítása</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ez határozza meg, hogy a termék beszerzési ára és az eladások önköltsége (haszonkulcs kimutatás) hogyan számolódik, amikor
+            ugyanabból a termékből több tételt is eltérő áron vettél.
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, costingMethod: 'average' }))}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                form.costingMethod === 'average'
+                  ? 'border-[var(--color-primary)] bg-[var(--color-info-bg)]'
+                  : 'border-[var(--color-border)]'
+              }`}
+            >
+              <div className="text-sm font-semibold text-[var(--color-text)]">Súlyozott átlagár</div>
+              <div className="text-xs text-[var(--color-text-muted)]">
+                Minden beszerzés egy közös átlagköltségbe olvad bele - egyszerűbb, kevésbé pontos áringadozásnál.
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, costingMethod: 'fifo' }))}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                form.costingMethod === 'fifo' ? 'border-[var(--color-primary)] bg-[var(--color-info-bg)]' : 'border-[var(--color-border)]'
+              }`}
+            >
+              <div className="text-sm font-semibold text-[var(--color-text)]">FIFO (első be, első ki)</div>
+              <div className="text-xs text-[var(--color-text-muted)]">
+                Minden tétel a saját árán könyvelődik el, a legrégebbi tétel fogy el elsőként - pontosabb, ha sokat ingadozik a beszerzési
+                ár.
+              </div>
+            </button>
+          </div>
+        </Card>
+
         <Card className="mb-5">
           <h2 className="mb-4 text-base font-semibold text-[var(--color-text)]">Fogyás- és rendelésszámítás</h2>
 

@@ -21,6 +21,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [type, setType] = useState<MovementType>('out')
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
+  const [shippingCost, setShippingCost] = useState('')
   const [date, setDate] = useState(todayISO())
   const [note, setNote] = useState('')
   const [trackCustomer, setTrackCustomer] = useState(false)
@@ -33,6 +34,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const product = products.find((p) => p.id === productId) ?? null
   const qtyNumber = Number(quantity.replace(',', '.'))
   const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
+  const shippingCostNumber = shippingCost.trim() === '' ? undefined : Number(shippingCost.replace(',', '.'))
 
   function step(delta: number) {
     const current = Number.isFinite(qtyNumber) ? qtyNumber : 0
@@ -64,6 +66,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('A beszerzési ár nem lehet negatív.')
       return
     }
+    if (shippingCost.trim() !== '' && (!Number.isFinite(shippingCostNumber) || (shippingCostNumber ?? 0) < 0)) {
+      setError('A szállítási költség nem lehet negatív.')
+      return
+    }
     if (type === 'out' && trackCustomer && !customerId) {
       setError('Válassz vevőt, vagy kapcsold ki a vevőhöz rögzítést.')
       return
@@ -77,6 +83,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         date,
         note,
         unitPrice: type === 'in' ? unitPriceNumber : undefined,
+        shippingCost: type === 'in' ? shippingCostNumber : undefined,
         customerId: type === 'out' && trackCustomer ? customerId : undefined,
         isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
       },
@@ -86,6 +93,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setPendingNegative(null)
       setQuantity('')
       setUnitPrice('')
+      setShippingCost('')
       setNote('')
       resetCustomerSection()
       setSuccessTick((t) => t + 1)
@@ -167,18 +175,25 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       </FieldGroup>
 
       {type === 'in' && (
-        <Field label="Beszerzési egységár (Ft, opcionális)">
-          <Input
-            inputMode="decimal"
-            value={unitPrice}
-            onChange={(e) => setUnitPrice(e.target.value)}
-            placeholder={product ? String(product.purchasePrice) : '0'}
-          />
-          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-            Csak akkor add meg, ha most más áron vetted, mint eddig - a termék átlagos beszerzési ára ez alapján frissül. Üresen hagyva a
-            jelenlegi ár marad érvényben.
-          </span>
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Áru egységára (Ft, opcionális)">
+            <Input
+              inputMode="decimal"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+              placeholder={product ? String(product.purchasePrice) : '0'}
+            />
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+              Csak akkor add meg, ha most más áron vetted, mint eddig. Üresen hagyva a jelenlegi ár marad érvényben.
+            </span>
+          </Field>
+          <Field label="Szállítási költség (Ft, opcionális)">
+            <Input inputMode="decimal" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" />
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+              A teljes tételre összesen, nem darabonként. Elkülönítve kerül nyilvántartásba az áru árától.
+            </span>
+          </Field>
+        </div>
       )}
 
       {type === 'out' && (

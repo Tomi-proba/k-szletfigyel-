@@ -3,7 +3,8 @@
 // alerting logic in action instead of an empty app.
 import { addDays, formatISO, subDays, subMonths } from 'date-fns'
 import { createId } from './id'
-import type { Customer, Location, Movement, Product, Supplier } from '../types'
+import { consumeFifo } from '../lib/costing'
+import type { Customer, Location, Movement, Product, PurchaseLot, Supplier } from '../types'
 
 interface SeedResult {
   locations: Location[]
@@ -11,6 +12,40 @@ interface SeedResult {
   customers: Customer[]
   products: Product[]
   movements: Movement[]
+  lots: PurchaseLot[]
+}
+
+/** Walks each product's movements in date order, creating a PurchaseLot for
+ * every "in" and consuming lots FIFO for every "out" - so there's a
+ * consistent lot ledger to demo FIFO costing with, not just the running
+ * average. Seed movements don't carry real historical prices, so every lot
+ * uses the product's (single, final) purchasePrice as an approximation. */
+function deriveLots(movements: Movement[], products: Product[]): PurchaseLot[] {
+  let lots: PurchaseLot[] = []
+  for (const product of products) {
+    const productMovements = movements
+      .filter((m) => m.productId === product.id)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt.localeCompare(b.createdAt)))
+
+    for (const m of productMovements) {
+      if (m.type === 'in') {
+        lots.push({
+          id: createId(),
+          productId: product.id,
+          movementId: m.id,
+          date: m.date,
+          quantity: m.quantity,
+          remainingQuantity: m.quantity,
+          unitPrice: product.purchasePrice,
+          shippingCost: 0,
+          createdAt: m.createdAt,
+        })
+      } else {
+        lots = consumeFifo(lots, product.id, m.quantity, product.purchasePrice).updatedLots
+      }
+    }
+  }
+  return lots
 }
 
 /** Attaches a tracked customer + payment status to the N most recent "out"
@@ -434,5 +469,6 @@ export function buildSeedData(): SeedResult {
   products.push(tomlo)
   movements.push(...hTomlo.movements)
 
-  return { locations, suppliers, customers, products, movements }
+  const lots = deriveLots(movements, products)
+  return { locations, suppliers, customers, products, movements, lots }
 }

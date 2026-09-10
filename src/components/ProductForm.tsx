@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Product } from '../types'
 import { COMMON_UNITS } from '../types'
-import { Button, Field, Input, Select } from './ui'
+import { lotUnitCost } from '../lib/costing'
+import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { Button, Card, Field, Input, Select } from './ui'
 
 interface ProductFormProps {
   product?: Product
@@ -15,6 +17,12 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
   const suppliers = useStore((s) => s.suppliers)
   const locations = useStore((s) => s.locations)
   const products = useStore((s) => s.products)
+  const lots = useStore((s) => s.lots)
+  const costingMethod = useStore((s) => s.settings.costingMethod)
+  const productLots = useMemo(
+    () => (product ? lots.filter((l) => l.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : []),
+    [lots, product],
+  )
   // Computed with useMemo, not inline in the selector - a selector that
   // allocates a new array every call breaks zustand's useSyncExternalStore
   // snapshot caching and can trigger an infinite render loop.
@@ -120,12 +128,14 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Field label={product ? 'Átlagos beszerzési ár (Ft)' : 'Kezdő beszerzési ár (Ft)'}>
+          <Field label={product ? (costingMethod === 'fifo' ? 'Legutóbbi beszerzési ár (Ft)' : 'Átlagos beszerzési ár (Ft)') : 'Kezdő beszerzési ár (Ft)'}>
             <Input type="number" min={0} step="any" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} required />
           </Field>
           {product && (
             <p className="-mt-2 mb-3 text-xs text-[var(--color-text-muted)]">
-              Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat adsz meg.
+              {costingMethod === 'fifo'
+                ? 'Minden bejövő mozgásnál az ott megadott árra frissül (a FIFO költségszámítás a tételes előzményekből dolgozik, lásd lent).'
+                : 'Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat adsz meg (súlyozott átlag).'}
             </p>
           )}
         </div>
@@ -144,6 +154,44 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
           ))}
         </Select>
       </Field>
+
+      {product && productLots.length > 0 && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Beszerzési tételek</h3>
+          <Card className="max-h-56 overflow-y-auto p-0">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-[var(--color-surface)]">
+                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                  <th className="px-3 py-2 font-medium">Dátum</th>
+                  <th className="px-3 py-2 text-right font-medium">Mennyiség</th>
+                  <th className="px-3 py-2 text-right font-medium">Maradék</th>
+                  <th className="px-3 py-2 text-right font-medium">Áru ára</th>
+                  <th className="px-3 py-2 text-right font-medium">Szállítás</th>
+                  <th className="px-3 py-2 text-right font-medium">Egységköltség</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productLots.map((lot) => (
+                  <tr key={lot.id} className="border-b border-[var(--color-border)] last:border-b-0">
+                    <td className="whitespace-nowrap px-3 py-2">{formatDate(lot.date)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(lot.quantity)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {lot.remainingQuantity > 0 ? (
+                        formatNumber(lot.remainingQuantity)
+                      ) : (
+                        <span className="text-[var(--color-text-muted)]">elfogyott</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(lot.unitPrice)}</td>
+                    <td className="px-3 py-2 text-right">{lot.shippingCost > 0 ? formatCurrency(lot.shippingCost) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-medium">{formatCurrency(lotUnitCost(lot))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
 
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 

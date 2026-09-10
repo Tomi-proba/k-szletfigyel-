@@ -4,6 +4,11 @@
 
 export type MovementType = 'in' | 'out'
 
+/** How the cost basis for outgoing stock is determined.
+ * 'average' - a single running weighted-average cost per product.
+ * 'fifo' - each purchase batch is its own cost layer, consumed oldest-first. */
+export type CostingMethod = 'average' | 'fifo'
+
 export interface Location {
   id: string
   name: string
@@ -51,6 +56,30 @@ export interface Product {
   updatedAt: string
 }
 
+/** One incoming batch of stock, at its own price - what "the beszerzési ár
+ * is different every time we import" actually needs tracked. Created
+ * automatically whenever an 'in' movement is recorded; consumed
+ * oldest-first when costingMethod is 'fifo' (see lib/costing.ts). Kept
+ * even in 'average' mode so switching methods later has real history to
+ * work from. */
+export interface PurchaseLot {
+  id: string
+  productId: string
+  /** The 'in' movement that created this lot, so deleting that movement
+   * can remove the lot too. */
+  movementId: string
+  date: string
+  /** Original quantity received in this batch. */
+  quantity: number
+  /** How much of this batch hasn't been sold yet (FIFO consumption). */
+  remainingQuantity: number
+  /** Price of the goods themselves, per unit - excludes shipping. */
+  unitPrice: number
+  /** Total shipping/freight cost for this whole batch (not per unit). */
+  shippingCost: number
+  createdAt: string
+}
+
 export interface Movement {
   id: string
   productId: string
@@ -62,14 +91,19 @@ export interface Movement {
   quantity: number
   note?: string
   createdAt: string
-  /** 'in' only: the actual unit price paid for this batch, if it differed
-   * from (or was used to establish) the product's running average cost.
-   * Omitted when the batch was booked in at the product's existing cost. */
+  /** 'in' only: the actual unit price paid for this batch (goods only,
+   * excluding shipping), if it differed from (or was used to establish)
+   * the product's existing cost. Omitted when booked in at the existing
+   * cost. See PurchaseLot for the batch this movement created. */
   unitPrice?: number
-  /** 'out' only: the product's weighted-average cost per unit at the
-   * moment this movement was recorded - snapshotted so margin reports
-   * stay accurate for past periods even after later purchases change the
-   * product's current average cost. */
+  /** 'in' only: total shipping/freight cost for this batch, kept separate
+   * from unitPrice so the two can be reported independently. */
+  shippingCost?: number
+  /** 'out' only: the cost basis per unit at the moment this movement was
+   * recorded (weighted-average or FIFO-consumed, per Settings.costingMethod
+   * at the time) - snapshotted so margin reports stay accurate for past
+   * periods even after later purchases or a method change shift the
+   * product's current cost. */
   unitCost?: number
   /** 'out' only, and only when sold to a tracked customer: the product's
    * sale price at the moment of this sale, snapshotted so an outstanding
@@ -86,6 +120,8 @@ export interface Movement {
 }
 
 export interface Settings {
+  /** Which method values outgoing stock's cost basis - see CostingMethod. */
+  costingMethod: CostingMethod
   /** Window (days) used to compute average daily consumption for reorder suggestions. */
   avgConsumptionWindowDays: number
   /** Safety buffer (days) added on top of supplier lead time before an order is flagged urgent. */
@@ -99,6 +135,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  costingMethod: 'average',
   avgConsumptionWindowDays: 30,
   safetyStockDays: 7,
   reorderTargetDays: 30,

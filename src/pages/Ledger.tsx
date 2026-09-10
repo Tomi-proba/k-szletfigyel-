@@ -6,6 +6,7 @@ import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
 import { computeInventoryPurchaseCost } from '../lib/costing'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
+import { computeAutoVatTotals } from '../lib/vat'
 import { VAT_CATEGORY, type LedgerEntry } from '../types'
 import { Modal } from '../components/Modal'
 import { LedgerEntryForm } from '../components/LedgerEntryForm'
@@ -62,6 +63,11 @@ export function Ledger() {
   // eventually sells - so this is keyed off the purchase (lot) date, not
   // COGS of whatever happened to sell in this same period.
   const inventoryCost = useMemo(() => computeInventoryPurchaseCost(lots, from, to), [lots, from, to])
+  // Automatically tracked VAT counts toward the P&L the same way purchases
+  // do above: accrued the moment the transaction happens, not when the ÁFA
+  // return is actually filed. Non-reclaimable purchase VAT is left out -
+  // it's already folded into inventoryCost via lotUnitCost (see lib/costing.ts).
+  const autoVat = useMemo(() => computeAutoVatTotals(lots, movements, from, to), [lots, movements, from, to])
 
   // The P&L combines ALL ACTIVE ledger entries in range (not the category/
   // type/showDeleted filters above, which only narrow the entry list/
@@ -69,8 +75,8 @@ export function Ledger() {
   // period total - lib/ledger.ts's own filtering already drops deleted ones.
   const entriesInRange = useMemo(() => entries.filter((e) => e.date >= from && e.date <= to), [entries, from, to])
   const summary = useMemo(
-    () => computeFinancialSummary(entriesInRange, inventoryRevenue, inventoryCost, from, to),
-    [entriesInRange, inventoryRevenue, inventoryCost, from, to],
+    () => computeFinancialSummary(entriesInRange, inventoryRevenue, inventoryCost, autoVat.purchaseReclaimable, autoVat.sale, from, to),
+    [entriesInRange, inventoryRevenue, inventoryCost, autoVat, from, to],
   )
 
   function toRow(e: LedgerEntry): LedgerRow {
@@ -190,14 +196,16 @@ export function Ledger() {
           <div className="text-sm text-[var(--color-text-muted)]">Összes bevétel</div>
           <div className="text-2xl font-bold text-[var(--color-success)]">{formatCurrency(summary.totalIncome)}</div>
           <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-            ebből napló: {formatCurrency(summary.ledgerIncomeTotal)} · készlet: {formatCurrency(summary.inventoryRevenue)}
+            ebből napló: {formatCurrency(summary.ledgerIncomeTotal)} · készlet: {formatCurrency(summary.inventoryRevenue)} · automatikus ÁFA:{' '}
+            {formatCurrency(summary.autoVatIncome)}
           </div>
         </Card>
         <Card>
           <div className="text-sm text-[var(--color-text-muted)]">Összes kiadás</div>
           <div className="text-2xl font-bold text-[var(--color-danger)]">{formatCurrency(summary.totalExpense)}</div>
           <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-            ebből napló: {formatCurrency(summary.ledgerExpenseTotal)} · beszerzés: {formatCurrency(summary.inventoryCost)}
+            ebből napló: {formatCurrency(summary.ledgerExpenseTotal)} · beszerzés: {formatCurrency(summary.inventoryCost)} · automatikus ÁFA:{' '}
+            {formatCurrency(summary.autoVatExpense)}
           </div>
         </Card>
         <Card>
@@ -213,8 +221,8 @@ export function Ledger() {
         <div>
           <h2 className="text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg és tételek</h2>
           <p className="text-sm text-[var(--color-text-muted)]">
-            A befizetendő/visszaigényelhető egyenleg, az automatikus (beszerzés/eladás) és a kézzel felvitt ÁFA tételek a dedikált ÁFA
-            oldalon tekinthetők meg.
+            A fenti bevétel/kiadás már tartalmazza az automatikus ÁFA-t is (lásd "automatikus ÁFA" a kártyákon). A teljes
+            befizetendő/visszaigényelhető egyenleg és a tételes bontás a dedikált ÁFA oldalon tekinthető meg.
           </p>
         </div>
         <Link
@@ -247,10 +255,20 @@ export function Ledger() {
                     <td className="py-2 text-right text-[var(--color-danger)]">{c.expense > 0 ? formatCurrency(c.expense) : '—'}</td>
                   </tr>
                 ))}
-                <tr className="font-semibold">
+                <tr className="border-b border-[var(--color-border)] font-semibold">
                   <td className="py-2 pr-4">Készlet (eladás / beszerzés)</td>
                   <td className="py-2 pr-4 text-right text-[var(--color-success)]">{formatCurrency(summary.inventoryRevenue)}</td>
                   <td className="py-2 text-right text-[var(--color-danger)]">{formatCurrency(summary.inventoryCost)}</td>
+                </tr>
+                <tr className="font-semibold">
+                  <td className="py-2 pr-4">
+                    Automatikus ÁFA (beszerzés / eladás)
+                    <div className="text-xs font-normal text-[var(--color-text-muted)]">
+                      visszaigényelhető beszerzési ÁFA bevételként, értékesítési ÁFA kiadásként - részletek az ÁFA oldalon
+                    </div>
+                  </td>
+                  <td className="py-2 pr-4 text-right text-[var(--color-success)]">{formatCurrency(summary.autoVatIncome)}</td>
+                  <td className="py-2 text-right text-[var(--color-danger)]">{formatCurrency(summary.autoVatExpense)}</td>
                 </tr>
               </tbody>
             </table>

@@ -62,32 +62,49 @@ export interface FinancialSummary {
    * goods eventually sell, so this is keyed off the purchase date, not any
    * later sale date. */
   inventoryCost: number
+  /** Automatically tracked, reclaimable VAT from purchases in the same
+   * period (see computeAutoVatTotals in lib/vat.ts) - counted as income the
+   * moment the purchase happens, same accrual logic as inventoryCost above.
+   * Non-reclaimable purchase VAT is deliberately excluded here: it's already
+   * folded into inventoryCost via lotUnitCost, so adding it again here would
+   * double-count it. */
+  autoVatIncome: number
+  /** Automatically tracked, payable VAT from sales in the same period -
+   * counted as an expense (an obligation owed to the tax authority) the
+   * moment the sale happens, not when the ÁFA return is actually filed. */
+  autoVatExpense: number
   totalIncome: number
   totalExpense: number
   netResult: number
 }
 
-/** A simple profit & loss for the period: the ledger's own categories plus
- * the stock trading activity (sale revenue as income, purchase spend as an
- * expense line - see inventoryCost above), combined into one bottom line. */
+/** A simple profit & loss for the period: the ledger's own categories, the
+ * stock trading activity (sale revenue as income, purchase spend as an
+ * expense line - see inventoryCost above), and the automatically tracked
+ * per-transaction VAT (see autoVatIncome/autoVatExpense above), combined
+ * into one bottom line. */
 export function computeFinancialSummary(
   entries: LedgerEntry[],
   inventoryRevenue: number,
   inventoryCost: number,
+  autoVatIncome: number,
+  autoVatExpense: number,
   fromISO: string,
   toISO: string,
 ): FinancialSummary {
   const categoryTotals = computeCategoryTotals(entries, fromISO, toISO)
   const ledgerIncomeTotal = categoryTotals.reduce((sum, c) => sum + c.income, 0)
   const ledgerExpenseTotal = categoryTotals.reduce((sum, c) => sum + c.expense, 0)
-  const totalIncome = ledgerIncomeTotal + inventoryRevenue
-  const totalExpense = ledgerExpenseTotal + inventoryCost
+  const totalIncome = ledgerIncomeTotal + inventoryRevenue + autoVatIncome
+  const totalExpense = ledgerExpenseTotal + inventoryCost + autoVatExpense
   return {
     categoryTotals,
     ledgerIncomeTotal,
     ledgerExpenseTotal,
     inventoryRevenue,
     inventoryCost,
+    autoVatIncome,
+    autoVatExpense,
     totalIncome,
     totalExpense,
     netResult: totalIncome - totalExpense,

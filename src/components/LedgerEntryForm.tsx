@@ -18,17 +18,20 @@ const CUSTOM_CATEGORY_SENTINEL = '__custom__'
 
 interface LedgerEntryFormProps {
   entry?: LedgerEntry
+  /** Preselects a category for a brand-new entry (e.g. the ÁFA page's "Új
+   * ÁFA tétel" button) - ignored when editing an existing entry. */
+  initialCategory?: string
   onDone: () => void
 }
 
-export function LedgerEntryForm({ entry, onDone }: LedgerEntryFormProps) {
+export function LedgerEntryForm({ entry, initialCategory, onDone }: LedgerEntryFormProps) {
   const addLedgerEntry = useStore((s) => s.addLedgerEntry)
   const updateLedgerEntry = useStore((s) => s.updateLedgerEntry)
   const categories = useStore((s) => s.ledgerCategories)
 
   const [date, setDate] = useState(entry?.date ?? todayISO())
   const [type, setType] = useState<LedgerEntryType>(entry?.type ?? 'expense')
-  const [categorySelect, setCategorySelect] = useState(entry?.category ?? categories[0] ?? CUSTOM_CATEGORY_SENTINEL)
+  const [categorySelect, setCategorySelect] = useState(entry?.category ?? initialCategory ?? categories[0] ?? CUSTOM_CATEGORY_SENTINEL)
   const [customCategory, setCustomCategory] = useState('')
   const [description, setDescription] = useState(entry?.description ?? '')
   const [amount, setAmount] = useState(String(entry?.amount ?? ''))

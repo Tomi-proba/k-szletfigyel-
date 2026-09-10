@@ -10,6 +10,7 @@ import { Customers } from './pages/Customers'
 import { Locations } from './pages/Locations'
 import { Reports } from './pages/Reports'
 import { Ledger } from './pages/Ledger'
+import { Vat } from './pages/Vat'
 import { AuditLog } from './pages/AuditLog'
 import { Settings } from './pages/Settings'
 
@@ -32,6 +33,7 @@ function App() {
         <Route path="telephelyek" element={<Locations />} />
         <Route path="riportok" element={<Reports />} />
         <Route path="penzugyi-naplo" element={<Ledger />} />
+        <Route path="afa" element={<Vat />} />
         <Route path="audit-naplo" element={<AuditLog />} />
         <Route path="beallitasok" element={<Settings />} />
       </Route>

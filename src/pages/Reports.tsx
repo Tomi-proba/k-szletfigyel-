@@ -1,7 +1,7 @@
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
+import { useAlerts } from '../hooks/useAlerts'
 import { computeMarginReport } from '../lib/alerts'
 import { groupShippingByPeriod, groupShippingBySupplier, type ShippingPeriodGranularity } from '../lib/shipping'
 import { computeRevenueTotals, listRevenueRows } from '../lib/revenue'
@@ -10,45 +10,57 @@ import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 
-type Tab = 'haszonkulcs' | 'szallitas' | 'bevetel'
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'haszonkulcs', label: 'Haszonkulcs kimutatás' },
-  { key: 'szallitas', label: 'Szállítási költség kimutatás' },
-  { key: 'bevetel', label: 'Bevétel kereső' },
+const SECTIONS = [
+  { id: 'haszonkulcs', label: 'Haszonkulcs' },
+  { id: 'szallitas', label: 'Szállítási költség' },
+  { id: 'bevetel', label: 'Bevétel kereső' },
+  { id: 'vevoi-tartozas', label: 'Vevői tartozás' },
 ]
 
-const TAB_KEYS: Tab[] = TABS.map((t) => t.key)
-
 export function Reports() {
-  const [searchParams] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(() => {
-    const t = searchParams.get('tab')
-    return (TAB_KEYS as string[]).includes(t ?? '') ? (t as Tab) : 'haszonkulcs'
-  })
+  // The app uses HashRouter, where the URL hash IS the route - a plain
+  // href="#id" anchor would overwrite the route instead of scrolling. So
+  // in-page navigation scrolls manually instead of touching the URL.
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div>
-      <PageHeader title="Riportok" />
+      <PageHeader title="Riportok" subtitle="Minden kimutatás és export egy helyen: haszonkulcs, szállítási költség, bevétel-visszakeresés, vevői tartozás." />
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        {TABS.map((t) => (
+      <nav className="mb-6 flex flex-wrap gap-2">
+        {SECTIONS.map((s) => (
           <button
-            key={t.key}
+            key={s.id}
             type="button"
-            onClick={() => setTab(t.key)}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-[var(--color-primary)] text-white' : 'bg-black/5 text-[var(--color-text)] hover:bg-black/10'
-            }`}
+            onClick={() => scrollToSection(s.id)}
+            className="rounded-full bg-black/5 px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-black/10"
           >
-            {t.label}
+            {s.label}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {tab === 'haszonkulcs' && <MarginReportTab />}
-      {tab === 'szallitas' && <ShippingReportTab />}
-      {tab === 'bevetel' && <RevenueSearchTab />}
+      <section id="haszonkulcs" className="mb-10 scroll-mt-4">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Haszonkulcs kimutatás</h2>
+        <MarginReportSection />
+      </section>
+
+      <section id="szallitas" className="mb-10 scroll-mt-4">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Szállítási költség kimutatás</h2>
+        <ShippingReportSection />
+      </section>
+
+      <section id="bevetel" className="mb-10 scroll-mt-4">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Bevétel kereső</h2>
+        <RevenueSearchSection />
+      </section>
+
+      <section id="vevoi-tartozas" className="scroll-mt-4">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--color-text)]">Vevői tartozás</h2>
+        <CustomerDebtSection />
+      </section>
     </div>
   )
 }
@@ -64,7 +76,7 @@ interface MarginRow {
   marginPercent: number
 }
 
-function MarginReportTab() {
+function MarginReportSection() {
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
 
@@ -200,7 +212,7 @@ interface PeriodRow {
   totalHuf: number
 }
 
-function ShippingReportTab() {
+function ShippingReportSection() {
   const lots = useStore((s) => s.lots)
   const products = useStore((s) => s.products)
   const suppliers = useStore((s) => s.suppliers)
@@ -414,7 +426,7 @@ interface RevenueRowExport {
   amountHuf: number
 }
 
-function RevenueSearchTab() {
+function RevenueSearchSection() {
   const movements = useStore((s) => s.movements)
   const products = useStore((s) => s.products)
   const customers = useStore((s) => s.customers)
@@ -576,6 +588,125 @@ function RevenueSearchTab() {
                   </td>
                   <td className="px-4 py-3 text-[var(--color-text-muted)]">{r.sourceType === 'sale' ? (r.customerName ?? '—') : '—'}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[var(--color-success)]">
+                    {formatCurrency(r.amountHuf)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+interface CustomerDebtRow {
+  date: string
+  customerName: string
+  productName: string
+  quantity: string
+  amountHuf: number
+}
+
+function CustomerDebtSection() {
+  const alerts = useAlerts()
+
+  const rows: CustomerDebtRow[] = alerts.unpaidSales.map((s) => ({
+    date: formatDate(s.date),
+    customerName: s.customerName,
+    productName: s.productName,
+    quantity: `${formatNumber(s.quantity)} ${s.unit}`,
+    amountHuf: Math.round(s.amount),
+  }))
+  const totalDebt = alerts.customerBalances.reduce((sum, b) => sum + b.unpaidAmount, 0)
+
+  const columns: ExportColumn<CustomerDebtRow>[] = [
+    { header: 'Dátum', accessor: (r) => r.date, width: 14 },
+    { header: 'Vevő', accessor: (r) => r.customerName, width: 24 },
+    { header: 'Termék', accessor: (r) => r.productName, width: 26 },
+    { header: 'Mennyiség', accessor: (r) => r.quantity, width: 16 },
+    { header: 'Tartozás (Ft)', accessor: (r) => r.amountHuf, width: 16 },
+  ]
+
+  return (
+    <div>
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card>
+          <div className="text-sm text-[var(--color-text-muted)]">Összes tartozás</div>
+          <div className="text-2xl font-bold text-[var(--color-danger)]">{formatCurrency(totalDebt)}</div>
+        </Card>
+        <Card>
+          <div className="text-sm text-[var(--color-text-muted)]">Érintett vevők</div>
+          <div className="text-2xl font-bold text-[var(--color-text)]">{formatNumber(alerts.customerBalances.length)}</div>
+        </Card>
+        <Card>
+          <div className="text-sm text-[var(--color-text-muted)]">Kifizetetlen eladások</div>
+          <div className="text-2xl font-bold text-[var(--color-text)]">{formatNumber(alerts.unpaidSales.length)}</div>
+        </Card>
+      </div>
+
+      <div className="mb-5">
+        <h3 className="mb-2 text-base font-semibold text-[var(--color-text)]">Vevőnkénti összesítés</h3>
+        {alerts.customerBalances.length === 0 ? (
+          <EmptyState>Nincs kifizetetlen vevői tartozás.</EmptyState>
+        ) : (
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                  <th className="px-4 py-3 font-medium">Vevő</th>
+                  <th className="px-4 py-3 text-right font-medium">Nyitott tételek</th>
+                  <th className="px-4 py-3 text-right font-medium">Tartozás</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alerts.customerBalances.map((b) => (
+                  <tr key={b.customerId} className="border-b border-[var(--color-border)] last:border-b-0">
+                    <td className="px-4 py-3 font-medium text-[var(--color-text)]">{b.customerName}</td>
+                    <td className="px-4 py-3 text-right">{formatNumber(b.unpaidSalesCount)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-[var(--color-danger)]">{formatCurrency(b.unpaidAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-[var(--color-text)]">Tételes lista</h3>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => exportToExcel('vevoi_tartozas.xlsx', 'Vevői tartozás', columns, rows)}>
+            <FileSpreadsheet size={16} /> Excel
+          </Button>
+          <Button variant="secondary" onClick={() => exportToPdf('vevoi_tartozas.pdf', 'Vevői tartozás', columns, rows)}>
+            <FileText size={16} /> PDF
+          </Button>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState>Nincs kifizetetlen eladási tétel.</EmptyState>
+      ) : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                <th className="px-4 py-3 font-medium">Dátum</th>
+                <th className="px-4 py-3 font-medium">Vevő</th>
+                <th className="px-4 py-3 font-medium">Termék</th>
+                <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
+                <th className="px-4 py-3 text-right font-medium">Tartozás</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-b border-[var(--color-border)] last:border-b-0">
+                  <td className="whitespace-nowrap px-4 py-3">{r.date}</td>
+                  <td className="px-4 py-3">{r.customerName}</td>
+                  <td className="px-4 py-3">{r.productName}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">{r.quantity}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[var(--color-danger)]">
                     {formatCurrency(r.amountHuf)}
                   </td>
                 </tr>

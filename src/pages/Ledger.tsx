@@ -1,11 +1,11 @@
-import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { FileSpreadsheet, FileText, Pencil, Plus, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
 import { computeInventoryPurchaseCost } from '../lib/costing'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
-import { computeCombinedVatSummary, listAutoVatRows } from '../lib/vat'
 import { VAT_CATEGORY, type LedgerEntry } from '../types'
 import { Modal } from '../components/Modal'
 import { LedgerEntryForm } from '../components/LedgerEntryForm'
@@ -30,7 +30,6 @@ export function Ledger() {
   const entries = useStore((s) => s.ledgerEntries)
   const categories = useStore((s) => s.ledgerCategories)
   const products = useStore((s) => s.products)
-  const suppliers = useStore((s) => s.suppliers)
   const movements = useStore((s) => s.movements)
   const lots = useStore((s) => s.lots)
   const deleteLedgerEntry = useStore((s) => s.deleteLedgerEntry)
@@ -73,17 +72,6 @@ export function Ledger() {
     () => computeFinancialSummary(entriesInRange, inventoryRevenue, inventoryCost, from, to),
     [entriesInRange, inventoryRevenue, inventoryCost, from, to],
   )
-  const vatSummary = useMemo(() => computeCombinedVatSummary(entriesInRange, lots, movements, from, to), [entriesInRange, lots, movements, from, to])
-  const autoVatRows = useMemo(
-    () => listAutoVatRows(lots, movements, products, suppliers, from, to),
-    [lots, movements, products, suppliers, from, to],
-  )
-  const hasVatEntries =
-    entriesInRange.some((e) => e.category === VAT_CATEGORY && !e.deletedAt) ||
-    vatSummary.autoPurchaseReclaimable > 0 ||
-    vatSummary.autoPurchaseNonReclaimable > 0 ||
-    vatSummary.autoSalePayable > 0 ||
-    autoVatRows.some((r) => r.cancelled)
 
   function toRow(e: LedgerEntry): LedgerRow {
     return {
@@ -221,110 +209,21 @@ export function Ledger() {
         </Card>
       </div>
 
-      {hasVatEntries && (
-        <Card className="mb-5">
-          <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg</h2>
-          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
-              <div className="text-sm text-[var(--color-text-muted)]">Befizetendő</div>
-              <div className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(vatSummary.totalPayable)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-[var(--color-text-muted)]">Visszaigényelhető</div>
-              <div className="text-lg font-bold text-[var(--color-success)]">{formatCurrency(vatSummary.totalReclaimable)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-[var(--color-text-muted)]">Egyenleg</div>
-              <div className="text-lg font-bold text-[var(--color-text)]">{formatCurrency(vatSummary.netBalance)}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">
-                {vatSummary.netBalance >= 0 ? 'fizetendő az adóhatóság felé' : 'visszajáró összeg'}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                  <th className="py-2 pr-4 font-medium">Forrás</th>
-                  <th className="py-2 pr-4 text-right font-medium">Befizetendő</th>
-                  <th className="py-2 pr-4 text-right font-medium">Visszaigényelhető</th>
-                  <th className="py-2 text-right font-medium">Nem visszaigényelhető</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-[var(--color-border)]">
-                  <td className="py-2 pr-4">Kézi napló tételek</td>
-                  <td className="py-2 pr-4 text-right">{vatSummary.manualPayable > 0 ? formatCurrency(vatSummary.manualPayable) : '—'}</td>
-                  <td className="py-2 pr-4 text-right">{vatSummary.manualReclaimable > 0 ? formatCurrency(vatSummary.manualReclaimable) : '—'}</td>
-                  <td className="py-2 text-right">—</td>
-                </tr>
-                <tr className="border-b border-[var(--color-border)]">
-                  <td className="py-2 pr-4">Automatikus (beszerzésből)</td>
-                  <td className="py-2 pr-4 text-right">—</td>
-                  <td className="py-2 pr-4 text-right">
-                    {vatSummary.autoPurchaseReclaimable > 0 ? formatCurrency(vatSummary.autoPurchaseReclaimable) : '—'}
-                  </td>
-                  <td className="py-2 text-right text-[var(--color-text-muted)]">
-                    {vatSummary.autoPurchaseNonReclaimable > 0 ? formatCurrency(vatSummary.autoPurchaseNonReclaimable) : '—'}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4">Automatikus (értékesítésből)</td>
-                  <td className="py-2 pr-4 text-right">{vatSummary.autoSalePayable > 0 ? formatCurrency(vatSummary.autoSalePayable) : '—'}</td>
-                  <td className="py-2 pr-4 text-right">—</td>
-                  <td className="py-2 text-right">—</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-            A "nem visszaigényelhető" oszlop csak tájékoztató jellegű - nem csökkenti az egyenleget, mert az az érintett termékek
-            egységköltségébe került be valós, meg nem térülő kiadásként.
+      <Card className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg és tételek</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            A befizetendő/visszaigényelhető egyenleg, az automatikus (beszerzés/eladás) és a kézzel felvitt ÁFA tételek a dedikált ÁFA
+            oldalon tekinthetők meg.
           </p>
-
-          {autoVatRows.length > 0 && (
-            <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-              <h3 className="mb-2 text-sm font-semibold text-[var(--color-text)]">Automatikus ÁFA tételek</h3>
-              <div className="max-h-64 overflow-y-auto overflow-x-auto">
-                <table className="w-full min-w-[520px] text-xs">
-                  <thead className="sticky top-0 bg-[var(--color-surface)]">
-                    <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                      <th className="py-2 pr-3 font-medium">Dátum</th>
-                      <th className="py-2 pr-3 font-medium">Megnevezés</th>
-                      <th className="py-2 pr-3 font-medium">Forrás</th>
-                      <th className="py-2 pr-3 text-right font-medium">Kulcs</th>
-                      <th className="py-2 text-right font-medium">ÁFA összeg</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {autoVatRows.map((r) => (
-                      <tr
-                        key={`${r.sourceType}-${r.id}`}
-                        className={`border-b border-[var(--color-border)] last:border-b-0 ${r.cancelled ? 'opacity-60' : ''}`}
-                      >
-                        <td className="whitespace-nowrap py-2 pr-3">{formatDate(r.date)}</td>
-                        <td className={`py-2 pr-3 ${r.cancelled ? 'line-through' : ''}`}>{r.description}</td>
-                        <td className="py-2 pr-3">
-                          {r.sourceType === 'sale'
-                            ? r.cancelled
-                              ? 'Stornózva (visszavont eladás miatt)'
-                              : 'Értékesítés'
-                            : r.sourceType === 'purchase-reclaimable'
-                              ? 'Beszerzés (visszaig.)'
-                              : 'Beszerzés (nem visszaig.)'}
-                        </td>
-                        <td className="py-2 pr-3 text-right">{r.vatRatePercent}%</td>
-                        <td className="py-2 text-right font-medium">{formatCurrency(r.amountHuf)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+        </div>
+        <Link
+          to="/afa"
+          className="shrink-0 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Ugrás az ÁFA oldalra
+        </Link>
+      </Card>
 
       <Card className="mb-5">
         <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Kategóriánkénti összesítés</h2>

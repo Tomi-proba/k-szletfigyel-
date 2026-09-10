@@ -6,9 +6,10 @@ import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
 import { Modal } from '../components/Modal'
 import { Button, Card, Checkbox, EmptyState, Field, FieldGroup, Input, PageHeader, Select, Textarea } from '../components/ui'
-import { formatDate, formatDateTime, formatNumber } from '../lib/format'
+import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
+import { lotUnitCost } from '../lib/costing'
 import type { Movement, Product, PurchaseLot, SaleStatus } from '../types'
 
 const SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
@@ -22,8 +23,13 @@ interface MovementRow {
   type: string
   quantity: number
   unit: string
+  supplierName: string
   goodsUnitPrice: string
   shippingCost: string
+  currency: string
+  exchangeRate: string
+  unitCost: string
+  lotRemaining: string
   vat: string
   customerName: string
   paymentStatus: string
@@ -37,6 +43,7 @@ export function Movements() {
   const products = useStore((s) => s.products)
   const locations = useStore((s) => s.locations)
   const customers = useStore((s) => s.customers)
+  const suppliers = useStore((s) => s.suppliers)
   const lots = useStore((s) => s.lots)
   const deleteMovement = useStore((s) => s.deleteMovement)
   const restoreMovement = useStore((s) => s.restoreMovement)
@@ -58,6 +65,7 @@ export function Movements() {
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers])
+  const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
   const lotByMovementId = useMemo(() => new Map(lots.map((l) => [l.movementId, l])), [lots])
 
   const filtered = useMemo(
@@ -80,6 +88,8 @@ export function Movements() {
   function toRow(m: Movement): MovementRow {
     const product = productById.get(m.productId)
     const vat = vatOf(m)
+    const lot = m.type === 'in' ? lotByMovementId.get(m.id) : undefined
+    const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
     return {
       date: formatDate(m.date),
       productName: product?.name ?? 'Törölt termék',
@@ -88,8 +98,13 @@ export function Movements() {
       type: m.type === 'in' ? 'Bejövő' : 'Kimenő',
       quantity: m.quantity,
       unit: product?.unit ?? '',
+      supplierName: m.type === 'in' ? (supplier?.name ?? '') : '',
       goodsUnitPrice: m.type === 'in' && m.unitPrice !== undefined ? String(m.unitPrice) : '',
       shippingCost: m.type === 'in' && m.shippingCost !== undefined ? String(m.shippingCost) : '',
+      currency: m.type === 'in' ? (m.currency ?? 'HUF') : '',
+      exchangeRate: m.type === 'in' && m.currency && m.currency !== 'HUF' ? String(m.exchangeRate ?? '') : '',
+      unitCost: lot ? String(Math.round(lotUnitCost(lot))) : '',
+      lotRemaining: lot ? `${formatNumber(lot.remainingQuantity)} / ${formatNumber(lot.quantity)}` : '',
       vat: vat.rate === undefined ? '' : `${vat.rate}%${m.type === 'in' ? (vat.reclaimable === false ? ' (nem visszaig.)' : ' (visszaig.)') : ''}`,
       customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : '',
       paymentStatus: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : '',
@@ -107,8 +122,13 @@ export function Movements() {
     { header: 'Típus', accessor: (r) => r.type, width: 10 },
     { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
+    { header: 'Beszállító', accessor: (r) => r.supplierName, width: 22 },
     { header: 'Áru egységára', accessor: (r) => r.goodsUnitPrice, width: 14 },
     { header: 'Szállítási költség', accessor: (r) => r.shippingCost, width: 16 },
+    { header: 'Pénznem', accessor: (r) => r.currency, width: 10 },
+    { header: 'Árfolyam', accessor: (r) => r.exchangeRate, width: 12 },
+    { header: 'Egységköltség (Ft)', accessor: (r) => r.unitCost, width: 16 },
+    { header: 'Készleten (tételből)', accessor: (r) => r.lotRemaining, width: 18 },
     { header: 'ÁFA', accessor: (r) => r.vat, width: 16 },
     { header: 'Vevő', accessor: (r) => r.customerName, width: 22 },
     { header: 'Fizetve', accessor: (r) => r.paymentStatus, width: 14 },
@@ -175,7 +195,7 @@ export function Movements() {
         <EmptyState>Nincs a szűrésnek megfelelő mozgás.</EmptyState>
       ) : (
         <Card className="overflow-x-auto p-0">
-          <table className="w-full min-w-[800px] text-sm">
+          <table className="w-full min-w-[960px] text-sm">
             <thead>
               <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
                 <th className="px-4 py-3 font-medium">Dátum</th>
@@ -183,6 +203,7 @@ export function Movements() {
                 {locations.length > 1 && <th className="px-4 py-3 font-medium">Telephely</th>}
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
+                <th className="px-4 py-3 font-medium">Beszerzés részletei</th>
                 <th className="px-4 py-3 font-medium">ÁFA</th>
                 <th className="px-4 py-3 font-medium">Vevő</th>
                 <th className="px-4 py-3 font-medium">Eladási státusz</th>
@@ -218,6 +239,34 @@ export function Movements() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
                       {formatNumber(m.quantity)} {product?.unit}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
+                      {m.type === 'in' ? (
+                        (() => {
+                          const lot = lotByMovementId.get(m.id)
+                          const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
+                          return (
+                            <div className="space-y-0.5">
+                              {supplier && <div className="text-[var(--color-text)]">{supplier.name}</div>}
+                              {m.unitPrice !== undefined && (
+                                <div>
+                                  Egységár: {formatMoney(m.unitPrice, m.currency ?? 'HUF')}
+                                  {m.shippingCost ? ` · Szállítás: ${formatMoney(m.shippingCost, m.currency ?? 'HUF')}` : ''}
+                                </div>
+                              )}
+                              {m.currency && m.currency !== 'HUF' && <div>Árfolyam: {formatNumber(m.exchangeRate ?? 0)}</div>}
+                              {lot && <div>Egységköltség: {formatCurrency(Math.round(lotUnitCost(lot)))}</div>}
+                              {lot && (
+                                <div>
+                                  Készleten: {formatNumber(lot.remainingQuantity)} / {formatNumber(lot.quantity)} {product?.unit}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()
+                      ) : (
+                        <span>—</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {vat.rate === undefined ? (

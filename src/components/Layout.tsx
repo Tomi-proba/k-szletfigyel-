@@ -33,11 +33,11 @@ interface NavGroup {
 }
 
 // Grouped so the sidebar reads as a handful of labeled sections instead of
-// one long flat list - see the "Előzmények" comment on isItemActive below
-// for why a few items deliberately point at the same underlying page from
-// more than one group (a report/filter can have one true home and still be
-// reachable from every place it's contextually relevant, without splitting
-// or duplicating the page itself).
+// one long flat list. Every page has exactly one nav entry point - no two
+// links point at the same page/filter combination - except the Riasztások
+// deep-links below (?szuro=nyitott, ?szuro=fizetesi), which are genuinely
+// different filtered views of one page, not duplicates of each other. See
+// isItemActive for how those stay distinguishable in the active-link state.
 const NAV_GROUPS: NavGroup[] = [
   {
     key: 'attekintes',
@@ -54,20 +54,14 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Package,
     items: [
       { to: '/keszlet', label: 'Termékek' },
-      { to: '/mozgasnaplo?tipus=in', label: 'Beszerzési tételek' },
       { to: '/mozgasnaplo', label: 'Mozgásnapló' },
-      { to: '/riportok?tab=szallitas', label: 'Szállítási költség kimutatás' },
     ],
   },
   {
     key: 'ertekesites',
     label: 'Értékesítés',
     icon: ShoppingCart,
-    items: [
-      { to: '/mozgasnaplo?tipus=out', label: 'Eladások' },
-      { to: '/riasztasok?szuro=nyitott', label: 'Nyitott eladások' },
-      { to: '/riportok?tab=bevetel', label: 'Bevétel kereső' },
-    ],
+    items: [{ to: '/riasztasok?szuro=nyitott', label: 'Nyitott eladások' }],
   },
   {
     key: 'vevok',
@@ -87,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Scale,
     items: [
       { to: '/penzugyi-naplo', label: 'Pénzügyi napló' },
+      { to: '/afa', label: 'ÁFA' },
       { to: '/riasztasok?szuro=fizetesi', label: 'Fizetési kötelezettségek' },
     ],
   },
@@ -94,12 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     key: 'riportok',
     label: 'Riportok',
     icon: BarChart3,
-    items: [
-      { to: '/riportok', label: 'Összes riport' },
-      { to: '/riportok?tab=haszonkulcs', label: 'Haszonkulcs kimutatás' },
-      { to: '/riportok?tab=szallitas', label: 'Szállítási költség kimutatás' },
-      { to: '/riportok?tab=bevetel', label: 'Bevétel kereső' },
-    ],
+    items: [{ to: '/riportok', label: 'Riportok' }],
   },
   {
     key: 'elozmenyek',
@@ -120,13 +110,12 @@ const NAV_GROUPS: NavGroup[] = [
 
 const EXPANDED_GROUPS_STORAGE_KEY = 'keszletfigyelo-nav-expanded-groups'
 
-/** A few pages (Mozgásnapló, Riportok) are linked from more than one group,
- * each pointing at a different query string on the same route (e.g.
- * ?tipus=in vs ?tipus=out) - react-router's own NavLink only compares the
- * pathname, which would light up every one of those links at once. This
- * compares the full path+query instead, with a plain (query-less) link
- * only counting as active when there's no extra query narrowing the page
- * to a more specific sibling link. */
+/** Riasztások has two filtered deep-links (?szuro=nyitott, ?szuro=fizetesi)
+ * alongside its own plain link - react-router's own NavLink only compares
+ * the pathname, which would light up all three at once. This compares the
+ * full path+query instead, with a plain (query-less) link only counting as
+ * active when there's no extra query narrowing the page to a more specific
+ * sibling link. */
 function isItemActive(item: NavItem, pathname: string, search: string): boolean {
   const [itemPath, itemQuery] = item.to.split('?')
   if (pathname !== itemPath) return false

@@ -132,6 +132,44 @@ export interface Movement {
   isPaid?: boolean
 }
 
+export type LedgerEntryType = 'income' | 'expense'
+
+/** For ÁFA-category entries: whether this is VAT owed to the tax
+ * authority, or VAT that can be reclaimed. */
+export type VatDirection = 'payable' | 'reclaimable'
+
+/** The category name that gets ÁFA-specific fields (rate, direction). Kept
+ * as a constant rather than a fixed enum member because categories are
+ * otherwise free text - this one just has to match exactly. */
+export const VAT_CATEGORY = 'ÁFA'
+
+/** Seeded once; grows as the user types new category names via the
+ * "Egyéb" option on the ledger entry form - see addLedgerEntry. */
+export const DEFAULT_LEDGER_CATEGORIES = ['ÁFA', 'Bérköltség', 'Bérjárulék', 'Bérpótlék', 'Osztalék', 'Bérleti díj']
+
+/** A general income/expense entry, independent of stock movements or
+ * customers - rent, payroll, dividends, VAT, or anything else that needs
+ * booking for a simple profit & loss view (see lib/ledger.ts). */
+export interface LedgerEntry {
+  id: string
+  date: string
+  type: LedgerEntryType
+  /** Free text, but drawn from (and appended to) Settings-level category list. */
+  category: string
+  description: string
+  /** Amount in `currency`. */
+  amount: number
+  currency: Currency
+  /** HUF value of 1 unit of `currency` at the time - always 1 for HUF. */
+  exchangeRate: number
+  note?: string
+  /** Only set when category === VAT_CATEGORY. */
+  vatRatePercent?: number
+  vatDirection?: VatDirection
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Settings {
   /** Which method values outgoing stock's cost basis - see CostingMethod. */
   costingMethod: CostingMethod

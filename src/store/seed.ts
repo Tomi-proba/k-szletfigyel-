@@ -4,7 +4,8 @@
 import { addDays, formatISO, subDays, subMonths } from 'date-fns'
 import { createId } from './id'
 import { consumeFifo } from '../lib/costing'
-import type { Customer, Location, Movement, Product, PurchaseLot, Supplier } from '../types'
+import { DEFAULT_LEDGER_CATEGORIES, VAT_CATEGORY } from '../types'
+import type { Customer, LedgerEntry, Location, Movement, Product, PurchaseLot, Supplier } from '../types'
 
 interface SeedResult {
   locations: Location[]
@@ -13,6 +14,8 @@ interface SeedResult {
   products: Product[]
   movements: Movement[]
   lots: PurchaseLot[]
+  ledgerEntries: LedgerEntry[]
+  ledgerCategories: string[]
 }
 
 /** Walks each product's movements in date order, creating a PurchaseLot for
@@ -472,5 +475,58 @@ export function buildSeedData(): SeedResult {
   movements.push(...hTomlo.movements)
 
   const lots = deriveLots(movements, products)
-  return { locations, suppliers, customers, products, movements, lots }
+
+  // A handful of general ledger entries so the financial journal isn't
+  // empty on first open - rent, payroll, a dividend, and a payable/
+  // reclaimable ÁFA pair to demo the VAT balance.
+  const mkLedgerEntry = (
+    monthsAgo: number,
+    day: number,
+    type: LedgerEntry['type'],
+    category: string,
+    description: string,
+    amount: number,
+    extra?: Partial<Pick<LedgerEntry, 'vatRatePercent' | 'vatDirection' | 'note'>>,
+  ): LedgerEntry => {
+    const date = new Date(subMonths(now, monthsAgo))
+    date.setDate(day)
+    return {
+      id: createId(),
+      date: iso(date),
+      type,
+      category,
+      description,
+      amount,
+      currency: 'HUF',
+      exchangeRate: 1,
+      createdAt: date.toISOString(),
+      updatedAt: date.toISOString(),
+      ...extra,
+    }
+  }
+
+  const ledgerEntries: LedgerEntry[] = [
+    mkLedgerEntry(2, 5, 'expense', 'Bérleti díj', 'Belvárosi telephely bérleti díja', 280000),
+    mkLedgerEntry(1, 5, 'expense', 'Bérleti díj', 'Belvárosi telephely bérleti díja', 280000),
+    mkLedgerEntry(0, 5, 'expense', 'Bérleti díj', 'Belvárosi telephely bérleti díja', 280000),
+    mkLedgerEntry(1, 10, 'expense', 'Bérköltség', '2 fő eladó bére', 950000),
+    mkLedgerEntry(0, 10, 'expense', 'Bérköltség', '2 fő eladó bére', 950000),
+    mkLedgerEntry(1, 10, 'expense', 'Bérjárulék', 'Bérköltséghez kapcsolódó járulékok', 185000),
+    mkLedgerEntry(0, 10, 'expense', 'Bérjárulék', 'Bérköltséghez kapcsolódó járulékok', 185000),
+    mkLedgerEntry(0, 20, 'expense', 'Osztalék', 'Tulajdonosi osztalékfizetés', 500000),
+    mkLedgerEntry(1, 20, 'expense', VAT_CATEGORY, 'Negyedéves ÁFA bevallás - fizetendő', 620000, {
+      vatRatePercent: 27,
+      vatDirection: 'payable',
+    }),
+    mkLedgerEntry(1, 20, 'income', VAT_CATEGORY, 'Beszerzésekre jutó visszaigényelhető ÁFA', 214000, {
+      vatRatePercent: 27,
+      vatDirection: 'reclaimable',
+    }),
+    mkLedgerEntry(0, 3, 'expense', 'Egyéb', 'Irodaszer beszerzés', 24500),
+    mkLedgerEntry(0, 8, 'expense', 'Marketing', 'Közösségi média hirdetés', 45000),
+  ]
+
+  const ledgerCategories = Array.from(new Set([...DEFAULT_LEDGER_CATEGORIES, ...ledgerEntries.map((e) => e.category)]))
+
+  return { locations, suppliers, customers, products, movements, lots, ledgerEntries, ledgerCategories }
 }

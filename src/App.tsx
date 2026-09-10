@@ -9,6 +9,7 @@ import { Suppliers } from './pages/Suppliers'
 import { Customers } from './pages/Customers'
 import { Locations } from './pages/Locations'
 import { Reports } from './pages/Reports'
+import { Ledger } from './pages/Ledger'
 import { Settings } from './pages/Settings'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
         <Route path="vevok" element={<Customers />} />
         <Route path="telephelyek" element={<Locations />} />
         <Route path="riportok" element={<Reports />} />
+        <Route path="penzugyi-naplo" element={<Ledger />} />
         <Route path="beallitasok" element={<Settings />} />
       </Route>
     </Routes>

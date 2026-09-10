@@ -4,9 +4,11 @@ import { createId } from './id'
 import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import {
+  DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
   type Currency,
   type Customer,
+  type LedgerEntry,
   type Location,
   type Movement,
   type MovementType,
@@ -53,6 +55,8 @@ interface AppState {
   products: Product[]
   movements: Movement[]
   lots: PurchaseLot[]
+  ledgerEntries: LedgerEntry[]
+  ledgerCategories: string[]
   settings: Settings
 
   // Locations
@@ -79,6 +83,11 @@ interface AppState {
   recordMovement: (input: RecordMovementInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   deleteMovement: (id: string) => void
   setMovementPaid: (movementId: string, isPaid: boolean) => void
+
+  // Ledger (general income/expense journal)
+  addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
+  updateLedgerEntry: (id: string, input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
+  deleteLedgerEntry: (id: string) => void
 
   // Settings
   updateSettings: (settings: Settings) => void
@@ -305,6 +314,32 @@ export const useStore = create<AppState>()(
           }
         }),
 
+      addLedgerEntry: (input) =>
+        set((state) => {
+          const category = input.category.trim()
+          const now = new Date().toISOString()
+          return {
+            ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
+            ledgerEntries: [...state.ledgerEntries, { ...input, category, id: createId(), createdAt: now, updatedAt: now }],
+          }
+        }),
+
+      updateLedgerEntry: (id, input) =>
+        set((state) => {
+          const category = input.category.trim()
+          return {
+            ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
+            ledgerEntries: state.ledgerEntries.map((e) =>
+              e.id === id ? { ...input, category, id, createdAt: e.createdAt, updatedAt: new Date().toISOString() } : e,
+            ),
+          }
+        }),
+
+      deleteLedgerEntry: (id) =>
+        set((state) => ({
+          ledgerEntries: state.ledgerEntries.filter((e) => e.id !== id),
+        })),
+
       updateSettings: (settings) => set({ settings }),
 
       resetToDemoData: () => set({ ...buildSeedData(), settings: DEFAULT_SETTINGS }),
@@ -319,6 +354,8 @@ export const useStore = create<AppState>()(
             products: [],
             movements: [],
             lots: [],
+            ledgerEntries: [],
+            ledgerCategories: [...DEFAULT_LEDGER_CATEGORIES],
             settings: DEFAULT_SETTINGS,
           }
         }),

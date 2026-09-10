@@ -7,6 +7,7 @@ import {
   MapPin,
   Package,
   Plus,
+  Scale,
   Settings as SettingsIcon,
   Truck,
   Users,
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/vevok', label: 'Vevők', icon: Users },
   { to: '/telephelyek', label: 'Telephelyek', icon: MapPin },
   { to: '/riportok', label: 'Riportok', icon: BarChart3 },
+  { to: '/penzugyi-naplo', label: 'Pénzügyi napló', icon: Scale },
   { to: '/beallitasok', label: 'Beállítások', icon: SettingsIcon },
 ]
 

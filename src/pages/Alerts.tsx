@@ -1,22 +1,25 @@
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
-import { Card, EmptyState, PageHeader } from '../components/ui'
-import { formatNumber } from '../lib/format'
+import { useStore } from '../store/useStore'
+import { Button, Card, EmptyState, PageHeader } from '../components/ui'
+import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 
-type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes'
+type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'alacsony', label: 'Alacsony készlet' },
   { key: 'rendeles', label: 'Rendelési javaslat' },
   { key: 'lassan', label: 'Lassan fogyó' },
   { key: 'athelyezes', label: 'Áthelyezés javasolt' },
+  { key: 'kifizetetlen', label: 'Kifizetetlen eladás' },
 ]
 
 export function Alerts() {
   const [searchParams, setSearchParams] = useSearchParams()
   const active = searchParams.get('szuro') as FilterKey | null
   const alerts = useAlerts()
+  const setMovementPaid = useStore((s) => s.setMovementPaid)
 
   function setFilter(key: FilterKey | null) {
     if (key) setSearchParams({ szuro: key })
@@ -24,7 +27,8 @@ export function Alerts() {
   }
 
   const showAll = !active
-  const totalCount = alerts.lowStock.length + alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length
+  const totalCount =
+    alerts.lowStock.length + alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length
 
   return (
     <div>
@@ -148,6 +152,32 @@ export function Alerts() {
                     </div>
                     <div className="mt-1 text-sm text-[var(--color-text-muted)]">
                       Javasolt mennyiség: {formatNumber(t.quantity)} {t.unit}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(showAll || active === 'kifizetetlen') && (
+          <section>
+            <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Kifizetetlen eladások</h2>
+            {alerts.unpaidSales.length === 0 ? (
+              <EmptyState>Nincs kifizetetlen eladás.</EmptyState>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {alerts.unpaidSales.map((sale) => (
+                  <Card key={sale.movementId} className="border-l-4 border-l-[var(--color-danger)]">
+                    <div className="font-semibold text-[var(--color-text)]">{sale.customerName}</div>
+                    <div className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      {formatDate(sale.date)} · {sale.productName} · {formatNumber(sale.quantity)} {sale.unit}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
+                      <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                        <CheckCircle2 size={16} /> Kifizetve
+                      </Button>
                     </div>
                   </Card>
                 ))}

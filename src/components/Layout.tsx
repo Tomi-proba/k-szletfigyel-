@@ -9,6 +9,7 @@ import {
   Plus,
   Settings as SettingsIcon,
   Truck,
+  Users,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/mozgasnaplo', label: 'Mozgásnapló', icon: ClipboardList },
   { to: '/riasztasok', label: 'Riasztások', icon: AlertTriangle, badge: true },
   { to: '/beszallitok', label: 'Beszállítók', icon: Truck },
+  { to: '/vevok', label: 'Vevők', icon: Users },
   { to: '/telephelyek', label: 'Telephelyek', icon: MapPin },
   { to: '/riportok', label: 'Riportok', icon: BarChart3 },
   { to: '/beallitasok', label: 'Beállítások', icon: SettingsIcon },
@@ -40,7 +42,7 @@ export function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [quickMoveOpen, setQuickMoveOpen] = useState(false)
   const alerts = useAlerts()
-  const alertCount = alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length
+  const alertCount = alerts.needsReorder.length + alerts.slowMoving.length + alerts.transferSuggestions.length + alerts.unpaidSales.length
   const location = useLocation()
   const isDashboard = location.pathname === '/'
 

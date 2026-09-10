@@ -119,9 +119,16 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Beszerzési ár (Ft)">
-          <Input type="number" min={0} step="any" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} required />
-        </Field>
+        <div>
+          <Field label={product ? 'Átlagos beszerzési ár (Ft)' : 'Kezdő beszerzési ár (Ft)'}>
+            <Input type="number" min={0} step="any" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} required />
+          </Field>
+          {product && (
+            <p className="-mt-2 mb-3 text-xs text-[var(--color-text-muted)]">
+              Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat adsz meg.
+            </p>
+          )}
+        </div>
         <Field label="Eladási ár (Ft)">
           <Input type="number" min={0} step="any" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} required />
         </Field>

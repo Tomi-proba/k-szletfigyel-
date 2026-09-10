@@ -1,14 +1,18 @@
 import { useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import {
+  computeCustomerBalances,
   computeProductInsight,
   computeSlowMoving,
   computeTransferSuggestions,
+  computeUnpaidSales,
   getStockStatus,
+  type CustomerBalance,
   type ProductInsight,
   type SlowMovingResult,
   type StockStatus,
   type TransferSuggestion,
+  type UnpaidSale,
 } from '../lib/alerts'
 import type { Product } from '../types'
 
@@ -26,6 +30,8 @@ export interface AlertsData {
   needsReorder: ProductAlertInfo[]
   slowMoving: ProductAlertInfo[]
   transferSuggestions: TransferSuggestion[]
+  unpaidSales: UnpaidSale[]
+  customerBalances: CustomerBalance[]
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -33,6 +39,7 @@ export function useAlerts(): AlertsData {
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
   const suppliers = useStore((s) => s.suppliers)
+  const customers = useStore((s) => s.customers)
   const locations = useStore((s) => s.locations)
   const settings = useStore((s) => s.settings)
 
@@ -50,7 +57,9 @@ export function useAlerts(): AlertsData {
     const needsReorder = all.filter((a) => a.insight.needsReorder)
     const slowMoving = all.filter((a) => a.slowMoving.isSlowMoving)
     const transferSuggestions = computeTransferSuggestions(products, movements, locations, settings, now)
+    const unpaidSales = computeUnpaidSales(movements, products, customers)
+    const customerBalances = computeCustomerBalances(unpaidSales)
 
-    return { byProductId, all, lowStock, needsReorder, slowMoving, transferSuggestions }
-  }, [products, movements, suppliers, locations, settings])
+    return { byProductId, all, lowStock, needsReorder, slowMoving, transferSuggestions, unpaidSales, customerBalances }
+  }, [products, movements, suppliers, customers, locations, settings])
 }

@@ -4,6 +4,7 @@ import { createId } from './id'
 import { buildSeedData } from './seed'
 import {
   DEFAULT_SETTINGS,
+  type Customer,
   type Location,
   type Movement,
   type MovementType,
@@ -18,6 +19,16 @@ export interface RecordMovementInput {
   quantity: number
   date: string
   note?: string
+  /** 'in' only: unit price actually paid for this batch, if different from
+   * the product's current average cost. Omit to book it in at the
+   * existing cost (no change to the running average). */
+  unitPrice?: number
+  /** 'out' only: attach the sale to a tracked customer instead of treating
+   * it as an anonymous walk-in/cash sale. */
+  customerId?: string
+  /** 'out' only, meaningful when customerId is set. Defaults to true (paid)
+   * when a customer is attached and this is omitted. */
+  isPaid?: boolean
 }
 
 export type RecordMovementResult =
@@ -27,6 +38,7 @@ export type RecordMovementResult =
 interface AppState {
   locations: Location[]
   suppliers: Supplier[]
+  customers: Customer[]
   products: Product[]
   movements: Movement[]
   settings: Settings
@@ -41,6 +53,11 @@ interface AppState {
   updateSupplier: (id: string, input: Omit<Supplier, 'id'>) => void
   deleteSupplier: (id: string) => void
 
+  // Customers
+  addCustomer: (input: Omit<Customer, 'id'>) => void
+  updateCustomer: (id: string, input: Omit<Customer, 'id'>) => void
+  deleteCustomer: (id: string) => void
+
   // Products
   addProduct: (input: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateProduct: (id: string, input: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -49,6 +66,7 @@ interface AppState {
   // Movements
   recordMovement: (input: RecordMovementInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   deleteMovement: (id: string) => void
+  setMovementPaid: (movementId: string, isPaid: boolean) => void
 
   // Settings
   updateSettings: (settings: Settings) => void
@@ -97,6 +115,22 @@ export const useStore = create<AppState>()(
           products: state.products.map((p) => (p.supplierId === id ? { ...p, supplierId: undefined } : p)),
         })),
 
+      addCustomer: (input) =>
+        set((state) => ({
+          customers: [...state.customers, { ...input, id: createId() }],
+        })),
+
+      updateCustomer: (id, input) =>
+        set((state) => ({
+          customers: state.customers.map((c) => (c.id === id ? { ...input, id } : c)),
+        })),
+
+      deleteCustomer: (id) =>
+        set((state) => ({
+          customers: state.customers.filter((c) => c.id !== id),
+          movements: state.movements.map((m) => (m.customerId === id ? { ...m, customerId: undefined, isPaid: undefined } : m)),
+        })),
+
       addProduct: (input) =>
         set((state) => {
           const now = new Date().toISOString()
@@ -119,8 +153,11 @@ export const useStore = create<AppState>()(
         })),
 
       recordMovement: (input, opts) => {
-        const { productId, type, quantity, date, note } = input
+        const { productId, type, quantity, date, note, unitPrice, customerId, isPaid } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) {
           return { ok: false, reason: 'invalid-quantity' }
         }
         const product = get().products.find((p) => p.id === productId)
@@ -133,9 +170,30 @@ export const useStore = create<AppState>()(
           return { ok: false, reason: 'insufficient-stock', resultingStock }
         }
 
+        // Incoming batches can arrive at a different price each time
+        // (import goods, exchange-rate swings, supplier changes). Rather
+        // than overwrite the product's cost outright, fold the new batch
+        // into a weighted-average unit cost - the standard "moving
+        // average" costing method. Outgoing movements snapshot that cost
+        // at the time of sale so later purchases don't retroactively
+        // change past margin figures.
+        let nextPurchasePrice = product.purchasePrice
+        let movementUnitPrice: number | undefined
+        let movementUnitCost: number | undefined
+        if (type === 'in' && unitPrice !== undefined && unitPrice !== product.purchasePrice) {
+          const existingValue = product.currentStock * product.purchasePrice
+          const incomingValue = quantity * unitPrice
+          nextPurchasePrice = Math.round(((existingValue + incomingValue) / resultingStock) * 100) / 100
+          movementUnitPrice = unitPrice
+        } else if (type === 'out') {
+          movementUnitCost = product.purchasePrice
+        }
+
         set((state) => ({
           products: state.products.map((p) =>
-            p.id === productId ? { ...p, currentStock: resultingStock, updatedAt: new Date().toISOString() } : p,
+            p.id === productId
+              ? { ...p, currentStock: resultingStock, purchasePrice: nextPurchasePrice, updatedAt: new Date().toISOString() }
+              : p,
           ),
           movements: [
             ...state.movements,
@@ -148,16 +206,30 @@ export const useStore = create<AppState>()(
               quantity,
               note: note?.trim() || undefined,
               createdAt: new Date().toISOString(),
+              unitPrice: movementUnitPrice,
+              unitCost: movementUnitCost,
+              customerId: type === 'out' ? customerId : undefined,
+              saleUnitPrice: type === 'out' && customerId ? product.salePrice : undefined,
+              isPaid: type === 'out' && customerId ? (isPaid ?? true) : undefined,
             },
           ],
         }))
         return { ok: true }
       },
 
+      setMovementPaid: (movementId, isPaid) =>
+        set((state) => ({
+          movements: state.movements.map((m) => (m.id === movementId ? { ...m, isPaid } : m)),
+        })),
+
       deleteMovement: (id) =>
         set((state) => {
           const movement = state.movements.find((m) => m.id === id)
           if (!movement) return state
+          // Reverses the stock quantity only. Un-blending a weighted-average
+          // cost precisely after the fact isn't well-defined once later
+          // movements have layered on top of it, so the product's current
+          // average cost is intentionally left as-is.
           const reverseDelta = movement.type === 'in' ? -movement.quantity : movement.quantity
           return {
             movements: state.movements.filter((m) => m.id !== id),
@@ -177,6 +249,7 @@ export const useStore = create<AppState>()(
           return {
             locations: [defaultLocation],
             suppliers: [],
+            customers: [],
             products: [],
             movements: [],
             settings: DEFAULT_SETTINGS,

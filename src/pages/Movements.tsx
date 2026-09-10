@@ -16,6 +16,8 @@ interface MovementRow {
   type: string
   quantity: number
   unit: string
+  customerName: string
+  paymentStatus: string
   note: string
 }
 
@@ -23,6 +25,7 @@ export function Movements() {
   const movements = useStore((s) => s.movements)
   const products = useStore((s) => s.products)
   const locations = useStore((s) => s.locations)
+  const customers = useStore((s) => s.customers)
   const deleteMovement = useStore((s) => s.deleteMovement)
 
   const [from, setFrom] = useState(isoDaysAgo(30))
@@ -33,6 +36,7 @@ export function Movements() {
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
+  const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers])
 
   const filtered = useMemo(
     () =>
@@ -54,6 +58,8 @@ export function Movements() {
       type: m.type === 'in' ? 'Bejövő' : 'Kimenő',
       quantity: m.quantity,
       unit: product?.unit ?? '',
+      customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : '',
+      paymentStatus: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : '',
       note: m.note ?? '',
     }
   }
@@ -66,6 +72,8 @@ export function Movements() {
     { header: 'Típus', accessor: (r) => r.type, width: 10 },
     { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
+    { header: 'Vevő', accessor: (r) => r.customerName, width: 22 },
+    { header: 'Fizetve', accessor: (r) => r.paymentStatus, width: 14 },
     { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },
   ]
 
@@ -132,6 +140,7 @@ export function Movements() {
                 {locations.length > 1 && <th className="px-4 py-3 font-medium">Telephely</th>}
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
+                <th className="px-4 py-3 font-medium">Vevő</th>
                 <th className="px-4 py-3 font-medium">Megjegyzés</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -154,6 +163,16 @@ export function Movements() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
                       {formatNumber(m.quantity)} {product?.unit}
+                    </td>
+                    <td className="px-4 py-3">
+                      {m.customerId && (
+                        <>
+                          <div className="text-[var(--color-text)]">{customerById.get(m.customerId)?.name ?? 'Törölt vevő'}</div>
+                          <div className={m.isPaid ? 'text-xs text-[var(--color-success)]' : 'text-xs font-medium text-[var(--color-danger)]'}>
+                            {m.isPaid ? 'Fizetve' : 'Nem fizetett'}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-text-muted)]">{m.note}</td>
                     <td className="px-4 py-3 text-right">

@@ -18,6 +18,14 @@ export interface Supplier {
   leadTimeDays: number
 }
 
+export interface Customer {
+  id: string
+  name: string
+  phone?: string
+  email?: string
+  notes?: string
+}
+
 export interface Product {
   id: string
   name: string
@@ -29,6 +37,11 @@ export interface Product {
   currentStock: number
   /** Alert threshold, configurable per product. */
   minStock: number
+  /** Weighted-average purchase cost per unit, in HUF. Import prices vary
+   * order to order, so this isn't a fixed price: every incoming movement
+   * that specifies its own unit price folds into this average (see
+   * recordMovement in the store). Manually editable too, e.g. for a
+   * correction or when first creating the product. */
   purchasePrice: number
   salePrice: number
   supplierId?: string
@@ -49,6 +62,27 @@ export interface Movement {
   quantity: number
   note?: string
   createdAt: string
+  /** 'in' only: the actual unit price paid for this batch, if it differed
+   * from (or was used to establish) the product's running average cost.
+   * Omitted when the batch was booked in at the product's existing cost. */
+  unitPrice?: number
+  /** 'out' only: the product's weighted-average cost per unit at the
+   * moment this movement was recorded - snapshotted so margin reports
+   * stay accurate for past periods even after later purchases change the
+   * product's current average cost. */
+  unitCost?: number
+  /** 'out' only, and only when sold to a tracked customer: the product's
+   * sale price at the moment of this sale, snapshotted so an outstanding
+   * balance doesn't silently change if the product's price is edited
+   * later. Absent for anonymous/walk-in sales (the common case). */
+  saleUnitPrice?: number
+  /** 'out' only: which tracked customer this was sold to. Omitted for a
+   * plain walk-in/cash sale - that's the default and needs no tracking. */
+  customerId?: string
+  /** 'out' only, meaningful when customerId is set: whether the customer
+   * has paid for this sale yet. Sales without a customerId are always
+   * effectively "paid" (cash sale) and this is left unset for them. */
+  isPaid?: boolean
 }
 
 export interface Settings {

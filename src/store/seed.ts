@@ -3,13 +3,36 @@
 // alerting logic in action instead of an empty app.
 import { addDays, formatISO, subDays, subMonths } from 'date-fns'
 import { createId } from './id'
-import type { Location, Movement, Product, Supplier } from '../types'
+import type { Customer, Location, Movement, Product, Supplier } from '../types'
 
 interface SeedResult {
   locations: Location[]
   suppliers: Supplier[]
+  customers: Customer[]
   products: Product[]
   movements: Movement[]
+}
+
+/** Attaches a tracked customer + payment status to the N most recent "out"
+ * movements for one product, so the unpaid-sales alert has something to
+ * show out of the box. Mutates the given movement objects in place. */
+function attachCustomerSales(
+  movements: Movement[],
+  productId: string,
+  salePrice: number,
+  entries: { customerId: string; isPaid: boolean }[],
+) {
+  const candidates = movements
+    .filter((m) => m.productId === productId && m.type === 'out')
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, entries.length)
+
+  candidates.forEach((movement, i) => {
+    const entry = entries[i]
+    movement.customerId = entry.customerId
+    movement.isPaid = entry.isPaid
+    movement.saleUnitPrice = salePrice
+  })
 }
 
 function iso(d: Date): string {
@@ -116,6 +139,25 @@ export function buildSeedData(): SeedResult {
     leadTimeDays: 14,
   }
   const suppliers = [supMetal, supFa, supEpker]
+
+  const custKovacs: Customer = {
+    id: createId(),
+    name: 'Kovács Építő Kft.',
+    phone: '+36 30 222 3344',
+    email: 'info@kovacsepito.hu',
+  }
+  const custNagy: Customer = {
+    id: createId(),
+    name: 'Nagy Ferenc (egyéni vállalkozó)',
+    phone: '+36 20 555 1122',
+  }
+  const custSzabo: Customer = {
+    id: createId(),
+    name: 'Szabó és Társa Bt.',
+    phone: '+36 70 333 9988',
+    email: 'szabo.tarsa@gmail.com',
+  }
+  const customers = [custKovacs, custNagy, custSzabo]
 
   const products: Product[] = []
   const movements: Movement[] = []
@@ -292,6 +334,10 @@ export function buildSeedData(): SeedResult {
   cement.currentStock = hCement.endingStock + 150
   products.push(cement)
   movements.push(...hCement.movements)
+  attachCustomerSales(hCement.movements, cement.id, cement.salePrice, [
+    { customerId: custKovacs.id, isPaid: false },
+    { customerId: custSzabo.id, isPaid: true },
+  ])
 
   // 6) PVC csővezeték - trending toward a reorder alert (below safety window, not yet under minStock)
   const pvc = mk(
@@ -319,6 +365,10 @@ export function buildSeedData(): SeedResult {
   pvc.currentStock = 75
   products.push(pvc)
   movements.push(...hPvc.movements)
+  attachCustomerSales(hPvc.movements, pvc.id, pvc.salePrice, [
+    { customerId: custKovacs.id, isPaid: false },
+    { customerId: custNagy.id, isPaid: true },
+  ])
 
   // 7) Zsanér szett - normal
   const zsanér = mk(
@@ -384,5 +434,5 @@ export function buildSeedData(): SeedResult {
   products.push(tomlo)
   movements.push(...hTomlo.movements)
 
-  return { locations, suppliers, products, movements }
+  return { locations, suppliers, customers, products, movements }
 }

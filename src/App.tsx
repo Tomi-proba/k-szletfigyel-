@@ -6,6 +6,7 @@ import { Products } from './pages/Products'
 import { Movements } from './pages/Movements'
 import { Alerts } from './pages/Alerts'
 import { Suppliers } from './pages/Suppliers'
+import { Customers } from './pages/Customers'
 import { Locations } from './pages/Locations'
 import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
@@ -25,6 +26,7 @@ function App() {
         <Route path="mozgasnaplo" element={<Movements />} />
         <Route path="riasztasok" element={<Alerts />} />
         <Route path="beszallitok" element={<Suppliers />} />
+        <Route path="vevok" element={<Customers />} />
         <Route path="telephelyek" element={<Locations />} />
         <Route path="riportok" element={<Reports />} />
         <Route path="beallitasok" element={<Settings />} />

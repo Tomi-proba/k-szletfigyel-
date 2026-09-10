@@ -1,10 +1,10 @@
-import { AlertTriangle, ArrowLeftRight, PackageMinus, TrendingDown } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CircleDollarSign, PackageMinus, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
 import { MovementForm } from '../components/MovementForm'
 import { Card, PageHeader } from '../components/ui'
-import { formatNumber } from '../lib/format'
+import { formatCurrency, formatNumber } from '../lib/format'
 
 function SummaryCard({
   to,
@@ -50,6 +50,8 @@ export function Dashboard() {
     .sort((a, b) => (a.insight.daysUntilStockout ?? Infinity) - (b.insight.daysUntilStockout ?? Infinity))
     .slice(0, 5)
 
+  const totalUnpaid = alerts.unpaidSales.reduce((sum, s) => sum + s.amount, 0)
+
   return (
     <div>
       <PageHeader title="Kezdőlap" subtitle={`${products.length} termék, ${locations.length} telephely nyilvántartva`} />
@@ -61,10 +63,17 @@ export function Dashboard() {
         </Card>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
             <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
             <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
+            <SummaryCard
+              to="/riasztasok?szuro=kifizetetlen"
+              icon={CircleDollarSign}
+              label={alerts.unpaidSales.length === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
+              count={alerts.unpaidSales.length}
+              tone="danger"
+            />
           </div>
 
           {alerts.transferSuggestions.length > 0 && (

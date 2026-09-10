@@ -5,7 +5,7 @@ import type { MovementType } from '../types'
 import { todayISO } from '../lib/dates'
 import { ProductPicker } from './ProductPicker'
 import { ConfirmDialog } from './ConfirmDialog'
-import { Button, Field, FieldGroup, Input, Textarea } from './ui'
+import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
 interface MovementFormProps {
   onDone?: () => void
@@ -15,23 +15,35 @@ interface MovementFormProps {
 export function MovementForm({ onDone, defaultProductId = null }: MovementFormProps) {
   const recordMovement = useStore((s) => s.recordMovement)
   const products = useStore((s) => s.products)
+  const customers = useStore((s) => s.customers)
 
   const [productId, setProductId] = useState<string | null>(defaultProductId)
   const [type, setType] = useState<MovementType>('out')
   const [quantity, setQuantity] = useState('')
+  const [unitPrice, setUnitPrice] = useState('')
   const [date, setDate] = useState(todayISO())
   const [note, setNote] = useState('')
+  const [trackCustomer, setTrackCustomer] = useState(false)
+  const [customerId, setCustomerId] = useState('')
+  const [isPaid, setIsPaid] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
 
   const product = products.find((p) => p.id === productId) ?? null
   const qtyNumber = Number(quantity.replace(',', '.'))
+  const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
 
   function step(delta: number) {
     const current = Number.isFinite(qtyNumber) ? qtyNumber : 0
     const next = Math.max(0, current + delta)
     setQuantity(String(Math.round(next * 100) / 100))
+  }
+
+  function resetCustomerSection() {
+    setTrackCustomer(false)
+    setCustomerId('')
+    setIsPaid(true)
   }
 
   function trySubmit(allowNegativeStock = false) {
@@ -48,12 +60,34 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('Add meg a dátumot.')
       return
     }
+    if (unitPrice.trim() !== '' && (!Number.isFinite(unitPriceNumber) || (unitPriceNumber ?? 0) < 0)) {
+      setError('A beszerzési ár nem lehet negatív.')
+      return
+    }
+    if (type === 'out' && trackCustomer && !customerId) {
+      setError('Válassz vevőt, vagy kapcsold ki a vevőhöz rögzítést.')
+      return
+    }
 
-    const result = recordMovement({ productId, type, quantity: qtyNumber, date, note }, { allowNegativeStock })
+    const result = recordMovement(
+      {
+        productId,
+        type,
+        quantity: qtyNumber,
+        date,
+        note,
+        unitPrice: type === 'in' ? unitPriceNumber : undefined,
+        customerId: type === 'out' && trackCustomer ? customerId : undefined,
+        isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
+      },
+      { allowNegativeStock },
+    )
     if (result.ok) {
       setPendingNegative(null)
       setQuantity('')
+      setUnitPrice('')
       setNote('')
+      resetCustomerSection()
       setSuccessTick((t) => t + 1)
       onDone?.()
       return
@@ -131,6 +165,82 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </button>
         </div>
       </FieldGroup>
+
+      {type === 'in' && (
+        <Field label="Beszerzési egységár (Ft, opcionális)">
+          <Input
+            inputMode="decimal"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+            placeholder={product ? String(product.purchasePrice) : '0'}
+          />
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            Csak akkor add meg, ha most más áron vetted, mint eddig - a termék átlagos beszerzési ára ez alapján frissül. Üresen hagyva a
+            jelenlegi ár marad érvényben.
+          </span>
+        </Field>
+      )}
+
+      {type === 'out' && (
+        <FieldGroup label="Vevő">
+          <Checkbox
+            label="Nem sima eladás - vevőhöz rögzítem"
+            checked={trackCustomer}
+            onChange={(e) => {
+              setTrackCustomer(e.target.checked)
+              if (!e.target.checked) {
+                setCustomerId('')
+                setIsPaid(true)
+              }
+            }}
+          />
+          {trackCustomer && (
+            <div className="rounded-lg border border-[var(--color-border)] p-3">
+              <label className="mb-3 block text-sm">
+                <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő kiválasztása</span>
+                <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                  <option value="">Válassz vevőt…</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+                {customers.length === 0 && (
+                  <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+                    Még nincs rögzített vevő - vedd fel a Vevők oldalon.
+                  </span>
+                )}
+              </label>
+              <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPaid(true)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    isPaid
+                      ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Fizetve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPaid(false)}
+                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                    !isPaid
+                      ? 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Még nem fizetett
+                </button>
+              </div>
+            </div>
+          )}
+        </FieldGroup>
+      )}
 
       <Field label="Dátum">
         <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />

@@ -2,7 +2,7 @@
 // plain data so it can be unit tested and reused (e.g. in reports/exports)
 // without depending on the zustand store or React.
 import { differenceInCalendarDays, formatISO, subYears } from 'date-fns'
-import type { Location, Movement, Product, Settings, Supplier } from '../types'
+import type { Customer, Location, Movement, Product, Settings, Supplier } from '../types'
 import { isoDaysAgo, todayISO } from './dates'
 
 /** A calendar month difference is "significant" for the seasonality note at this threshold. */
@@ -243,7 +243,12 @@ export function computeMarginReport(products: Product[], movements: Movement[], 
     if (outMovements.length === 0) continue
     const quantitySold = outMovements.reduce((sum, m) => sum + m.quantity, 0)
     const revenue = quantitySold * product.salePrice
-    const cost = quantitySold * product.purchasePrice
+    // Each sale's cost uses the product's weighted-average cost as it stood
+    // at that moment (snapshotted on the movement), not today's cost - so a
+    // price change from a recent purchase doesn't distort past margins.
+    // Older movements recorded before per-sale cost tracking existed fall
+    // back to the product's current average cost as an approximation.
+    const cost = outMovements.reduce((sum, m) => sum + m.quantity * (m.unitCost ?? product.purchasePrice), 0)
     const margin = revenue - cost
     rows.push({
       productId: product.id,
@@ -263,4 +268,67 @@ export function getStockStatus(isLowStock: boolean, isSlowMoving: boolean): Stoc
   if (isLowStock) return 'low'
   if (isSlowMoving) return 'slow-moving'
   return 'normal'
+}
+
+export interface UnpaidSale {
+  movementId: string
+  date: string
+  customerId: string
+  customerName: string
+  productName: string
+  quantity: number
+  unit: string
+  amount: number
+}
+
+export interface CustomerBalance {
+  customerId: string
+  customerName: string
+  unpaidAmount: number
+  unpaidSalesCount: number
+}
+
+/** Every "out" movement sold to a tracked customer that hasn't been marked
+ * paid yet - the data behind the unpaid-sales alert and the Vevők page. */
+export function computeUnpaidSales(movements: Movement[], products: Product[], customers: Customer[]): UnpaidSale[] {
+  const productById = new Map(products.map((p) => [p.id, p]))
+  const customerById = new Map(customers.map((c) => [c.id, c]))
+
+  return movements
+    .filter((m) => m.type === 'out' && m.customerId && m.isPaid === false)
+    .map((m) => {
+      const product = productById.get(m.productId)
+      const customer = customerById.get(m.customerId as string)
+      return {
+        movementId: m.id,
+        date: m.date,
+        customerId: m.customerId as string,
+        customerName: customer?.name ?? 'Törölt vevő',
+        productName: product?.name ?? 'Törölt termék',
+        quantity: m.quantity,
+        unit: product?.unit ?? '',
+        amount: m.quantity * (m.saleUnitPrice ?? product?.salePrice ?? 0),
+      }
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+}
+
+/** Unpaid totals grouped per customer, for the Vevők overview. */
+export function computeCustomerBalances(unpaidSales: UnpaidSale[]): CustomerBalance[] {
+  const byCustomer = new Map<string, CustomerBalance>()
+  for (const sale of unpaidSales) {
+    const existing = byCustomer.get(sale.customerId)
+    if (existing) {
+      existing.unpaidAmount += sale.amount
+      existing.unpaidSalesCount += 1
+    } else {
+      byCustomer.set(sale.customerId, {
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        unpaidAmount: sale.amount,
+        unpaidSalesCount: 1,
+      })
+    }
+  }
+  return Array.from(byCustomer.values()).sort((a, b) => b.unpaidAmount - a.unpaidAmount)
 }

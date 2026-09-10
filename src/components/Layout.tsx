@@ -8,7 +8,6 @@ import {
   Plus,
   Scale,
   Settings as SettingsIcon,
-  ShoppingCart,
   Truck,
   Users,
   X,
@@ -34,10 +33,12 @@ interface NavGroup {
 
 // Grouped so the sidebar reads as a handful of labeled sections instead of
 // one long flat list. Every page has exactly one nav entry point - no two
-// links point at the same page/filter combination - except the Riasztások
-// deep-links below (?szuro=nyitott, ?szuro=fizetesi), which are genuinely
-// different filtered views of one page, not duplicates of each other. See
-// isItemActive for how those stay distinguishable in the active-link state.
+// links point at the same page/filter combination. Nyitott eladások/
+// Értékesítés was deliberately removed even though it wasn't an exact route
+// duplicate: it only ever jumped to Riasztások's own "Nyitott eladás" filter
+// chip, which is already reachable from the Riasztások page itself - a
+// second, permanent shortcut to a filter the destination page already
+// offers is the same kind of duplication as a repeated route.
 const NAV_GROUPS: NavGroup[] = [
   {
     key: 'attekintes',
@@ -56,12 +57,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/keszlet', label: 'Termékek' },
       { to: '/mozgasnaplo', label: 'Mozgásnapló' },
     ],
-  },
-  {
-    key: 'ertekesites',
-    label: 'Értékesítés',
-    icon: ShoppingCart,
-    items: [{ to: '/riasztasok?szuro=nyitott', label: 'Nyitott eladások' }],
   },
   {
     key: 'vevok',
@@ -110,12 +105,11 @@ const NAV_GROUPS: NavGroup[] = [
 
 const EXPANDED_GROUPS_STORAGE_KEY = 'keszletfigyelo-nav-expanded-groups'
 
-/** Riasztások has two filtered deep-links (?szuro=nyitott, ?szuro=fizetesi)
- * alongside its own plain link - react-router's own NavLink only compares
- * the pathname, which would light up all three at once. This compares the
- * full path+query instead, with a plain (query-less) link only counting as
- * active when there's no extra query narrowing the page to a more specific
- * sibling link. */
+/** Riasztások has a filtered deep-link (?szuro=fizetesi) alongside its own
+ * plain link - react-router's own NavLink only compares the pathname, which
+ * would light up both at once. This compares the full path+query instead,
+ * with a plain (query-less) link only counting as active when there's no
+ * extra query narrowing the page to a more specific sibling link. */
 function isItemActive(item: NavItem, pathname: string, search: string): boolean {
   const [itemPath, itemQuery] = item.to.split('?')
   if (pathname !== itemPath) return false

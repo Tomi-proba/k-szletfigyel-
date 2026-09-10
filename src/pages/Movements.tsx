@@ -1,5 +1,6 @@
 import { CircleSlash, FileSpreadsheet, FileText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
@@ -41,10 +42,14 @@ export function Movements() {
   const restoreMovement = useStore((s) => s.restoreMovement)
   const setSaleStatus = useStore((s) => s.setSaleStatus)
 
+  const [searchParams] = useSearchParams()
   const [from, setFrom] = useState(isoDaysAgo(30))
   const [to, setTo] = useState(todayISO())
   const [productFilter, setProductFilter] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'' | 'in' | 'out'>('')
+  const [typeFilter, setTypeFilter] = useState<'' | 'in' | 'out'>(() => {
+    const t = searchParams.get('tipus')
+    return t === 'in' || t === 'out' ? t : ''
+  })
   const [showDeleted, setShowDeleted] = useState(false)
   const [deleting, setDeleting] = useState<Movement | null>(null)
   const [editingVat, setEditingVat] = useState<Movement | null>(null)

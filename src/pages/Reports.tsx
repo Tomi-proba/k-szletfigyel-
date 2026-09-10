@@ -1,5 +1,6 @@
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { computeMarginReport } from '../lib/alerts'
 import { groupShippingByPeriod, groupShippingBySupplier, type ShippingPeriodGranularity } from '../lib/shipping'
@@ -17,8 +18,14 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'bevetel', label: 'Bevétel kereső' },
 ]
 
+const TAB_KEYS: Tab[] = TABS.map((t) => t.key)
+
 export function Reports() {
-  const [tab, setTab] = useState<Tab>('haszonkulcs')
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab')
+    return (TAB_KEYS as string[]).includes(t ?? '') ? (t as Tab) : 'haszonkulcs'
+  })
 
   return (
     <div>

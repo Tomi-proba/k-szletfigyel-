@@ -17,6 +17,7 @@ import {
   type UnpaidSale,
 } from '../lib/alerts'
 import { computePayableObligations, type PayableObligation } from '../lib/payables'
+import { computeMissingClosings, type MissingClosingAlert } from '../lib/dailyClosing'
 import { todayISO } from '../lib/dates'
 import type { Product } from '../types'
 
@@ -42,6 +43,9 @@ export interface AlertsData {
   urgentPayables: PayableObligation[]
   /** Sales recorded but not yet delivered (pending/shipping) - see computeOpenSales. */
   openSales: OpenSale[]
+  /** Locations that had movement activity on a day but never submitted a
+   * napi zárás for it - see computeMissingClosings. */
+  missingClosings: MissingClosingAlert[]
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -53,6 +57,7 @@ export function useAlerts(): AlertsData {
   const locations = useStore((s) => s.locations)
   const lots = useStore((s) => s.lots)
   const ledgerEntries = useStore((s) => s.ledgerEntries)
+  const dailyClosings = useStore((s) => s.dailyClosings)
   const settings = useStore((s) => s.settings)
 
   return useMemo(() => {
@@ -75,6 +80,7 @@ export function useAlerts(): AlertsData {
     const payables = computePayableObligations(lots, products, suppliers, ledgerEntries, settings.paymentReminderDaysBefore, todayISO())
     const urgentPayables = payables.filter((p) => p.isAlertWorthy)
     const openSales = computeOpenSales(movements, products, customers)
+    const missingClosings = computeMissingClosings(locations, movements, dailyClosings, settings.missingClosingGraceDays, todayISO())
 
     return {
       byProductId,
@@ -88,6 +94,7 @@ export function useAlerts(): AlertsData {
       payables,
       urgentPayables,
       openSales,
+      missingClosings,
     }
-  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, settings])
+  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings])
 }

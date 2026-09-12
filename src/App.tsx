@@ -11,6 +11,8 @@ import { Locations } from './pages/Locations'
 import { Reports } from './pages/Reports'
 import { Ledger } from './pages/Ledger'
 import { Vat } from './pages/Vat'
+import { DailyClosingPage } from './pages/DailyClosing'
+import { DailyReports } from './pages/DailyReports'
 import { AuditLog } from './pages/AuditLog'
 import { Settings } from './pages/Settings'
 
@@ -34,6 +36,8 @@ function App() {
         <Route path="riportok" element={<Reports />} />
         <Route path="penzugyi-naplo" element={<Ledger />} />
         <Route path="afa" element={<Vat />} />
+        <Route path="napi-zaras" element={<DailyClosingPage />} />
+        <Route path="napi-jelentesek" element={<DailyReports />} />
         <Route path="audit-naplo" element={<AuditLog />} />
         <Route path="beallitasok" element={<Settings />} />
       </Route>

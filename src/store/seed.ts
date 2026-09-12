@@ -4,8 +4,9 @@
 import { addDays, formatISO, subDays, subMonths } from 'date-fns'
 import { createId } from './id'
 import { consumeFifo } from '../lib/costing'
+import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import { DEFAULT_LEDGER_CATEGORIES, VAT_CATEGORY } from '../types'
-import type { AuditLogEntry, Customer, LedgerEntry, Location, Movement, Product, PurchaseLot, SaleStatus, Supplier } from '../types'
+import type { AuditLogEntry, Customer, DailyClosing, LedgerEntry, Location, Movement, Product, PurchaseLot, SaleStatus, Supplier } from '../types'
 
 interface SeedResult {
   locations: Location[]
@@ -16,6 +17,7 @@ interface SeedResult {
   lots: PurchaseLot[]
   ledgerEntries: LedgerEntry[]
   ledgerCategories: string[]
+  dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
 }
 
@@ -636,6 +638,51 @@ export function buildSeedData(): SeedResult {
 
   const ledgerCategories = Array.from(new Set([...DEFAULT_LEDGER_CATEGORIES, ...ledgerEntries.map((e) => e.category)]))
 
+  // A couple of illustrative napi zárás (daily closing) records - one
+  // approved, one still sitting in the office's "submitted" queue - and
+  // deliberately no closing for the most recent active day at either
+  // location, so the missing-closing alert has something real to show too.
+  // Dates are picked from the actual generated movement history (not
+  // hardcoded offsets) so the demo summaries are always internally consistent.
+  function activeMovementDatesFor(locationId: string): string[] {
+    return Array.from(
+      new Set(movements.filter((m) => m.locationId === locationId && !m.deletedAt && !m.cancelled).map((m) => m.date)),
+    ).sort()
+  }
+  function hoursAfter(dateIso: string, hours: number): string {
+    return new Date(new Date(dateIso).getTime() + hours * 60 * 60 * 1000).toISOString()
+  }
+  function buildDemoClosing(locationId: string, date: string, submittedOffsetHours: number, status: DailyClosing['status']): DailyClosing {
+    const summary = buildDailyClosingSummary(movements, products, locationId, date)
+    const submittedAt = hoursAfter(date, submittedOffsetHours)
+    return {
+      id: createId(),
+      locationId,
+      date,
+      submittedAt,
+      status,
+      viewedAt: status === 'viewed' || status === 'approved' ? hoursAfter(submittedAt, 2) : undefined,
+      approvedAt: status === 'approved' ? hoursAfter(submittedAt, 20) : undefined,
+      inCount: summary.inCount,
+      outCount: summary.outCount,
+      productBreakdown: summary.productBreakdown,
+      movementIds: summary.movementIds,
+      createdAt: submittedAt,
+    }
+  }
+
+  const belvarosDates = activeMovementDatesFor(locBelvaros.id)
+  const ipariDates = activeMovementDatesFor(locIpari.id)
+  // Skip the most recent day at each location so it stays "not yet closed" -
+  // that's what computeMissingClosings picks up.
+  const belvarosClosingDate = belvarosDates.length > 1 ? belvarosDates[belvarosDates.length - 2] : undefined
+  const ipariClosingDate = ipariDates.length > 1 ? ipariDates[ipariDates.length - 2] : undefined
+
+  const dailyClosings: DailyClosing[] = [
+    ...(belvarosClosingDate ? [buildDemoClosing(locBelvaros.id, belvarosClosingDate, 18, 'approved')] : []),
+    ...(ipariClosingDate ? [buildDemoClosing(locIpari.id, ipariClosingDate, 17, 'submitted')] : []),
+  ]
+
   // A handful of illustrative audit entries so the Audit napló page and each
   // entity's "Előzmények" panel aren't empty on first open. The bulk of the
   // seeded movement history predates the audit log (same as real legacy data
@@ -692,5 +739,5 @@ export function buildSeedData(): SeedResult {
     },
   ]
 
-  return { locations, suppliers, customers, products, movements, lots, ledgerEntries, ledgerCategories, auditLog }
+  return { locations, suppliers, customers, products, movements, lots, ledgerEntries, ledgerCategories, dailyClosings, auditLog }
 }

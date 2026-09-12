@@ -21,6 +21,7 @@ export const ENTITY_TYPE_LABELS: Record<AuditEntityType, string> = {
   supplier: 'Beszállító',
   location: 'Telephely',
   ledgerEntry: 'Napló tétel',
+  dailyClosing: 'Napi zárás',
 }
 
 // Only fields listed here are tracked - id/createdAt/updatedAt/deletedAt and
@@ -91,6 +92,9 @@ const FIELD_LABELS: Record<AuditEntityType, Record<string, string>> = {
     vatDirection: 'ÁFA irány',
     dueDate: 'Fizetési határidő',
     isPaid: 'Kifizetve',
+  },
+  dailyClosing: {
+    status: 'Állapot',
   },
 }
 

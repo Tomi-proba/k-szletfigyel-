@@ -47,6 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/', label: 'Kezdőlap' },
       { to: '/riasztasok', label: 'Riasztások', badge: true },
+      { to: '/napi-jelentesek', label: 'Beérkezett napi jelentések' },
     ],
   },
   {
@@ -56,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/keszlet', label: 'Termékek' },
       { to: '/mozgasnaplo', label: 'Mozgásnapló' },
+      { to: '/napi-zaras', label: 'Napi zárás' },
     ],
   },
   {

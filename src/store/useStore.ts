@@ -5,6 +5,7 @@ import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
+import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import {
   DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
@@ -14,6 +15,7 @@ import {
   type AuditLogEntry,
   type Currency,
   type Customer,
+  type DailyClosing,
   type LedgerEntry,
   type Location,
   type Movement,
@@ -37,6 +39,23 @@ function auditEntry(
   changes?: AuditFieldChange[],
 ): AuditLogEntry {
   return { id: createId(), timestamp: new Date().toISOString(), entityType, entityId, entityLabel, action, description, changes }
+}
+
+/** Marks a location's already-submitted daily closing (if one exists for
+ * that date) as modified - called whenever a movement it covers gets
+ * corrected, or a brand-new movement lands on a day that was already
+ * closed. The closing's own snapshotted numbers are deliberately never
+ * rewritten (that would falsify a sent report); this just raises a flag so
+ * the office knows to double-check it. A no-op when no closing matches. */
+function flagClosingModified(closings: DailyClosing[], locationId: string, date: string): DailyClosing[] {
+  const now = new Date().toISOString()
+  let matched = false
+  const next = closings.map((c) => {
+    if (c.locationId !== locationId || c.date !== date) return c
+    matched = true
+    return { ...c, modifiedAfterSubmission: true, lastModifiedAt: now }
+  })
+  return matched ? next : closings
 }
 
 export interface RecordMovementInput {
@@ -93,6 +112,10 @@ export type CancelSaleResult =
   | { ok: true; wasPaid: boolean }
   | { ok: false; reason: 'not-found' | 'not-a-sale' | 'already-cancelled' }
 
+export type SubmitDailyClosingResult =
+  | { ok: true; closingId: string }
+  | { ok: false; reason: 'already-closed' | 'no-movements' | 'location-not-found' }
+
 interface AppState {
   locations: Location[]
   suppliers: Supplier[]
@@ -102,6 +125,7 @@ interface AppState {
   lots: PurchaseLot[]
   ledgerEntries: LedgerEntry[]
   ledgerCategories: string[]
+  dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
   settings: Settings
 
@@ -140,6 +164,11 @@ interface AppState {
   updateMovementVat: (movementId: string, vatRatePercent?: number) => void
   setSaleStatus: (movementId: string, status: SaleStatus) => void
   cancelSale: (movementId: string, reason?: string) => CancelSaleResult
+
+  // Napi zárás (daily closing)
+  submitDailyClosing: (locationId: string, date: string) => SubmitDailyClosingResult
+  markDailyClosingViewed: (id: string) => void
+  approveDailyClosing: (id: string) => void
 
   // Ledger (general income/expense journal)
   addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -456,6 +485,17 @@ export const useStore = create<AppState>()(
         if (newLot) newLot.movementId = movementId
         const movementLabel = `${product.name} (${quantity} ${product.unit})`
 
+        // A correction targets whichever day the ORIGINAL movement belongs
+        // to (corrections themselves are always dated today, per
+        // deleteMovement/cancelSale below) - that original day's closing, if
+        // any, is what needs flagging as modified. A plain new movement
+        // checks its own location+date instead, so backdating an entry onto
+        // an already-closed day gets flagged too.
+        const originalForCorrection = correctsMovementId ? get().movements.find((m) => m.id === correctsMovementId) : undefined
+        const closingCheckLocationId = originalForCorrection?.locationId ?? product.locationId
+        const closingCheckDate = originalForCorrection?.date ?? date
+        const affectedClosing = get().dailyClosings.find((c) => c.locationId === closingCheckLocationId && c.date === closingCheckDate)
+
         set((state) => ({
           products: state.products.map((p) =>
             p.id === productId
@@ -491,6 +531,7 @@ export const useStore = create<AppState>()(
               correctsMovementId,
             },
           ],
+          dailyClosings: flagClosingModified(state.dailyClosings, closingCheckLocationId, closingCheckDate),
           auditLog: [
             ...state.auditLog,
             auditEntry(
@@ -504,6 +545,17 @@ export const useStore = create<AppState>()(
                   ? `Bejövő mozgás rögzítve - ${movementLabel}`
                   : `Eladás rögzítve - ${movementLabel}`,
             ),
+            ...(affectedClosing
+              ? [
+                  auditEntry(
+                    'dailyClosing',
+                    affectedClosing.id,
+                    `${closingCheckDate} - napi zárás`,
+                    'update',
+                    `A(z) ${closingCheckDate} napi zárás módosult egy utólagos tétel miatt (${movementLabel})`,
+                  ),
+                ]
+              : []),
           ],
         }))
         return { ok: true }
@@ -692,7 +744,15 @@ export const useStore = create<AppState>()(
         const product = get().products.find((p) => p.id === movement.productId)
         const label = `${product?.name ?? 'Törölt termék'} (${movement.quantity} db)`
 
-        if (mode === 'correction') {
+        // Once a day has a napi zárás (in any status), its movements can no
+        // longer be freely soft-deleted at the location level - only the
+        // correction-entry path is allowed, so an already-sent report is
+        // never silently invalidated by a plain deletion (see flagClosingModified,
+        // called from within recordMovement below).
+        const isDayClosed = get().dailyClosings.some((c) => c.locationId === movement.locationId && c.date === movement.date)
+        const effectiveMode: DeleteMovementMode = isDayClosed ? 'correction' : mode
+
+        if (effectiveMode === 'correction') {
           const reverseType: MovementType = movement.type === 'in' ? 'out' : 'in'
           get().recordMovement(
             {
@@ -749,6 +809,73 @@ export const useStore = create<AppState>()(
               ...state.auditLog,
               auditEntry('movement', id, product?.name ?? 'Törölt termék', 'restore', 'Mozgás visszaállítva'),
             ],
+          }
+        }),
+
+      submitDailyClosing: (locationId, date) => {
+        const location = get().locations.find((l) => l.id === locationId)
+        if (!location) return { ok: false, reason: 'location-not-found' }
+        if (get().dailyClosings.some((c) => c.locationId === locationId && c.date === date)) {
+          return { ok: false, reason: 'already-closed' }
+        }
+        const summary = buildDailyClosingSummary(get().movements, get().products, locationId, date)
+        if (summary.inCount === 0 && summary.outCount === 0) {
+          return { ok: false, reason: 'no-movements' }
+        }
+
+        const now = new Date().toISOString()
+        const closing: DailyClosing = {
+          id: createId(),
+          locationId,
+          date,
+          submittedAt: now,
+          status: 'submitted',
+          inCount: summary.inCount,
+          outCount: summary.outCount,
+          productBreakdown: summary.productBreakdown,
+          movementIds: summary.movementIds,
+          createdAt: now,
+        }
+        set((state) => ({
+          dailyClosings: [...state.dailyClosings, closing],
+          auditLog: [
+            ...state.auditLog,
+            auditEntry(
+              'dailyClosing',
+              closing.id,
+              `${location.name} - ${date}`,
+              'create',
+              `Napi zárás elküldve - ${location.name}, ${date} (${summary.inCount} bejövő, ${summary.outCount} kimenő tétel)`,
+            ),
+          ],
+        }))
+        return { ok: true, closingId: closing.id }
+      },
+
+      markDailyClosingViewed: (id) =>
+        set((state) => {
+          const closing = state.dailyClosings.find((c) => c.id === id)
+          if (!closing || closing.status !== 'submitted') return state
+          const location = state.locations.find((l) => l.id === closing.locationId)
+          const label = `${location?.name ?? 'Ismeretlen telephely'} - ${closing.date}`
+          return {
+            dailyClosings: state.dailyClosings.map((c) => (c.id === id ? { ...c, status: 'viewed', viewedAt: new Date().toISOString() } : c)),
+            auditLog: [...state.auditLog, auditEntry('dailyClosing', id, label, 'update', `Napi zárás megtekintve - ${label}`)],
+          }
+        }),
+
+      approveDailyClosing: (id) =>
+        set((state) => {
+          const closing = state.dailyClosings.find((c) => c.id === id)
+          if (!closing || closing.status === 'approved') return state
+          const location = state.locations.find((l) => l.id === closing.locationId)
+          const label = `${location?.name ?? 'Ismeretlen telephely'} - ${closing.date}`
+          const now = new Date().toISOString()
+          return {
+            dailyClosings: state.dailyClosings.map((c) =>
+              c.id === id ? { ...c, status: 'approved', approvedAt: now, viewedAt: c.viewedAt ?? now } : c,
+            ),
+            auditLog: [...state.auditLog, auditEntry('dailyClosing', id, label, 'update', `Napi zárás jóváhagyva - ${label}`)],
           }
         }),
 
@@ -865,6 +992,7 @@ export const useStore = create<AppState>()(
             lots: [],
             ledgerEntries: [],
             ledgerCategories: [...DEFAULT_LEDGER_CATEGORIES],
+            dailyClosings: [],
             auditLog: [],
             settings: DEFAULT_SETTINGS,
           }

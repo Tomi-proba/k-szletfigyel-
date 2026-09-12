@@ -15,7 +15,8 @@ A **Készletfigyelő** egy magyar nyelvű, kisvállalkozásoknak (elsősorban eg
 - vevői és beszállítói törzsadatok, vevői tartozások és beszállítói fizetési kötelezettségek nyomon követése
 - automatikus és kézi ÁFA-nyilvántartás, kombinált ÁFA-egyenleggel
 - egy általános pénzügyi napló (bérleti díj, bérköltség stb.) és egy abból + a készletmozgásokból összeálló egyszerű eredménykimutatás
-- riasztási rendszer (alacsony készlet, lassan fogyó termék, rendelési javaslat, áthelyezési javaslat, kifizetetlen eladás, lejáró/lejárt fizetési kötelezettség, nyitott eladás)
+- riasztási rendszer (alacsony készlet, lassan fogyó termék, rendelési javaslat, áthelyezési javaslat, kifizetetlen eladás, lejáró/lejárt fizetési kötelezettség, nyitott eladás, hiányzó napi zárás)
+- napi zárás telephelyenként, iroda felé küldött jelentéssel és jóváhagyási munkafolyamattal (több telephelyes/raktáras működéshez)
 - teljes körű, soft-delete alapú auditálhatóság — semmi nem törlődik ténylegesen, minden változás naplózva van
 - Excel/PDF export minden fontosabb listánál és riportnál
 
@@ -121,10 +122,13 @@ Eladás-specifikus mezők: `customerId?`, `isPaid?`, `vatRatePercent?`, `saleSta
 Készlettől és vevőktől független bevétel/kiadás (bérleti díj, bérköltség, osztalék, kézi ÁFA-tételek stb.). `type: 'income' | 'expense'`, `category` (szabad szöveg, de az `'ÁFA'` kategória extra mezőket kap: `vatRatePercent`, `vatDirection: 'payable' | 'reclaimable'`), opcionális `dueDate`/`isPaid`/`paidDate` fizetési-kötelezettség követéshez, és `correctsEntryId?` korrekciós tételekhez.
 
 ### 4.8 `Settings`
-Globális beállítások: költségszámítási mód (`costingMethod`), riasztási időablakok és küszöbök, `paymentReminderDaysBefore: number[]` (pl. `[7,3,1]`), `defaultVatRatePercentForNewProducts`.
+Globális beállítások: költségszámítási mód (`costingMethod`), riasztási időablakok és küszöbök, `paymentReminderDaysBefore: number[]` (pl. `[7,3,1]`), `defaultVatRatePercentForNewProducts`, `missingClosingGraceDays` (lásd 4.10).
 
 ### 4.9 `AuditLogEntry`
 Lásd 6. fejezet.
+
+### 4.10 `DailyClosing` (napi zárás)
+Egy telephely egy napjának lezárt, iroda felé elküldött mozgás-összesítője. `status: 'submitted' | 'viewed' | 'approved'`, `inCount`/`outCount` (hány bejövő/kimenő mozgás), `productBreakdown: DailyClosingProductRow[]` (termékenkénti be/ki mennyiség, névvel és mértékegységgel a küldés pillanatában lefényképezve), `movementIds` (visszakövethetőség a Mozgásnaplóhoz), és `modifiedAfterSubmission?`/`lastModifiedAt?` — ha egy már elküldött zárás által lefedett mozgást utólag korrigálnak, vagy egy már lezárt napra új mozgás kerül, ez a két mező jelzi (a zárás saját, elküldött számai **soha nem íródnak felül** - lásd 7.8 és 9.7).
 
 ---
 
@@ -160,6 +164,8 @@ Mivel a Zustand `persist` middleware aszinkron tölti be a localStorage-tartalma
 
 - **Korrekciós tétel (ajánlott)**: az eredeti rekord **változatlanul, aktívan** megmarad; egy új, ellentétes hatású rekord jön létre, ami `correctsMovementId`/`correctsEntryId` mezővel hivatkozik az eredetire. Ez a könyvelésben megszokott "sztornó" mintát követi — teljes nyomon követhetőség, és a hatás nettósítva nullázódik.
 - **Egyszerű törlés**: a rekord `deletedAt`-et kap, az eredeti értékekkel együtt megmarad, csak kiesik az aktív számításokból.
+
+Ha egy `Movement`-hez tartozó telephely+nap kombinációra már el lett küldve egy **napi zárás** (lásd 4.10 és 7.8), a `deleteMovement` store-akció **kényszerítve korrekciós módra vált**, függetlenül attól, mit kért a hívó fél — a `DeleteChoiceDialog` UI-ja ilyenkor eleve el sem rejti az "Egyszerű törlés" gombot (`correctionOnlyReason` prop), hogy a felhasználó ne találkozzon egy olyan gombbal, ami a háttérben másképp viselkedne, mint amit a felirata sugall.
 
 ### 6.2 Egységes audit napló
 Egyetlen, append-only `AuditLogEntry[]` tömb (`state.auditLog`) fedi le a teljes rendszert. Minden mutáló store-akció a végén hozzáfűz egy bejegyzést (`auditEntry()` helper). A mező-szintű "mi változott" részletet a `diffFields()` (`src/lib/audit.ts`) generálja: entitástípusonként előre definiált, emberi nyelvre lefordított mezőlista alapján hasonlítja össze a régi és új állapotot, és csak a ténylegesen változott mezőket sorolja fel (`AuditFieldChange[]`).
@@ -265,6 +271,17 @@ Beszállítónkénti és/vagy időszakonkénti (nap/hét/hónap/év) bontásban 
 
 Generikus `exportToExcel`/`exportToPdf` — az oldalak egy `ExportColumn<T>[]` definíciót és sima objektum-sorokat adnak át, a modul maga nem tud semmit az üzleti logikáról. Az ExcelJS/jsPDF könyvtárak és a beágyazott magyar betűtípus csak exportáláskor töltődnek be dinamikus importtal (`import()`), hogy ne terheljék az alkalmazás kezdeti betöltési méretét.
 
+### 7.8 Napi zárás (`lib/dailyClosing.ts`)
+
+Két tiszta függvény:
+
+- **`buildDailyClosingSummary(movements, products, locationId, date)`** — összegyűjti egy telephely egy napjának összes aktív mozgását, és termékenkénti be/ki bontássá alakítja. Ezt hívja meg mind a küldés előtti előnézet (`pages/DailyClosing.tsx`), mind a tényleges `submitDailyClosing` store-akció — így a kettő garantáltan sosem tér el egymástól.
+- **`computeMissingClosings(locations, movements, closings, graceDays, today)`** — minden `(telephely, nap)` párt megkeres, ahol volt aktív mozgás, de nincs hozzá elküldött zárás, a `Settings.missingClosingGraceDays` türelmi idő figyelembevételével. Egy 30 napos "lookback" ablakra korlátozva fut (`MISSING_CLOSING_LOOKBACK_DAYS`), hogy egy telephely régi, nyomon követés előtti napjai ne spammeljék örökké a riasztást. **Egy olyan nap, amin egyáltalán nem volt mozgás, nem számít "hiányzónak"** - ez tudatos értelmezés, lásd 11.5.
+
+Ezt a `hooks/useAlerts.ts` hívja meg (`missingClosings` mezőként), így ugyanaz a riasztás jelenik meg a Riasztások oldalon és a Beérkezett napi jelentések oldalon is — nincs külön, párhuzamos értesítési csatorna (lásd 9.7).
+
+**Hogyan marad a zárás "soha nem törlődik/módosul utólag" elvű?** A `submitDailyClosing` store-akció (`store/useStore.ts`) a `buildDailyClosingSummary` eredményét egyszer, a küldés pillanatában lefényképezi a `DailyClosing` rekordba - ez utána **soha nem számolódik újra és nem íródik felül**. Ha egy already-closed napra eső mozgást utólag korrigálnak (lásd 9.4), vagy egy már lezárt napra új mozgás kerül, a `flagClosingModified` helper (`useStore.ts`) csak egy `modifiedAfterSubmission: true` + `lastModifiedAt` jelzést tesz rá - a zárás eredeti száma változatlan marad, csak egy figyelmeztető jelzés utal rá, hogy érdemes újranézni. Ez pontosan ugyanaz a minta, mint a korrekciós tételeké (6.1): a történelem nem íródik felül, csak kiegészül.
+
 ---
 
 ## 8. Navigáció és oldalak
@@ -275,8 +292,8 @@ A bal oldali menü (`components/Layout.tsx`) **8, lenyitható/összecsukható cs
 
 | Csoport | Menüpontok |
 |---|---|
-| **Áttekintés** | Kezdőlap, Riasztások |
-| **Készlet** | Termékek, Mozgásnapló |
+| **Áttekintés** | Kezdőlap, Riasztások, Beérkezett napi jelentések |
+| **Készlet** | Termékek, Mozgásnapló, Napi zárás |
 | **Vevők** | Vevők |
 | **Beszállítók** | Beszállítók |
 | **Pénzügy** | Pénzügyi napló, ÁFA, Fizetési kötelezettségek |
@@ -300,6 +317,8 @@ A "Fizetési kötelezettségek" menüpont a `/riasztasok?szuro=fizetesi` mélyli
 | `/riportok` | `Reports.tsx` | Haszonkulcs kimutatás + Szállítási költség kimutatás (egy oldalon, saját gyorsnavigációval) |
 | `/penzugyi-naplo` | `Ledger.tsx` | Az általános pénzügyi napló: bevétel/kiadás tételek, eredménykimutatás-kártyák, kategóriánkénti összesítés |
 | `/afa` | `Vat.tsx` | A dedikált ÁFA oldal — lásd 7.2 |
+| `/napi-zaras` | `DailyClosing.tsx` | Telephely + nap választása, aznapi mozgás-előnézet, zárás elküldése, korábbi zárások telephelyenkénti előzménye — lásd 9.7 |
+| `/napi-jelentesek` | `DailyReports.tsx` | Iroda-nézet: minden telephely zárása telephelyenként csoportosítva, megtekintés/jóváhagyás, hiányzó zárások listája — lásd 9.7 |
 | `/audit-naplo` | `AuditLog.tsx` | A teljes rendszer audit naplója, szűrhető és exportálható |
 | `/beallitasok` | `Settings.tsx` | Globális beállítások + "veszélyzóna" (demó adat visszaállítás / összes adat törlése) |
 
@@ -336,6 +355,15 @@ Lásd 7.2 — a kulcs a termékről öröklődik alapból, de minden tranzakció
 
 ### 9.6 Fizetési kötelezettség nyomon követése
 Beszerzésnél a `MovementForm`-on (`dueDate` + `invoicePaid`), napló-tételnél a `LedgerEntryForm`-on (`dueDate` + `isPaid`) kapcsolható be. A Riasztások oldal "Fizetési kötelezettség" szűrője, illetve a Kezdőlap összegző kártyája mutatja a lejárt/közelgő tételeket, `Settings.paymentReminderDaysBefore` szerint.
+
+### 9.7 Napi zárás küldése és jóváhagyása (több telephelyes működés)
+
+1. **Küldés (raktár oldal, `/napi-zaras`)**: a felhasználó kiválaszt egy telephelyet és egy napot. Ha arra a kombinációra még nincs zárás, a rendszer élőben megmutatja az előnézetet (`buildDailyClosingSummary`: hány bejövő/kimenő tétel, termékenkénti bontás). A "Napi zárás elküldése" gomb `submitDailyClosing(locationId, date)`-et hív, ami lefényképezi az összegzést egy `DailyClosing` rekordba, `status: 'submitted'`-del. Nulla mozgású napra vagy már lezárt napra a küldés elutasított (`SubmitDailyClosingResult`).
+2. **Zárolás**: mostantól az adott telephely+nap mozgásai csak korrekciós tétellel javíthatók (lásd 6.1 és 9.4) — a Mozgásnaplóban egy "zárva" jelvény is jelzi ezt a dátum mellett.
+3. **Fogadás (iroda oldal, `/napi-jelentesek`)**: minden telephely minden zárása itt látszik, telephelyenként csoportosítva, állapot szerint (Beküldve → Megtekintve → Jóváhagyva). A "Megtekintés" gomb megnyitja a tételes bontást **és** automatikusan `markDailyClosingViewed`-et hív (ha még `'submitted'` volt). A "Jóváhagyás" gomb `approveDailyClosing`-ot hív, `approvedAt` időbélyeggel.
+4. **Hiányzó zárás riasztása**: a `computeMissingClosings` (7.8) eredménye a `useAlerts()`-en keresztül **ugyanabban a riasztás-objektumban** utazik, mint minden más riasztás — ezért jelenik meg azonos elven a Riasztások oldalon (`?szuro=hianyzo-zaras` chip), a Kezdőlap összegző kártyáján, **és** a Beérkezett napi jelentések oldal saját "Hiányzó napi zárások" kártyáján is, mindhárom helyen ugyanabból az egy számításból, sosem külön csatornán. Mindegyik hely "Zárás pótlása" linket ad a `/napi-zaras?telephely=X&datum=Y` mélylinkre.
+5. **Utólagos módosítás jelzése**: ha egy már zárt napra eső mozgást korrigálnak (vagy egy új mozgás kerül rá), a zárás `modifiedAfterSubmission` jelzést kap (7.8) - ez látszik mind a `/napi-zaras` oldal saját nézetén (figyelmeztető sáv), mind a `/napi-jelentesek` táblázat "Utólag módosult" jelvényén, mind az audit naplóban.
+6. **Történeti visszakeresés**: a `/napi-zaras` oldal alján minden korábbi zárás listázva van telephelyenként, dátum-tartomány szerint szűrve (`usePersistedDateRange`), exportálható Excel/PDF-be - egy zárás sosem tűnik el, csak a fenti módosítás-jelzést kaphatja meg.
 
 ---
 
@@ -378,6 +406,9 @@ A fejlesztés során több kör is zajlott a menü- és funkció-duplikációk f
 ### 11.4 Régi adatok / visszafelé kompatibilitás
 Néhány mező (pl. `Movement.unitCost`, `saleUnitPrice`, `saleStatus`) az alkalmazás egy későbbi fejlesztési fázisában jelent meg — a kód mindenhol explicit `?? fallback` mintával kezeli azt az esetet, amikor egy régebbi (a mező bevezetése előtt rögzített) rekordon ezek hiányoznak, hogy a riportok ne omoljanak össze rajtuk.
 
+### 11.5 "Hiányzó napi zárás" csak ott jelez, ahol volt mozgás
+A `computeMissingClosings` (7.8) tudatosan **nem** kéri számon minden naptári napra a zárást minden telephelyen — csak azokra a napokra, amiken **ténylegesen volt legalább egy aktív mozgás** az adott telephelyen. Ellenkező esetben egy ritkán mozgó telephely vagy egy régen (a funkció bevezetése előtt) létrehozott telephely minden múltbeli napja hamis riasztásként jelenne meg. Ha ez a viselkedés nem felel meg (pl. minden naptári napot zárni kell, mozgás nélkül is), a `computeMissingClosings` `daysWithActivity` szűrését kell módosítani.
+
 ---
 
 ## 12. Hol keressem, ha...
@@ -392,3 +423,5 @@ Néhány mező (pl. `Movement.unitCost`, `saleUnitPrice`, `saleStatus`) az alkal
 | "Hol vannak a menüpontok definiálva?" | `components/Layout.tsx`, `NAV_GROUPS` |
 | "Hogyan működik az export?" | `lib/export.ts` |
 | "Milyen demó adat töltődik be alapból?" | `store/seed.ts` |
+| "Hogyan működik a napi zárás?" | `lib/dailyClosing.ts`, `pages/DailyClosing.tsx`, `pages/DailyReports.tsx`, 7.8. és 9.7. fejezet |
+| "Miért nem tudom simán törölni ezt a mozgást?" | Valószínűleg az adott telephely+nap kombinációra már el lett küldve egy napi zárás - lásd 6.1 |

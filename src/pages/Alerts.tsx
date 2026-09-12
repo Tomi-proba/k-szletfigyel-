@@ -1,13 +1,13 @@
 import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
 import type { SaleStatus } from '../types'
 import { Button, Card, EmptyState, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 
-type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott'
+type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott' | 'hianyzo-zaras'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'alacsony', label: 'Alacsony készlet' },
@@ -17,6 +17,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'kifizetetlen', label: 'Kifizetetlen eladás' },
   { key: 'fizetesi', label: 'Fizetési kötelezettség' },
   { key: 'nyitott', label: 'Nyitott eladás' },
+  { key: 'hianyzo-zaras', label: 'Hiányzó napi zárás' },
 ]
 
 const OPEN_SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
@@ -68,7 +69,8 @@ export function Alerts() {
     alerts.transferSuggestions.length +
     alerts.unpaidSales.length +
     alerts.urgentPayables.length +
-    alerts.openSales.length
+    alerts.openSales.length +
+    alerts.missingClosings.length
 
   return (
     <div>
@@ -307,6 +309,37 @@ export function Alerts() {
                     <div className="mt-1 text-sm text-[var(--color-text-muted)]">
                       {formatDate(s.date)} · {formatNumber(s.quantity)} {s.unit}
                       {s.customerName && ` · ${s.customerName}`}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(showAll || active === 'hianyzo-zaras') && (
+          <section>
+            <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Hiányzó napi zárás</h2>
+            {alerts.missingClosings.length === 0 ? (
+              <EmptyState>Minden telephely elküldte a napi zárását.</EmptyState>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {alerts.missingClosings.map((m) => (
+                  <Card key={`${m.locationId}-${m.date}`} className="border-l-4 border-l-[var(--color-danger)]">
+                    <div className="font-semibold text-[var(--color-text)]">{m.locationName}</div>
+                    <div className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      {m.locationName} telephely nem küldött jelentést {formatDate(m.date)}-ra.
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="rounded-full bg-[var(--color-danger-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--color-danger)]">
+                        {m.daysOverdue} napja hiányzik
+                      </span>
+                      <Link
+                        to={`/napi-zaras?telephely=${m.locationId}&datum=${m.date}`}
+                        className="text-sm font-medium text-[var(--color-primary)] hover:underline"
+                      >
+                        Zárás pótlása
+                      </Link>
                     </div>
                   </Card>
                 ))}

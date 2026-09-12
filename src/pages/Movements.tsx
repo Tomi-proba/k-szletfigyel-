@@ -52,6 +52,7 @@ export function Movements() {
   const customers = useStore((s) => s.customers)
   const suppliers = useStore((s) => s.suppliers)
   const lots = useStore((s) => s.lots)
+  const dailyClosings = useStore((s) => s.dailyClosings)
   const deleteMovement = useStore((s) => s.deleteMovement)
   const restoreMovement = useStore((s) => s.restoreMovement)
   const setSaleStatus = useStore((s) => s.setSaleStatus)
@@ -260,9 +261,20 @@ export function Movements() {
                 const isDeleted = Boolean(m.deletedAt)
                 const isCancelled = Boolean(m.cancelled)
                 const rowMuted = isDeleted || isCancelled
+                const isDayClosed = dailyClosings.some((c) => c.locationId === m.locationId && c.date === m.date)
                 return (
                   <tr key={m.id} className={`border-b border-[var(--color-border)] last:border-b-0 ${rowMuted ? 'opacity-60' : ''}`}>
-                    <td className="whitespace-nowrap px-4 py-3">{formatDate(m.date)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {formatDate(m.date)}
+                      {isDayClosed && (
+                        <span
+                          className="ml-1.5 rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-muted)]"
+                          title="Erre a napra ezen a telephelyen már elküldtek napi zárást"
+                        >
+                          zárva
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className={`font-medium text-[var(--color-text)] ${rowMuted ? 'line-through' : ''}`}>
                         {product?.name ?? 'Törölt termék'}
@@ -416,6 +428,11 @@ export function Movements() {
         <DeleteChoiceDialog
           title="Mozgás törlése"
           description={`Hogyan töröljük ezt a mozgást (${productById.get(deleting.productId)?.name ?? 'termék'}, ${deleting.quantity} db)?`}
+          correctionOnlyReason={
+            dailyClosings.some((c) => c.locationId === deleting.locationId && c.date === deleting.date)
+              ? 'Erre a napra ezen a telephelyen már elküldtek napi zárást, ezért a mozgás csak korrekciós tétellel javítható - egyszerű törlés nem választható.'
+              : undefined
+          }
           onCorrection={() => {
             deleteMovement(deleting.id, 'correction' satisfies DeleteMovementMode)
             setDeleting(null)

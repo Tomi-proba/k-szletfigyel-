@@ -271,6 +271,10 @@ export interface Settings {
    * product - just a starting value for Product.defaultVatRatePercent,
    * freely overridable there and again per transaction. */
   defaultVatRatePercentForNewProducts: number
+  /** How many days after a calendar day ends the system waits before
+   * flagging a location's missing daily closing (see DailyClosing below) -
+   * 0 means it's flagged the very next day, 1 waits one extra day, etc. */
+  missingClosingGraceDays: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -282,6 +286,7 @@ export const DEFAULT_SETTINGS: Settings = {
   slowMovingThresholdPercent: 70,
   paymentReminderDaysBefore: [7, 3, 1],
   defaultVatRatePercentForNewProducts: 27,
+  missingClosingGraceDays: 0,
 }
 
 export const DEFAULT_LOCATION_NAME = 'Fő telephely'
@@ -294,7 +299,7 @@ export const COMMON_UNITS = ['db', 'm²', 'fm', 'kg', 'l', 'csomag', 'raklap'] a
 // Powers both the standalone Audit napló page and each entity's own
 // "Előzmények" panel (just filtered by entityType + entityId).
 
-export type AuditEntityType = 'product' | 'lot' | 'movement' | 'customer' | 'supplier' | 'location' | 'ledgerEntry'
+export type AuditEntityType = 'product' | 'lot' | 'movement' | 'customer' | 'supplier' | 'location' | 'ledgerEntry' | 'dailyClosing'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'cancel' | 'correction'
 
@@ -319,4 +324,52 @@ export interface AuditLogEntry {
   action: AuditAction
   description: string
   changes?: AuditFieldChange[]
+}
+
+// --- Napi zárás (daily closing) --------------------------------------------
+// One location's "day is done, here's everything that moved" package, sent
+// to the office/HQ for review. Never deleted or rewritten in place - once
+// submitted, a closing is a permanent historical record (see lib/dailyClosing.ts
+// for how it's built and store/useStore.ts for how corrections after the
+// fact only ever flag it as modifiedAfterSubmission, never edit its numbers).
+
+export type DailyClosingStatus = 'submitted' | 'viewed' | 'approved'
+
+export interface DailyClosingProductRow {
+  productId: string
+  /** Snapshotted at closing time so a later product rename/deletion doesn't
+   * change how a past closing reads. */
+  productName: string
+  unit: string
+  inQuantity: number
+  outQuantity: number
+}
+
+export interface DailyClosing {
+  id: string
+  locationId: string
+  /** The calendar day being closed (YYYY-MM-DD) - not the submission timestamp. */
+  date: string
+  submittedAt: string
+  status: DailyClosingStatus
+  /** Set once the office opens this closing's detail view. */
+  viewedAt?: string
+  /** Set once the office explicitly approves this closing. */
+  approvedAt?: string
+  /** How many individual bejövő/kimenő mozgás records this closing bundled -
+   * kept separate from the per-product quantities since a product's unit
+   * varies (db/kg/m²), so a single combined "quantity" wouldn't be meaningful. */
+  inCount: number
+  outCount: number
+  productBreakdown: DailyClosingProductRow[]
+  /** Every movement id captured in this closing, for traceability back to
+   * the Mozgásnapló. */
+  movementIds: string[]
+  /** Set when a movement this closing covers was later corrected (or a new
+   * movement was recorded for this same location+date after submission) -
+   * the closing's own numbers are never rewritten, this just flags that the
+   * office should double-check it. See flagClosingModified in useStore.ts. */
+  modifiedAfterSubmission?: boolean
+  lastModifiedAt?: string
+  createdAt: string
 }

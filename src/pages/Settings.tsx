@@ -148,6 +148,17 @@ export function Settings() {
         </Card>
 
         <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Napi zárás</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ha egy telephely egy napra nem küldött napi zárást, ennyi nappal a nap vége után jelzi ezt a rendszer riasztásként (0 = már a
+            következő napon jelezze).
+          </p>
+          <Field label="Türelmi idő hiányzó zárásra (nap)">
+            <Input type="number" min={0} {...num('missingClosingGraceDays')} />
+          </Field>
+        </Card>
+
+        <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">ÁFA</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
             Ez a kulcs jelenik meg felajánlva, amikor új terméket veszel fel - termékenként, majd tételenként (beszerzés/eladás

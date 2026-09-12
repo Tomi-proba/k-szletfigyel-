@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, PackageMinus, Truck, TrendingDown } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, ClipboardX, PackageMinus, Truck, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useStore } from '../store/useStore'
@@ -83,6 +83,13 @@ export function Dashboard() {
               tone="warning"
             />
             <SummaryCard to="/riasztasok?szuro=nyitott" icon={Truck} label="Nyitott eladás" count={alerts.openSales.length} tone="info" />
+            <SummaryCard
+              to="/riasztasok?szuro=hianyzo-zaras"
+              icon={ClipboardX}
+              label="Hiányzó napi zárás"
+              count={alerts.missingClosings.length}
+              tone="danger"
+            />
           </div>
 
           {alerts.transferSuggestions.length > 0 && (

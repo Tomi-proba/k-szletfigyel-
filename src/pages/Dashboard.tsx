@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, ClipboardX, PackageMinus, Truck, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { MovementForm } from '../components/MovementForm'
 import { Card, PageHeader } from '../components/ui'
@@ -44,6 +45,14 @@ export function Dashboard() {
   const alerts = useAlerts()
   const products = useStore((s) => s.products)
   const locations = useStore((s) => s.locations)
+  // A raktáros dashboardja a "leegyszerűsített, csak a saját raktárára
+  // fókuszáló kezdőoldal" (DOCUMENTATION.md 14. fejezet) - a
+  // készletszintekhez kötődő riasztások (`products`/`movements` már csak a
+  // saját telephelyét tartalmazza az RLS miatt) megmaradnak, de a
+  // vevő/fizetés-jellegű kártyák (kifizetetlen eladás, fizetési
+  // kötelezettség, nyitott eladás) irodai adatnak számítanak, ezért rejtve
+  // maradnak.
+  const { isWarehouseUser } = useAuth()
 
   const urgent = alerts.needsReorder
     .filter((a) => a.insight.reorderUrgent)
@@ -68,21 +77,27 @@ export function Dashboard() {
             <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
             <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
             <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
-            <SummaryCard
-              to="/riasztasok?szuro=kifizetetlen"
-              icon={CircleDollarSign}
-              label={alerts.unpaidSales.length === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
-              count={alerts.unpaidSales.length}
-              tone="danger"
-            />
-            <SummaryCard
-              to="/riasztasok?szuro=fizetesi"
-              icon={CalendarClock}
-              label={alerts.urgentPayables.length === 0 ? 'Fizetési kötelezettség' : `Fizetendő: ${formatCurrency(totalPayable)}`}
-              count={alerts.urgentPayables.length}
-              tone="warning"
-            />
-            <SummaryCard to="/riasztasok?szuro=nyitott" icon={Truck} label="Nyitott eladás" count={alerts.openSales.length} tone="info" />
+            {!isWarehouseUser && (
+              <SummaryCard
+                to="/riasztasok?szuro=kifizetetlen"
+                icon={CircleDollarSign}
+                label={alerts.unpaidSales.length === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
+                count={alerts.unpaidSales.length}
+                tone="danger"
+              />
+            )}
+            {!isWarehouseUser && (
+              <SummaryCard
+                to="/riasztasok?szuro=fizetesi"
+                icon={CalendarClock}
+                label={alerts.urgentPayables.length === 0 ? 'Fizetési kötelezettség' : `Fizetendő: ${formatCurrency(totalPayable)}`}
+                count={alerts.urgentPayables.length}
+                tone="warning"
+              />
+            )}
+            {!isWarehouseUser && (
+              <SummaryCard to="/riasztasok?szuro=nyitott" icon={Truck} label="Nyitott eladás" count={alerts.openSales.length} tone="info" />
+            )}
             <SummaryCard
               to="/riasztasok?szuro=hianyzo-zaras"
               icon={ClipboardX}

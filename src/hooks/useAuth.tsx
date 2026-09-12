@@ -8,6 +8,8 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
 import { mapCompanyRow, mapProfileRow, type Company, type Profile } from '../types/auth'
+import { emptyBusinessSlices, fetchBusinessData } from '../lib/remoteSync'
+import { hydrateFromRemote, resetToLocalMode } from '../store/useStore'
 
 interface AuthResult {
   error: string | null
@@ -19,7 +21,14 @@ interface AuthContextValue {
   profile: Profile | null
   company: Company | null
   isReadOnly: boolean
-  signUp: (email: string, password: string, companyName: string) => Promise<AuthResult>
+  /** True once profile.role === 'raktaros' - the restricted, single-location
+   * warehouse view. See DOCUMENTATION.md 14. fejezet for what this does and
+   * doesn't restrict. */
+  isWarehouseUser: boolean
+  /** companyName is only used for a brand-new company (no inviteToken).
+   * When inviteToken is set, the account joins that invite's existing
+   * company/role/location instead - see handle_new_user() in schema.sql. */
+  signUp: (email: string, password: string, companyName: string, inviteToken?: string) => Promise<AuthResult>
   signIn: (email: string, password: string) => Promise<AuthResult>
   signOut: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<AuthResult>
@@ -39,6 +48,13 @@ function friendlyAuthError(message: string): string {
   if (message.includes('Invalid login credentials')) return 'Hibás email cím vagy jelszó.'
   if (message.includes('User already registered')) return 'Ezzel az email címmel már regisztráltak.'
   if (message.includes('Password should be at least')) return 'A jelszónak legalább 6 karakter hosszúnak kell lennie.'
+  // The invite-token check lives in the handle_new_user() Postgres trigger
+  // (supabase/schema.sql) - a raised exception there surfaces here either as
+  // its own text or wrapped in Supabase's generic "Database error saving new
+  // user", depending on the Supabase version, so both are mapped.
+  if (message.includes('Érvénytelen vagy lejárt meghívó') || message.includes('Database error saving new user')) {
+    return 'Ez a meghívó érvénytelen, lejárt, vagy már felhasználásra került. Kérj újat attól, aki meghívott.'
+  }
   return message
 }
 
@@ -54,12 +70,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!profileRow) {
       setProfile(null)
       setCompany(null)
+      resetToLocalMode()
       return
     }
     const mappedProfile = mapProfileRow(profileRow)
     setProfile(mappedProfile)
     const { data: companyRow } = await supabase.from('companies').select('*').eq('id', mappedProfile.companyId).maybeSingle()
     setCompany(companyRow ? mapCompanyRow(companyRow) : null)
+
+    // Switches the store from the local/demo data every fresh browser starts
+    // with over to this company's shared, Supabase-backed data (see
+    // store/useStore.ts hydrateFromRemote + lib/remoteSync.ts) - what makes
+    // the raktáros/iroda role split (DOCUMENTATION.md 14. fejezet) actually
+    // share data across separate devices instead of each seeing its own
+    // browser's local copy.
+    try {
+      const slices = await fetchBusinessData()
+      hydrateFromRemote(mappedProfile.companyId, slices)
+    } catch (err) {
+      console.error('[useAuth] failed to load business data from Supabase', err)
+      hydrateFromRemote(mappedProfile.companyId, emptyBusinessSlices)
+    }
   }, [])
 
   useEffect(() => {
@@ -83,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null)
         setCompany(null)
+        resetToLocalMode()
       }
     })
 
@@ -92,12 +124,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadProfileAndCompany])
 
-  const signUp = useCallback(async (email: string, password: string, companyName: string): Promise<AuthResult> => {
+  const signUp = useCallback(async (email: string, password: string, companyName: string, inviteToken?: string): Promise<AuthResult> => {
     if (!supabase) return { error: 'A Supabase nincs beállítva.' }
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { company_name: companyName.trim() } },
+      options: { data: inviteToken ? { invite_token: inviteToken } : { company_name: companyName.trim() } },
     })
     return { error: error ? friendlyAuthError(error.message) : null }
   }, [])
@@ -161,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [company, refreshCompany])
 
   const isReadOnly = useMemo(() => computeIsReadOnly(company), [company])
+  const isWarehouseUser = profile?.role === 'raktaros'
 
   const value: AuthContextValue = {
     loading,
@@ -168,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     company,
     isReadOnly,
+    isWarehouseUser,
     signUp,
     signIn,
     signOut,

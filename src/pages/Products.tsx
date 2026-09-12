@@ -1,6 +1,7 @@
 import { FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAlerts } from '../hooks/useAlerts'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Product } from '../types'
 import { Modal } from '../components/Modal'
@@ -35,6 +36,14 @@ export function Products() {
   const deleteProduct = useStore((s) => s.deleteProduct)
   const restoreProduct = useStore((s) => s.restoreProduct)
   const alerts = useAlerts()
+  // A raktáros csak megtekinti a saját telephelye készletét - a beszerzési
+  // ár/egységköltség érzékeny adatnak számít (lásd DOCUMENTATION.md 14.
+  // fejezet), ezért rejtve marad, és a termék létrehozás/szerkesztés/törlés
+  // is irodai jog marad. A telephely-szűrés magától eltűnik (nincs mit
+  // szűrni): a `products`/`locations` tömb már csak a raktáros saját
+  // telephelyét tartalmazza, mert a Supabase RLS eleve úgy szűri a
+  // lekérdezést - lásd supabase/schema.sql.
+  const { isWarehouseUser } = useAuth()
 
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -89,7 +98,7 @@ export function Products() {
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
     { header: 'Státusz', accessor: (r) => STATUS_LABEL[r.status], width: 14 },
     { header: 'Beszállító', accessor: (r) => r.supplierName, width: 22 },
-    { header: 'Beszerzési ár', accessor: (r) => r.purchasePrice, width: 14 },
+    ...(isWarehouseUser ? [] : [{ header: 'Beszerzési ár', accessor: (r: InventoryRow) => r.purchasePrice, width: 14 }]),
     { header: 'Eladási ár', accessor: (r) => r.salePrice, width: 14 },
   ]
 
@@ -106,9 +115,11 @@ export function Products() {
             <Button variant="secondary" onClick={() => exportToPdf('keszletlista.pdf', 'Készletlista', inventoryColumns, inventoryRows)}>
               <FileText size={16} /> PDF
             </Button>
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új termék
-            </Button>
+            {!isWarehouseUser && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus size={18} /> Új termék
+              </Button>
+            )}
           </>
         }
       />
@@ -189,26 +200,28 @@ export function Products() {
                   <span>Beszállító: {supplierName(product.supplierId)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-[var(--color-text-muted)]">
-                  <span>Beszerzési ár: {formatCurrency(product.purchasePrice)}</span>
+                  {!isWarehouseUser && <span>Beszerzési ár: {formatCurrency(product.purchasePrice)}</span>}
                   <span>Eladási ár: {formatCurrency(product.salePrice)}</span>
                 </div>
 
-                <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  {isDeleted ? (
-                    <Button variant="secondary" onClick={() => restoreProduct(product.id)}>
-                      <RotateCcw size={16} /> Visszaállítás
-                    </Button>
-                  ) : (
-                    <>
-                      <Button variant="secondary" onClick={() => setEditing(product)}>
-                        <Pencil size={16} /> Szerkesztés
+                {!isWarehouseUser && (
+                  <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
+                    {isDeleted ? (
+                      <Button variant="secondary" onClick={() => restoreProduct(product.id)}>
+                        <RotateCcw size={16} /> Visszaállítás
                       </Button>
-                      <Button variant="danger" onClick={() => setDeleting(product)}>
-                        <Trash2 size={16} />
-                      </Button>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        <Button variant="secondary" onClick={() => setEditing(product)}>
+                          <Pencil size={16} /> Szerkesztés
+                        </Button>
+                        <Button variant="danger" onClick={() => setDeleting(product)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
               </Card>
             )
           })}

@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import { useHydrated } from './hooks/useHydrated'
 import { AuthGate } from './components/AuthGate'
+import { RoleGate } from './components/RoleGate'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Products } from './pages/Products'
@@ -18,6 +19,7 @@ import { AuditLog } from './pages/AuditLog'
 import { Settings } from './pages/Settings'
 import { Subscription } from './pages/Subscription'
 import { Admin } from './pages/Admin'
+import { Team } from './pages/Team'
 
 function App() {
   const hydrated = useHydrated()
@@ -34,17 +36,95 @@ function App() {
           <Route path="keszlet" element={<Products />} />
           <Route path="mozgasnaplo" element={<Movements />} />
           <Route path="riasztasok" element={<Alerts />} />
-          <Route path="beszallitok" element={<Suppliers />} />
-          <Route path="vevok" element={<Customers />} />
-          <Route path="telephelyek" element={<Locations />} />
-          <Route path="riportok" element={<Reports />} />
-          <Route path="penzugyi-naplo" element={<Ledger />} />
-          <Route path="afa" element={<Vat />} />
+          <Route
+            path="beszallitok"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Suppliers />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="vevok"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Customers />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="telephelyek"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Locations />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="riportok"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Reports />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="penzugyi-naplo"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Ledger />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="afa"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Vat />
+              </RoleGate>
+            }
+          />
           <Route path="napi-zaras" element={<DailyClosingPage />} />
-          <Route path="napi-jelentesek" element={<DailyReports />} />
-          <Route path="audit-naplo" element={<AuditLog />} />
-          <Route path="beallitasok" element={<Settings />} />
-          <Route path="elofizetes" element={<Subscription />} />
+          <Route
+            path="napi-jelentesek"
+            element={
+              <RoleGate roles={['iroda']}>
+                <DailyReports />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="audit-naplo"
+            element={
+              <RoleGate roles={['iroda']}>
+                <AuditLog />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="beallitasok"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Settings />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="elofizetes"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Subscription />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="csapat"
+            element={
+              <RoleGate roles={['iroda']}>
+                <Team />
+              </RoleGate>
+            }
+          />
           <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>

@@ -6,6 +6,7 @@ import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/co
 import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
+import { pushBusinessDiffs, type BusinessSlices } from '../lib/remoteSync'
 import {
   DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
@@ -129,6 +130,16 @@ interface AppState {
   auditLog: AuditLogEntry[]
   settings: Settings
 
+  /** 'local' - the original, single-tenant localStorage-only behaviour
+   * (Electron build, or web without Supabase configured/logged in) -
+   * completely unchanged. 'remote' - locations/products/movements/lots/
+   * dailyClosings/auditLog are backed by Supabase (see lib/remoteSync.ts)
+   * for the raktáros/iroda role-based views to work across separate
+   * devices; suppliers/customers/ledgerEntries/settings stay local either
+   * way. Never set directly - see hydrateFromRemote/resetToLocalMode below. */
+  dataMode: 'local' | 'remote'
+  remoteCompanyId: string | null
+
   // Locations
   addLocation: (name: string) => void
   updateLocation: (id: string, name: string) => void
@@ -186,9 +197,29 @@ interface AppState {
 
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (rawSet, get) => {
+      // Every action below still just calls `set(...)` exactly as before -
+      // this local shadow of the destructured `rawSet` param is the ONLY
+      // change needed to add Supabase sync: after applying the update
+      // in-memory, if we're in remote mode it diffs the 6 shared slices
+      // against their pre-update values (by reference - see
+      // lib/remoteSync.ts) and pushes whatever changed/was added. Hydrating
+      // FROM Supabase (hydrateFromRemote, below) deliberately bypasses this
+      // wrapper via useStore.setState directly, so a fresh fetch never
+      // triggers a pointless write-back of the data it just downloaded.
+      const set = ((updater: Parameters<typeof rawSet>[0]) => {
+        const prev = get()
+        rawSet(updater as never)
+        if (prev.dataMode === 'remote' && prev.remoteCompanyId) {
+          pushBusinessDiffs(prev.remoteCompanyId, prev, get())
+        }
+      }) as typeof rawSet
+
+      return {
       ...buildSeedData(),
       settings: DEFAULT_SETTINGS,
+      dataMode: 'local' as const,
+      remoteCompanyId: null,
 
       addLocation: (name) =>
         set((state) => {
@@ -978,9 +1009,19 @@ export const useStore = create<AppState>()(
 
       updateSettings: (settings) => set({ settings }),
 
-      resetToDemoData: () => set({ ...buildSeedData(), settings: DEFAULT_SETTINGS }),
+      // Both danger-zone actions are no-ops once a real company's data is
+      // Supabase-backed - resetting/wiping a live, multi-user company's
+      // shared data from one browser's "veszélyzóna" button is far too
+      // destructive to expose here. The Settings page hides these buttons
+      // in remote mode (see pages/Settings.tsx); this guard is the actual
+      // enforcement, not just the UI hiding them.
+      resetToDemoData: () => {
+        if (get().dataMode === 'remote') return
+        set({ ...buildSeedData(), settings: DEFAULT_SETTINGS })
+      },
 
-      clearAllData: () =>
+      clearAllData: () => {
+        if (get().dataMode === 'remote') return
         set(() => {
           const defaultLocation: Location = { id: createId(), name: 'Fő telephely' }
           return {
@@ -996,11 +1037,65 @@ export const useStore = create<AppState>()(
             auditLog: [],
             settings: DEFAULT_SETTINGS,
           }
-        }),
-    }),
+        })
+      },
+      }
+    },
     {
       name: 'keszletfigyelo-storage',
       version: 1,
+      // Never persist dataMode/remoteCompanyId as 'remote' - which mode we're
+      // in is derived live from the current Supabase session (see
+      // hydrateFromRemote/resetToLocalMode), not a durable local fact; a
+      // reload always starts 'local' until useAuth re-establishes a remote
+      // session. While actually in remote mode, the 6 shared slices are also
+      // blanked out of what's saved here, so a live company's data (or a
+      // DIFFERENT company's, if this browser later logs into another one)
+      // never lingers in this browser's local/offline fallback snapshot.
+      partialize: (state) => ({
+        ...state,
+        dataMode: 'local' as const,
+        remoteCompanyId: null,
+        ...(state.dataMode === 'remote'
+          ? { locations: [], products: [], lots: [], movements: [], dailyClosings: [], auditLog: [] }
+          : {}),
+      }),
     },
   ),
 )
+
+/** Populates the store from Supabase (see lib/remoteSync.ts fetchBusinessData)
+ * and switches on remote sync for subsequent mutations. Called once
+ * company+profile become available - see hooks/useAuth.tsx. Uses
+ * useStore.setState directly (bypassing the sync wrapper above) since this
+ * is a download, not a local mutation that needs pushing back. */
+export function hydrateFromRemote(companyId: string, slices: BusinessSlices) {
+  useStore.setState({
+    dataMode: 'remote',
+    remoteCompanyId: companyId,
+    locations: slices.locations,
+    products: slices.products,
+    lots: slices.lots,
+    movements: slices.movements,
+    dailyClosings: slices.dailyClosings,
+    auditLog: slices.auditLog,
+  })
+}
+
+/** Switches back to local/offline mode (sign-out, or Supabase not
+ * configured) and restores whatever this browser's own local snapshot was -
+ * see the partialize comment above for why that snapshot is never a stale
+ * remote company's data. */
+export function resetToLocalMode() {
+  useStore.setState({
+    dataMode: 'local',
+    remoteCompanyId: null,
+    locations: [],
+    products: [],
+    lots: [],
+    movements: [],
+    dailyClosings: [],
+    auditLog: [],
+  })
+  useStore.persist.rehydrate()
+}

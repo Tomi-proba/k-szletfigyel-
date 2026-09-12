@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useAuth } from './useAuth'
 import { useStore } from '../store/useStore'
 import {
   computeCustomerBalances,
@@ -59,6 +60,14 @@ export function useAlerts(): AlertsData {
   const ledgerEntries = useStore((s) => s.ledgerEntries)
   const dailyClosings = useStore((s) => s.dailyClosings)
   const settings = useStore((s) => s.settings)
+  // A vevő/fizetés/beszállítói-fizetés jellegű riasztások irodai adatnak
+  // számítanak (lásd DOCUMENTATION.md 14. fejezet) - raktáros szerepkörben
+  // ezek ki sem számolódnak, nem csak a felületen vannak elrejtve. Ez azért
+  // is fontos, mert `suppliers`/`customers`/`ledgerEntries` egy raktáros
+  // böngészőjében NEM a cég valódi (megosztott) adata, hanem az adott
+  // eszköz saját, helyi (jellemzően demó-)állapota - kiszámolásuk raktáros
+  // nézetben félrevezető, nem valós adatot mutatna.
+  const { isWarehouseUser } = useAuth()
 
   return useMemo(() => {
     const now = new Date()
@@ -74,12 +83,14 @@ export function useAlerts(): AlertsData {
     const lowStock = all.filter((a) => a.insight.isLowStock)
     const needsReorder = all.filter((a) => a.insight.needsReorder)
     const slowMoving = all.filter((a) => a.slowMoving.isSlowMoving)
-    const transferSuggestions = computeTransferSuggestions(products, movements, locations, settings, now)
-    const unpaidSales = computeUnpaidSales(movements, products, customers)
-    const customerBalances = computeCustomerBalances(unpaidSales)
-    const payables = computePayableObligations(lots, products, suppliers, ledgerEntries, settings.paymentReminderDaysBefore, todayISO())
+    const transferSuggestions = isWarehouseUser ? [] : computeTransferSuggestions(products, movements, locations, settings, now)
+    const unpaidSales = isWarehouseUser ? [] : computeUnpaidSales(movements, products, customers)
+    const customerBalances = isWarehouseUser ? [] : computeCustomerBalances(unpaidSales)
+    const payables = isWarehouseUser
+      ? []
+      : computePayableObligations(lots, products, suppliers, ledgerEntries, settings.paymentReminderDaysBefore, todayISO())
     const urgentPayables = payables.filter((p) => p.isAlertWorthy)
-    const openSales = computeOpenSales(movements, products, customers)
+    const openSales = isWarehouseUser ? [] : computeOpenSales(movements, products, customers)
     const missingClosings = computeMissingClosings(locations, movements, dailyClosings, settings.missingClosingGraceDays, todayISO())
 
     return {
@@ -96,5 +107,5 @@ export function useAlerts(): AlertsData {
       openSales,
       missingClosings,
     }
-  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings])
+  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser])
 }

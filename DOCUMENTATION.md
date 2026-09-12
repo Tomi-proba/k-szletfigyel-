@@ -86,8 +86,11 @@ src/
   App.tsx                     — route-tábla
   lib/supabase.ts            — Supabase kliens + `isSupabaseConfigured` (12. fejezet)
   lib/subscription.ts        — előfizetés-állapotgép tiszta logikája (12.4)
-  hooks/useAuth.tsx           — Auth/cég/előfizetés React context (12. fejezet)
-  types/auth.ts                — Company/Profile típusok + sor-mapperek
+  lib/remoteSync.ts           — megosztott üzleti adat (locations/products/movements/lots/dailyClosings/auditLog) Supabase-mapperei + szinkron (14.4)
+  hooks/useAuth.tsx           — Auth/cég/előfizetés/szerepkör React context (12. és 14. fejezet)
+  components/RoleGate.tsx      — route-szintű raktáros/iroda hozzáférés-kikényszerítés (14.5)
+  pages/Team.tsx                — meghívó-kezelés iroda-jogosultsághoz (14.6)
+  types/auth.ts                — Company/Profile/Invite típusok + sor-mapperek
   vite-env.d.ts                 — a `VITE_SUPABASE_*` env változók típusai
 electron/                     — Windows desktop csomagoló (Electron + electron-builder)
 .github/workflows/
@@ -338,6 +341,7 @@ A "Fizetési kötelezettségek" menüpont a `/riasztasok?szuro=fizetesi` mélyli
 | `/beallitasok` | `Settings.tsx` | Globális beállítások + "veszélyzóna" (demó adat visszaállítás / összes adat törlése) |
 | `/elofizetes` | `Subscription.tsx` | A cég előfizetési állapota, próbaidő/köv. fizetés, demó aktiválás/lemondás — lásd 12.4 |
 | `/admin` | `Admin.tsx` | Platform-admin nézet: minden regisztrált cég + becsült havi bevétel — lásd 12.6 |
+| `/csapat` | `Team.tsx` | Iroda-only: raktáros/iroda meghívók létrehozása, felhasználók listája — lásd 14.6 |
 
 ### 8.3 Fontosabb újrahasznált komponensek
 
@@ -520,7 +524,72 @@ Ha a több-cégnyi üzleti adat is szerver-oldali, RLS-szel garantált elkülön
 
 ---
 
-## 13. Hol keressem, ha...
+## 14. Szerepkör alapú hozzáférés és megosztott üzleti adat (raktáros/iroda)
+
+> Ez a fejezet a 12. fejezetre épül, és lezárja annak 12.7-es pontjában jelzett hiányt: a **raktáros/iroda szerepkör-szétválasztás** miatt a `locations`/`products`/`movements`/`purchase_lots`/`daily_closings`/`audit_log` adat immár **valóban megosztott, Supabase-en, RLS-sel védett** adat — nem csak a cég/előfizetés rétegé.
+
+### 14.1 Miért kellett ehhez üzleti adatot migrálni
+
+A raktáros/iroda felhasználók a valóságban külön eszközön dolgoznak (külön telephely). Amíg a termékek/mozgások/telephelyek/napi zárás csak `localStorage`-ban élt (12.7), egy "a raktáros csak a saját telephelyét lássa" korlátozás csak kozmetikai lett volna: a raktáros és az iroda gépe két teljesen külön adatot látott volna. Ezért ez a funkció explicit kiterjesztette a Supabase-re migrált táblák körét.
+
+### 14.2 Mi migrált, és mi maradt szándékosan eszközönkénti
+
+| Migrált (Supabase, RLS-sel, cégen és telephelyen belül szűrve) | Eszközönkénti maradt (localStorage, csak irodai gépen) |
+|---|---|
+| `locations`, `products`, `purchase_lots`, `movements`, `daily_closings`, `audit_log` | `suppliers`, `customers`, `ledgerEntries`/`ledgerCategories`, `settings` |
+
+A jobb oldali lista azért maradhatott eszközönkénti: egyik sem szükséges a raktáros korlátozott nézetéhez (mindegyik kifejezetten irodai/pénzügyi adat, amit a raktáros nem is lát), és a teljes migráció (12.7-ben már jelzett, nagyobb munka) továbbra sem ennek a körnek a feladata volt. **Következmény, amit tudni kell**: ha az iroda egy ÚJ eszközről jelentkezik be, ez a 4 adatkör üresen indul azon az eszközön (nincs "szerver-oldali" forrásuk) - csak a régi (első) irodai eszközön marad meg a korábbi állapotuk.
+
+### 14.3 Adatbázis-séma és RLS (`supabase/schema.sql`, "Szerepkör alapú..." blokk)
+
+A `profiles` tábla két új mezőt kap: `role` (`'raktaros'` / `'iroda'`, alapból `'iroda'`) és `assigned_location_id`/`assigned_location_name` (csak raktárosnál). Nincs UPDATE policy a `profiles` táblán semelyik mezőre - így sem a raktáros, sem az iroda nem tudja saját magát/másokat direkt API-hívással átállítani másik szerepkörre vagy telephelyre; ezt kizárólag a regisztrációkori `handle_new_user()` trigger állíthatja be (14.6), vagy az üzemeltető SQL-ből.
+
+A 6 migrált tábla mindegyikén RLS szabja meg, mit lát/írhat egy `iroda` (a teljes cég) kontra egy `raktaros` (csak `location_id = assigned_location_id` sorok) felhasználó - lásd a séma fájl kommentjeit minden táblánál. Kiemelt pontok:
+
+- **`daily_closings` UPDATE**: kizárólag iroda jogosultsággal lehetséges - egy raktáros adatbázis-szinten sem hagyhatja jóvá a saját zárását.
+- **`purchase_lots`**: a raktáros technikailag olvashatja/írhatja a saját telephelye tételeit (a FIFO-fogyás kiszámításához szükséges), annak ellenére, hogy a felület sosem mutatja neki az árat/költséget - lásd 14.7.
+- **`products` UPDATE**: sor-szintű, nem oszlop-szintű - lásd 14.7 a pontos korlátról.
+
+### 14.4 A szinkron-mechanizmus (`src/lib/remoteSync.ts`, `store/useStore.ts`)
+
+A `useStore.ts` **egyetlen sora sem változott az üzleti logikában** (FIFO, súlyozott átlagár, audit diffelés, korrekciós tételek stb.) - ez tudatos döntés volt a hibalehetőség minimalizálására. Ehelyett egy vékony szinkron-réteg került rá:
+
+- `dataMode: 'local' | 'remote'` és `remoteCompanyId` új mező az állapotban.
+- A store belső `set` függvénye egy `rawSet`-et burkoló wrapperré vált: minden állapotváltás után, ha `dataMode === 'remote'`, a 6 megosztott tömböt **referencia szerint** összeveti a módosítás előtti állapottal (minden mutáló akció úgyis csak az érintett elem(ek) referenciáját cseréli le - `.map(x => x.id === id ? {...x, ...} : x)` minta), és a ténylegesen megváltozott/új sorokat a háttérben felírja Supabase-be (`pushBusinessDiffs`). Egyetlen akciót sem kellett emiatt egyenként átírni.
+- Bejelentkezéskor (`hooks/useAuth.tsx`) a `hydrateFromRemote(companyId, slices)` letölti a 6 tábla RLS által már eleve leszűrt tartalmát, és ez tölti fel a store-t - ez a hívás direktben `useStore.setState`-et használ, megkerülve a fenti szinkron-wrappert, hogy a letöltött adat ne íródjon rögtön vissza.
+- Kijelentkezéskor / munkamenet nélkül `resetToLocalMode()` visszaáll `'local'` módra, és `useStore.persist.rehydrate()`-tel visszatölti ennek a böngészőnek a saját (nem cégekhez kötött) `localStorage` állapotát.
+- A `persist` middleware `partialize`-a mindig `dataMode: 'local'`-t ír `localStorage`-ba (egy oldalújratöltés sosem "emlékszik" magától remote módra - azt mindig az aktuális Supabase-munkamenet dönti el újra), és amíg ténylegesen remote módban van, a 6 megosztott tömböt üresen írja ki, hogy egy másik cégbe való bejelentkezés se örököljön semmit a böngésző helyi gyorsítótárából.
+
+**"Local-first, best-effort" szinkron**: egy mutáció azonnal érvényesül a memóriában (a felhasználó nem vár a hálózatra), a Supabase-írás a háttérben, hibát csak a konzolra logolva fut - hálózati hiba esetén a HELYI állapot NEM gördül vissza. Ez elfogadható kompromisszum egy raktári/irodai eszköznél, de érdemes tudni: átmeneti internet-kiesés esetén egy művelet "helyileg sikeresnek tűnhet", miközben a szerver-oldali írás elakadt, amíg a kapcsolat helyre nem áll (a következő sikeres írás/frissítés természetesen pótolja, mivel a diffelés mindig az AKTUÁLIS állapotot nézi).
+
+### 14.5 Raktáros nézet - mit mutat, mit rejt
+
+| Oldal | Raktárosnak |
+|---|---|
+| Kezdőlap | Csak a saját telephely készlet-jellegű kártyái (alacsony készlet, rendelendő, lassan fogyó, hiányzó zárás) - kifizetetlen eladás/fizetési kötelezettség/nyitott eladás rejtve |
+| Termékek | Csak a saját telephely termékei (RLS miatt eleve csak ezek érkeznek meg), beszerzési ár rejtve, létrehozás/szerkesztés/törlés rejtve |
+| Mozgásnapló | Csak a saját telephely mozgásai, ár/ÁFA/vevő oszlopok és az ÁFA-szerkesztés gomb rejtve, export is ezek nélkül |
+| Napi zárás | Csak a saját telephely (a telephely-választó eleve egy opciót tartalmaz) |
+| Riasztások | `useAlerts()` a vevő/fizetés-jellegű riasztásokat (kifizetetlen eladás, fizetési kötelezettség, nyitott eladás, áthelyezési javaslat) `raktaros` szerepkörnél ki sem számolja - lásd 14.7, miért ez fontosabb, mint pusztán elrejteni a kártyát |
+| Beszállítók, Vevők, Telephelyek, Riportok, Pénzügyi napló, ÁFA, Beérkezett napi jelentések, Audit napló, Beállítások, Előfizetés, Csapat | Route-szinten letiltva (`RoleGate`, `App.tsx`) - közvetlen URL-beírással sem érhető el |
+
+A nav (`Layout.tsx` `RAKTAROS_NAV_GROUPS`) ennek megfelelően csak 5 menüpontot mutat.
+
+### 14.6 Csapat / meghívó rendszer
+
+Mivel a Supabase önkiszolgáló regisztrációja (`signUp`) csak új céget tud létrehozni, egy raktáros-fiók hozzáadásához az iroda a `/csapat` oldalon (`pages/Team.tsx`) hoz létre egy **meghívót** (`invites` tábla: cél cég, szerepkör, telephely, 7 napos lejárat, token). A generált linket (`?meghivo=TOKEN`) manuálisan kell eljuttatni a raktároshoz (pl. üzenetben) - nincs automatikus emailküldés. A meghívott a `?meghivo=` paraméterrel megnyitott regisztrációs oldalon (`AuthGate.tsx` érzékeli, `pages/auth/Register.tsx` "Csatlakozás meghívóval" módban nyílik meg) csak email+jelszó megadásával csatlakozik - a `handle_new_user()` trigger (SECURITY DEFINER, tehát RLS-t megkerülve fér hozzá a tokenhez) ellenőrzi a meghívó érvényességét, majd a MEGLÉVŐ céghez, a meghívóban megadott szerepkörrel/telephellyel hozza létre a profilt, ahelyett hogy új céget hozna létre.
+
+### 14.7 Tudatos korlátok, amiket explicit ki kell mondani
+
+- **`purchase_lots` technikailag elérhető a raktárosnak**: a felület sosem mutatja neki a beszerzési árat/egységköltséget, de az adatbázis-hozzáférés megvan (szükséges a FIFO-számításhoz, amikor ő rögzít egy kimenő mozgást). Ez NEM ugyanolyan erősségű korlát, mint a telephely-elkülönítés - egy technikailag hozzáértő raktáros a böngésző fejlesztői eszközeivel közvetlenül lekérdezhetné a saját telephelye beszerzési árait a Supabase kliensen keresztül.
+- **`products`/`movements`/`purchase_lots` UPDATE policy-k sor-szintűek, nem oszlop-szintűek**: a raktáros a saját telephelyén technikailag bármely mezőt módosíthatná egy direkt API-hívással (pl. egy termék nevét vagy eladási árát), nem csak azt, amit a felülete ténylegesen felkínál neki.
+- **A "local-first, best-effort" szinkron** (14.4) nem garantálja tranzakciós erősséggel, hogy a memóriabeli és a Supabase-beli állapot mindig azonos - csak azt, hogy előbb-utóbb konvergálnak, amint a hálózat rendben van.
+- **A régi (migráció előtti) audit-bejegyzések nem kerültek át** Supabase-be - egy meglévő, korábban létrehozott cég `audit_log`-ja üresen indul, csak az ezután történő események kerülnek bele.
+- **A "Veszélyzóna" (demó adat visszaállítása / összes adat törlése)** a `Settings` oldalon `dataMode === 'remote'` esetén le van tiltva - egy éles, megosztott céges adatot egyetlen böngészőből visszaállítani/törölni túl kockázatos, ezért ez csak a helyi (nem cégekhez kötött) módban érhető el.
+
+---
+
+## 15. Hol keressem, ha...
 
 | Kérdés | Fájl |
 |---|---|
@@ -538,3 +607,6 @@ Ha a több-cégnyi üzleti adat is szerver-oldali, RLS-szel garantált elkülön
 | "Miért nem lát senki bejelentkezés-kérést, pedig telepítettem a SaaS kódot?" | `lib/supabase.ts` `isSupabaseConfigured` — nincs beállítva a két `VITE_SUPABASE_*` env változó, lásd 12.1 |
 | "Hogyan lesz valakiből admin?" | Kézzel, a Supabase SQL Editorban - lásd 12.2 vége és 12.6 |
 | "Hol az igazi (nem demó) fizetési integráció?" | Nincs még - `supabase/functions/create-checkout-session/index.ts` egy nem bekötött váz, lásd 12.5 |
+| "Hogyan hívok meg egy raktárost?" | `pages/Team.tsx` (`/csapat`, iroda-only) - lásd 14.6 |
+| "Miért lát a raktáros mindent/semmit sem?" | `hooks/useAuth.tsx` `isWarehouseUser` + `components/RoleGate.tsx` + `lib/remoteSync.ts` RLS-szűrés - lásd 14. fejezet |
+| "Hogyan kerül az üzleti adat Supabase-be?" | `lib/remoteSync.ts` (mapperek + fetch/upsert), `store/useStore.ts` `hydrateFromRemote`/a `set` wrapper - lásd 14.4 |

@@ -9,6 +9,7 @@ export function Settings() {
   const updateSettings = useStore((s) => s.updateSettings)
   const resetToDemoData = useStore((s) => s.resetToDemoData)
   const clearAllData = useStore((s) => s.clearAllData)
+  const isRemoteMode = useStore((s) => s.dataMode === 'remote')
 
   const [form, setForm] = useState(settings)
   const [reminderDaysInput, setReminderDaysInput] = useState(settings.paymentReminderDaysBefore.join(', '))
@@ -179,15 +180,24 @@ export function Settings() {
 
       <Card className="mt-8 max-w-xl border-[var(--color-danger)]/30">
         <h2 className="mb-1 text-base font-semibold text-[var(--color-text)]">Veszélyzóna</h2>
-        <p className="mb-4 text-sm text-[var(--color-text-muted)]">Ezek a műveletek nem visszavonhatók.</p>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setConfirmDemo(true)}>
-            Demó adatok visszaállítása
-          </Button>
-          <Button variant="danger" onClick={() => setConfirmClear(true)}>
-            Összes adat törlése
-          </Button>
-        </div>
+        {isRemoteMode ? (
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Ez a funkció csak a helyi (nem cégekhez kötött) módban érhető el - egy valódi, Supabase-hez kötött vállalkozás megosztott
+            adatait egy böngészőből visszaállítani/törölni túl kockázatos lenne. Lásd DOCUMENTATION.md 14. fejezet.
+          </p>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-[var(--color-text-muted)]">Ezek a műveletek nem visszavonhatók.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setConfirmDemo(true)}>
+                Demó adatok visszaállítása
+              </Button>
+              <Button variant="danger" onClick={() => setConfirmClear(true)}>
+                Összes adat törlése
+              </Button>
+            </div>
+          </>
+        )}
       </Card>
 
       {confirmDemo && (

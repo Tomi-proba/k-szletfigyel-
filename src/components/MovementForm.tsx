@@ -1,5 +1,6 @@
 import { Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementType } from '../types'
 import { todayISO } from '../lib/dates'
@@ -24,6 +25,11 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const recordMovement = useStore((s) => s.recordMovement)
   const products = useStore((s) => s.products)
   const customers = useStore((s) => s.customers)
+  // A raktáros leegyszerűsített nézete csak a mennyiséget/típust/dátumot
+  // rögzíti - a beszerzési ár, ÁFA, fizetési határidő és vevő-hozzárendelés
+  // irodai adatnak számít (lásd DOCUMENTATION.md 14. fejezet), ezért ezek a
+  // mezők el sem érhetők raktáros szerepkörben, nem csak vizuálisan rejtve.
+  const { isWarehouseUser } = useAuth()
 
   const [productId, setProductId] = useState<string | null>(defaultProductId)
   const [type, setType] = useState<MovementType>('out')
@@ -241,7 +247,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </div>
       </FieldGroup>
 
-      {type === 'in' && (
+      {type === 'in' && !isWarehouseUser && (
         <FieldGroup label="Beszerzési ár (opcionális)">
           <div className="mb-3 grid grid-cols-3 gap-2">
             {CURRENCIES.map((c) => (
@@ -295,7 +301,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'in' && (
+      {type === 'in' && !isWarehouseUser && (
         <FieldGroup label="ÁFA (opcionális)">
           <div className="grid grid-cols-2 gap-3">
             <label className="mb-3 block text-sm">
@@ -340,7 +346,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'in' && (
+      {type === 'in' && !isWarehouseUser && (
         <FieldGroup label="Beszállítói számla fizetési határideje">
           <Checkbox
             label="Fizetési határidő nyomon követése (kimenő kötelezettség)"
@@ -389,7 +395,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'out' && (
+      {type === 'out' && !isWarehouseUser && (
         <Field label="ÁFA kulcs (%, opcionális)">
           <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
           <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
@@ -398,7 +404,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </Field>
       )}
 
-      {type === 'out' && (
+      {type === 'out' && !isWarehouseUser && (
         <FieldGroup label="Vevő">
           <Checkbox
             label="Nem sima eladás - vevőhöz rögzítem"

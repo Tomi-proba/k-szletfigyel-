@@ -14,6 +14,12 @@ type AuthView = 'login' | 'register' | 'forgot-password'
  * so this works no matter what the current hash happens to be. */
 const hasPasswordRecoveryCode = new URLSearchParams(window.location.search).has('code')
 
+/** A "Csapat" oldalon (pages/Team.tsx) generált meghívó-link is egy plain
+ * "?meghivo=TOKEN" query parammal érkezik, ugyanazon okból (a "#/route"
+ * hash elé kerül, HashRouter-biztosan). Jelenléte esetén a Register a
+ * meglévő céghez csatlakozás módban nyílik meg, sima regisztráció helyett. */
+const inviteToken = new URLSearchParams(window.location.search).get('meghivo')
+
 /** Gates the whole app behind Supabase Auth - but only when Supabase is
  * actually configured (see .env.example). Until then this is a no-op
  * pass-through, so the existing single-tenant app keeps working exactly as
@@ -55,6 +61,7 @@ function ConfiguredAuthGate({
   }
 
   if (!session) {
+    if (inviteToken) return <Register inviteToken={inviteToken} onSwitchToLogin={() => setView('login')} />
     if (view === 'register') return <Register onSwitchToLogin={() => setView('login')} />
     if (view === 'forgot-password') return <ForgotPassword onSwitchToLogin={() => setView('login')} />
     return <Login onSwitchToRegister={() => setView('register')} onSwitchToForgotPassword={() => setView('forgot-password')} />

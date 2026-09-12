@@ -1,6 +1,7 @@
 import { CircleSlash, FileSpreadsheet, FileText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
@@ -56,6 +57,13 @@ export function Movements() {
   const deleteMovement = useStore((s) => s.deleteMovement)
   const restoreMovement = useStore((s) => s.restoreMovement)
   const setSaleStatus = useStore((s) => s.setSaleStatus)
+  // A `movements`/`locations` tömb már csak a raktáros saját telephelyét
+  // tartalmazza (Supabase RLS - lásd supabase/schema.sql), ezért itt nincs
+  // szükség külön telephely-szűrésre. Ami maradt: a beszerzési ár/
+  // egységköltség/ÁFA és a vevő/fizetési adatok - ezek irodai adatnak
+  // számítanak (lásd DOCUMENTATION.md 14. fejezet), ezért raktáros
+  // szerepkörben elrejtve maradnak a listából és az exportból is.
+  const { isWarehouseUser } = useAuth()
 
   const [searchParams] = useSearchParams()
   const [from, setFrom] = useState(isoDaysAgo(30))
@@ -143,16 +151,20 @@ export function Movements() {
     { header: 'Típus', accessor: (r) => r.type, width: 10 },
     { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
-    { header: 'Beszállító', accessor: (r) => r.supplierName, width: 22 },
-    { header: 'Áru egységára', accessor: (r) => r.goodsUnitPrice, width: 14 },
-    { header: 'Szállítási költség', accessor: (r) => r.shippingCost, width: 16 },
-    { header: 'Pénznem', accessor: (r) => r.currency, width: 10 },
-    { header: 'Árfolyam', accessor: (r) => r.exchangeRate, width: 12 },
-    { header: 'Egységköltség (Ft)', accessor: (r) => r.unitCost, width: 16 },
-    { header: 'Készleten (tételből)', accessor: (r) => r.lotRemaining, width: 18 },
-    { header: 'ÁFA', accessor: (r) => r.vat, width: 16 },
-    { header: 'Vevő', accessor: (r) => r.customerName, width: 22 },
-    { header: 'Fizetve', accessor: (r) => r.paymentStatus, width: 14 },
+    ...(isWarehouseUser
+      ? []
+      : [
+          { header: 'Beszállító', accessor: (r: MovementRow) => r.supplierName, width: 22 },
+          { header: 'Áru egységára', accessor: (r: MovementRow) => r.goodsUnitPrice, width: 14 },
+          { header: 'Szállítási költség', accessor: (r: MovementRow) => r.shippingCost, width: 16 },
+          { header: 'Pénznem', accessor: (r: MovementRow) => r.currency, width: 10 },
+          { header: 'Árfolyam', accessor: (r: MovementRow) => r.exchangeRate, width: 12 },
+          { header: 'Egységköltség (Ft)', accessor: (r: MovementRow) => r.unitCost, width: 16 },
+          { header: 'Készleten (tételből)', accessor: (r: MovementRow) => r.lotRemaining, width: 18 },
+          { header: 'ÁFA', accessor: (r: MovementRow) => r.vat, width: 16 },
+          { header: 'Vevő', accessor: (r: MovementRow) => r.customerName, width: 22 },
+          { header: 'Fizetve', accessor: (r: MovementRow) => r.paymentStatus, width: 14 },
+        ]),
     { header: 'Eladási státusz', accessor: (r) => r.saleStatus, width: 16 },
     { header: 'Állapot', accessor: (r) => r.cancelledInfo, width: 18 },
     { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },
@@ -206,17 +218,19 @@ export function Movements() {
               <option value="out">Kimenő</option>
             </Select>
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
-            <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>
-              <option value="">Összes vevő</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+          {!isWarehouseUser && (
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
+              <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>
+                <option value="">Összes vevő</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
           <label className="text-sm">
             <span className="mb-1 block font-medium text-[var(--color-text)]">Eladási státusz (csak kimenő)</span>
             <Select value={saleStatusFilter} onChange={(e) => setSaleStatusFilter(e.target.value as '' | SaleStatusFilter)}>
@@ -246,9 +260,9 @@ export function Movements() {
                 {locations.length > 1 && <th className="px-4 py-3 font-medium">Telephely</th>}
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
-                <th className="px-4 py-3 font-medium">Beszerzés részletei</th>
-                <th className="px-4 py-3 font-medium">ÁFA</th>
-                <th className="px-4 py-3 font-medium">Vevő</th>
+                {!isWarehouseUser && <th className="px-4 py-3 font-medium">Beszerzés részletei</th>}
+                {!isWarehouseUser && <th className="px-4 py-3 font-medium">ÁFA</th>}
+                {!isWarehouseUser && <th className="px-4 py-3 font-medium">Vevő</th>}
                 <th className="px-4 py-3 font-medium">Eladási státusz</th>
                 <th className="px-4 py-3 font-medium">Megjegyzés</th>
                 <th className="px-4 py-3" />
@@ -294,58 +308,64 @@ export function Movements() {
                     <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
                       {formatNumber(m.quantity)} {product?.unit}
                     </td>
-                    <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
-                      {m.type === 'in' ? (
-                        (() => {
-                          const lot = lotByMovementId.get(m.id)
-                          const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
-                          return (
-                            <div className="space-y-0.5">
-                              {supplier && <div className="text-[var(--color-text)]">{supplier.name}</div>}
-                              {m.unitPrice !== undefined && (
-                                <div>
-                                  Egységár: {formatMoney(m.unitPrice, m.currency ?? 'HUF')}
-                                  {m.shippingCost ? ` · Szállítás: ${formatMoney(m.shippingCost, m.currency ?? 'HUF')}` : ''}
-                                </div>
-                              )}
-                              {m.currency && m.currency !== 'HUF' && <div>Árfolyam: {formatNumber(m.exchangeRate ?? 0)}</div>}
-                              {lot && <div>Egységköltség: {formatCurrency(Math.round(lotUnitCost(lot)))}</div>}
-                              {lot && (
-                                <div>
-                                  Készleten: {formatNumber(lot.remainingQuantity)} / {formatNumber(lot.quantity)} {product?.unit}
-                                </div>
-                              )}
+                    {!isWarehouseUser && (
+                      <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
+                        {m.type === 'in' ? (
+                          (() => {
+                            const lot = lotByMovementId.get(m.id)
+                            const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
+                            return (
+                              <div className="space-y-0.5">
+                                {supplier && <div className="text-[var(--color-text)]">{supplier.name}</div>}
+                                {m.unitPrice !== undefined && (
+                                  <div>
+                                    Egységár: {formatMoney(m.unitPrice, m.currency ?? 'HUF')}
+                                    {m.shippingCost ? ` · Szállítás: ${formatMoney(m.shippingCost, m.currency ?? 'HUF')}` : ''}
+                                  </div>
+                                )}
+                                {m.currency && m.currency !== 'HUF' && <div>Árfolyam: {formatNumber(m.exchangeRate ?? 0)}</div>}
+                                {lot && <div>Egységköltség: {formatCurrency(Math.round(lotUnitCost(lot)))}</div>}
+                                {lot && (
+                                  <div>
+                                    Készleten: {formatNumber(lot.remainingQuantity)} / {formatNumber(lot.quantity)} {product?.unit}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+                    )}
+                    {!isWarehouseUser && (
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {vat.rate === undefined ? (
+                          <span className="text-[var(--color-text-muted)]">—</span>
+                        ) : (
+                          <>
+                            {vat.rate}%
+                            {m.type === 'in' && (
+                              <div className={`text-xs ${vat.reclaimable === false ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted)]'}`}>
+                                {vat.reclaimable === false ? 'nem visszaig.' : 'visszaig.'}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    )}
+                    {!isWarehouseUser && (
+                      <td className="px-4 py-3">
+                        {m.customerId && (
+                          <>
+                            <div className="text-[var(--color-text)]">{customerById.get(m.customerId)?.name ?? 'Törölt vevő'}</div>
+                            <div className={m.isPaid ? 'text-xs text-[var(--color-success)]' : 'text-xs font-medium text-[var(--color-danger)]'}>
+                              {m.isPaid ? 'Fizetve' : 'Nem fizetett'}
                             </div>
-                          )
-                        })()
-                      ) : (
-                        <span>—</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {vat.rate === undefined ? (
-                        <span className="text-[var(--color-text-muted)]">—</span>
-                      ) : (
-                        <>
-                          {vat.rate}%
-                          {m.type === 'in' && (
-                            <div className={`text-xs ${vat.reclaimable === false ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted)]'}`}>
-                              {vat.reclaimable === false ? 'nem visszaig.' : 'visszaig.'}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.customerId && (
-                        <>
-                          <div className="text-[var(--color-text)]">{customerById.get(m.customerId)?.name ?? 'Törölt vevő'}</div>
-                          <div className={m.isPaid ? 'text-xs text-[var(--color-success)]' : 'text-xs font-medium text-[var(--color-danger)]'}>
-                            {m.isPaid ? 'Fizetve' : 'Nem fizetett'}
-                          </div>
-                        </>
-                      )}
-                    </td>
+                          </>
+                        )}
+                      </td>
+                    )}
                     <td className="whitespace-nowrap px-4 py-3">
                       {m.type !== 'out' ? (
                         <span className="text-[var(--color-text-muted)]">—</span>
@@ -397,14 +417,16 @@ export function Movements() {
                               <CircleSlash size={16} />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setEditingVat(m)}
-                            aria-label="ÁFA szerkesztése"
-                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
-                          >
-                            <Pencil size={16} />
-                          </button>
+                          {!isWarehouseUser && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingVat(m)}
+                              aria-label="ÁFA szerkesztése"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setDeleting(m)}

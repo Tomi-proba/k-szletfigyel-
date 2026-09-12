@@ -19,12 +19,36 @@ export interface Company {
   stripeSubscriptionId: string | null
 }
 
+/** 'iroda' - full access to every module across every location (the
+ * pre-existing single-role app's behaviour). 'raktaros' - restricted to a
+ * single assigned location, see hooks/useAuth.tsx isWarehouseUser and the
+ * RLS policies in supabase/schema.sql that enforce this at the database
+ * level too, not just in the UI. */
+export type UserRole = 'raktaros' | 'iroda'
+
 export interface Profile {
   id: string
   companyId: string
   email: string
   isPlatformAdmin: boolean
+  role: UserRole
+  /** Only set when role is 'raktaros'. References a row in the (Supabase)
+   * locations table - see lib/remoteSync.ts. */
+  assignedLocationId: string | null
+  assignedLocationName: string | null
   createdAt: string
+}
+
+export interface Invite {
+  id: string
+  companyId: string
+  token: string
+  role: UserRole
+  assignedLocationId: string | null
+  assignedLocationName: string | null
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
 }
 
 /** Maps a public.companies row (snake_case, as Supabase returns it) to the
@@ -52,6 +76,23 @@ export function mapProfileRow(row: Record<string, unknown>): Profile {
     companyId: row.company_id as string,
     email: row.email as string,
     isPlatformAdmin: Boolean(row.is_platform_admin),
+    role: (row.role as UserRole) ?? 'iroda',
+    assignedLocationId: (row.assigned_location_id as string | null) ?? null,
+    assignedLocationName: (row.assigned_location_name as string | null) ?? null,
     createdAt: row.created_at as string,
+  }
+}
+
+export function mapInviteRow(row: Record<string, unknown>): Invite {
+  return {
+    id: row.id as string,
+    companyId: row.company_id as string,
+    token: row.token as string,
+    role: row.role as UserRole,
+    assignedLocationId: (row.assigned_location_id as string | null) ?? null,
+    assignedLocationName: (row.assigned_location_name as string | null) ?? null,
+    createdAt: row.created_at as string,
+    expiresAt: row.expires_at as string,
+    usedAt: (row.used_at as string | null) ?? null,
   }
 }

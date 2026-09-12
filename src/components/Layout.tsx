@@ -110,6 +110,35 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+// A raktáros/telephelyi felhasználó leegyszerűsített nézete - csak a saját
+// telephelyéhez tartozó napi munkához szükséges 5 menüpont. Minden más
+// (Vevők, Beszállítók, Pénzügy, Riportok, Előzmények, Beállítások) irodai
+// jogosultságot igényel - lásd RoleGate a route-táblán (App.tsx), ami ezt
+// akkor is kikényszeríti, ha valaki közvetlenül beírná az útvonalat. A
+// tartalom maga (Termékek/Mozgásnapló/Napi zárás/Riasztások) is szűrve van
+// a saját telephelyre - lásd DOCUMENTATION.md 14. fejezet.
+const RAKTAROS_NAV_GROUPS: NavGroup[] = [
+  {
+    key: 'attekintes',
+    label: 'Áttekintés',
+    icon: LayoutDashboard,
+    items: [
+      { to: '/', label: 'Kezdőlap' },
+      { to: '/riasztasok', label: 'Riasztások', badge: true },
+    ],
+  },
+  {
+    key: 'keszlet',
+    label: 'Készlet',
+    icon: Package,
+    items: [
+      { to: '/keszlet', label: 'Termékek' },
+      { to: '/mozgasnaplo', label: 'Mozgásnapló' },
+      { to: '/napi-zaras', label: 'Napi zárás' },
+    ],
+  },
+]
+
 const EXPANDED_GROUPS_STORAGE_KEY = 'keszletfigyelo-nav-expanded-groups'
 
 /** Riasztások has a filtered deep-link (?szuro=fizetesi) alongside its own
@@ -141,13 +170,18 @@ function activeGroupKey(groups: NavGroup[], pathname: string, search: string): s
 
 /** The "Fiók" (account) group only exists once Supabase is actually
  * configured and someone is logged in - so the nav is byte-for-byte
- * unchanged for the existing single-tenant app. "Admin" is added on top of
- * that only for the platform operator's own account. */
-function buildNavGroups(showAccount: boolean, showAdmin: boolean): NavGroup[] {
-  if (!showAccount) return NAV_GROUPS
-  const items: NavItem[] = [{ to: '/elofizetes', label: 'Előfizetés' }]
+ * unchanged for the existing single-tenant app. A raktáros gets the reduced
+ * RAKTAROS_NAV_GROUPS and never sees Előfizetés/Csapat (both iroda-only,
+ * see RoleGate on their routes) - "Admin" is independent of company role,
+ * for the platform operator's own account. */
+function buildNavGroups(isWarehouseUser: boolean, showAccount: boolean, isIroda: boolean, showAdmin: boolean): NavGroup[] {
+  const baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
+  if (!showAccount) return baseGroups
+  const items: NavItem[] = []
+  if (isIroda) items.push({ to: '/elofizetes', label: 'Előfizetés' }, { to: '/csapat', label: 'Csapat' })
   if (showAdmin) items.push({ to: '/admin', label: 'Admin' })
-  return [...NAV_GROUPS, { key: 'fiok', label: 'Fiók', icon: CreditCard, items }]
+  if (items.length === 0) return baseGroups
+  return [...baseGroups, { key: 'fiok', label: 'Fiók', icon: CreditCard, items }]
 }
 
 function loadExpandedGroups(): Set<string> {
@@ -180,9 +214,9 @@ export function Layout() {
   // follow-up one.
   const [lastAutoExpandedFor, setLastAutoExpandedFor] = useState<string | null>(null)
   const alerts = useAlerts()
-  const { session, profile, isReadOnly, signOut } = useAuth()
+  const { session, profile, isReadOnly, isWarehouseUser, signOut } = useAuth()
   const showAccountGroup = isSupabaseConfigured && !!session
-  const navGroups = buildNavGroups(showAccountGroup, !!profile?.isPlatformAdmin)
+  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, profile?.role === 'iroda', !!profile?.isPlatformAdmin)
   const alertCount =
     alerts.needsReorder.length +
     alerts.slowMoving.length +

@@ -3,8 +3,9 @@ import { useAuth } from '../../hooks/useAuth'
 import { AuthLayout } from '../../components/AuthLayout'
 import { Button, Field, Input } from '../../components/ui'
 
-export function Register({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
+export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: () => void; inviteToken?: string }) {
   const { signUp } = useAuth()
+  const isInvite = Boolean(inviteToken)
   const [companyName, setCompanyName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -16,13 +17,13 @@ export function Register({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!companyName.trim()) return setError('Add meg a vállalkozásod nevét.')
+    if (!isInvite && !companyName.trim()) return setError('Add meg a vállalkozásod nevét.')
     if (!email.trim()) return setError('Add meg az email címedet.')
     if (password.length < 6) return setError('A jelszónak legalább 6 karakter hosszúnak kell lennie.')
     if (password !== passwordAgain) return setError('A két jelszó nem egyezik.')
 
     setSubmitting(true)
-    const { error: signUpError } = await signUp(email.trim(), password, companyName)
+    const { error: signUpError } = await signUp(email.trim(), password, companyName, inviteToken)
     setSubmitting(false)
     if (signUpError) return setError(signUpError)
     setDone(true)
@@ -30,7 +31,7 @@ export function Register({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
 
   if (done) {
     return (
-      <AuthLayout title="Sikeres regisztráció">
+      <AuthLayout title={isInvite ? 'Sikeres csatlakozás' : 'Sikeres regisztráció'}>
         <p className="text-sm text-[var(--color-text)]">
           Ha a fiókod emailes megerősítést igényel, nézd meg a postaládádat ({email}) - a megerősítő linkre kattintva tudsz majd
           bejelentkezni. Ha nem, akkor már be is léphetsz.
@@ -43,13 +44,18 @@ export function Register({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
   }
 
   return (
-    <AuthLayout title="Regisztráció" subtitle="14 napos próbaidőszak, kártyaadat megadása nélkül.">
+    <AuthLayout
+      title={isInvite ? 'Csatlakozás meghívóval' : 'Regisztráció'}
+      subtitle={isInvite ? 'Hozz létre egy jelszót a fiókodhoz - a meghívó már tartalmazza, melyik céghez és milyen szerepkörrel csatlakozol.' : '14 napos próbaidőszak, kártyaadat megadása nélkül.'}
+    >
       <form onSubmit={handleSubmit}>
-        <Field label="Vállalkozás neve">
-          <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} autoFocus required />
-        </Field>
+        {!isInvite && (
+          <Field label="Vállalkozás neve">
+            <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} autoFocus required />
+          </Field>
+        )}
         <Field label="Email cím">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={isInvite} required />
         </Field>
         <Field label="Jelszó">
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
@@ -59,7 +65,7 @@ export function Register({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
         </Field>
         {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
         <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? 'Regisztráció…' : 'Regisztráció'}
+          {submitting ? (isInvite ? 'Csatlakozás…' : 'Regisztráció…') : isInvite ? 'Csatlakozás' : 'Regisztráció'}
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-[var(--color-text-muted)]">

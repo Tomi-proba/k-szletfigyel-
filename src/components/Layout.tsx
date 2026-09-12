@@ -1,8 +1,11 @@
 import {
+  AlertTriangle,
   BarChart3,
   ChevronDown,
+  CreditCard,
   History,
   LayoutDashboard,
+  LogOut,
   Menu,
   Package,
   Plus,
@@ -15,6 +18,8 @@ import {
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
+import { useAuth } from '../hooks/useAuth'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { Modal } from './Modal'
 import { MovementForm } from './MovementForm'
 
@@ -121,17 +126,28 @@ function isItemActive(item: NavItem, pathname: string, search: string): boolean 
   return [...itemParams.entries()].every(([key, value]) => currentParams.get(key) === value)
 }
 
-function activeGroupKey(pathname: string, search: string): string | null {
-  for (const group of NAV_GROUPS) {
+function activeGroupKey(groups: NavGroup[], pathname: string, search: string): string | null {
+  for (const group of groups) {
     if (group.items.some((item) => isItemActive(item, pathname, search))) return group.key
   }
   // Fall back to a same-page-different-query match so the right section
   // still opens even when the current URL doesn't exactly match any link
   // (e.g. a stray query param).
-  for (const group of NAV_GROUPS) {
+  for (const group of groups) {
     if (group.items.some((item) => item.to.split('?')[0] === pathname)) return group.key
   }
   return null
+}
+
+/** The "Fiók" (account) group only exists once Supabase is actually
+ * configured and someone is logged in - so the nav is byte-for-byte
+ * unchanged for the existing single-tenant app. "Admin" is added on top of
+ * that only for the platform operator's own account. */
+function buildNavGroups(showAccount: boolean, showAdmin: boolean): NavGroup[] {
+  if (!showAccount) return NAV_GROUPS
+  const items: NavItem[] = [{ to: '/elofizetes', label: 'Előfizetés' }]
+  if (showAdmin) items.push({ to: '/admin', label: 'Admin' })
+  return [...NAV_GROUPS, { key: 'fiok', label: 'Fiók', icon: CreditCard, items }]
 }
 
 function loadExpandedGroups(): Set<string> {
@@ -164,6 +180,9 @@ export function Layout() {
   // follow-up one.
   const [lastAutoExpandedFor, setLastAutoExpandedFor] = useState<string | null>(null)
   const alerts = useAlerts()
+  const { session, profile, isReadOnly, signOut } = useAuth()
+  const showAccountGroup = isSupabaseConfigured && !!session
+  const navGroups = buildNavGroups(showAccountGroup, !!profile?.isPlatformAdmin)
   const alertCount =
     alerts.needsReorder.length +
     alerts.slowMoving.length +
@@ -173,7 +192,7 @@ export function Layout() {
     alerts.openSales.length
   const location = useLocation()
   const isDashboard = location.pathname === '/'
-  const currentGroupKey = activeGroupKey(location.pathname, location.search)
+  const currentGroupKey = activeGroupKey(navGroups, location.pathname, location.search)
 
   // Whichever group the current page belongs to always stays expanded on
   // arrival, even if the user hasn't touched the menu - so following a link
@@ -202,7 +221,7 @@ export function Layout() {
 
   const navLinks = (onNavigate?: () => void) => (
     <nav className="flex flex-col gap-1">
-      {NAV_GROUPS.map((group) => {
+      {navGroups.map((group) => {
         const isOpen = expandedGroups.has(group.key)
         const isCurrentGroup = group.key === currentGroupKey
         const GroupIcon = group.icon
@@ -273,6 +292,15 @@ export function Layout() {
             Készletfigyelő
           </Link>
           {navLinks()}
+          {session && (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-[var(--color-text-muted)] hover:bg-black/5"
+            >
+              <LogOut size={18} /> Kijelentkezés
+            </button>
+          )}
         </aside>
 
         {drawerOpen && (
@@ -286,16 +314,37 @@ export function Layout() {
                 </button>
               </div>
               {navLinks(() => setDrawerOpen(false))}
+              {session && (
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-[var(--color-text-muted)] hover:bg-black/5"
+                >
+                  <LogOut size={18} /> Kijelentkezés
+                </button>
+              )}
             </div>
           </div>
         )}
 
         <main className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 md:pb-10">
+          {isReadOnly && (
+            <div className="mb-5 flex items-start gap-2 rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <span>
+                Az előfizetésed lejárt vagy le lett mondva - az alkalmazás jelenleg csak megtekintésre szolgál, új rögzítés nem
+                lehetséges.{' '}
+                <Link to="/elofizetes" className="font-semibold underline">
+                  Előfizetés kezelése
+                </Link>
+              </span>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
 
-      {!isDashboard && (
+      {!isDashboard && !isReadOnly && (
         <button
           type="button"
           onClick={() => setQuickMoveOpen(true)}

@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { useHydrated } from './hooks/useHydrated'
+import { AuthGate } from './components/AuthGate'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Products } from './pages/Products'
@@ -15,6 +16,8 @@ import { DailyClosingPage } from './pages/DailyClosing'
 import { DailyReports } from './pages/DailyReports'
 import { AuditLog } from './pages/AuditLog'
 import { Settings } from './pages/Settings'
+import { Subscription } from './pages/Subscription'
+import { Admin } from './pages/Admin'
 
 function App() {
   const hydrated = useHydrated()
@@ -24,24 +27,28 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="keszlet" element={<Products />} />
-        <Route path="mozgasnaplo" element={<Movements />} />
-        <Route path="riasztasok" element={<Alerts />} />
-        <Route path="beszallitok" element={<Suppliers />} />
-        <Route path="vevok" element={<Customers />} />
-        <Route path="telephelyek" element={<Locations />} />
-        <Route path="riportok" element={<Reports />} />
-        <Route path="penzugyi-naplo" element={<Ledger />} />
-        <Route path="afa" element={<Vat />} />
-        <Route path="napi-zaras" element={<DailyClosingPage />} />
-        <Route path="napi-jelentesek" element={<DailyReports />} />
-        <Route path="audit-naplo" element={<AuditLog />} />
-        <Route path="beallitasok" element={<Settings />} />
-      </Route>
-    </Routes>
+    <AuthGate>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="keszlet" element={<Products />} />
+          <Route path="mozgasnaplo" element={<Movements />} />
+          <Route path="riasztasok" element={<Alerts />} />
+          <Route path="beszallitok" element={<Suppliers />} />
+          <Route path="vevok" element={<Customers />} />
+          <Route path="telephelyek" element={<Locations />} />
+          <Route path="riportok" element={<Reports />} />
+          <Route path="penzugyi-naplo" element={<Ledger />} />
+          <Route path="afa" element={<Vat />} />
+          <Route path="napi-zaras" element={<DailyClosingPage />} />
+          <Route path="napi-jelentesek" element={<DailyReports />} />
+          <Route path="audit-naplo" element={<AuditLog />} />
+          <Route path="beallitasok" element={<Settings />} />
+          <Route path="elofizetes" element={<Subscription />} />
+          <Route path="admin" element={<Admin />} />
+        </Route>
+      </Routes>
+    </AuthGate>
   )
 }
 

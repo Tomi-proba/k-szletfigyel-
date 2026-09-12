@@ -20,7 +20,9 @@ A **Készletfigyelő** egy magyar nyelvű, kisvállalkozásoknak (elsősorban eg
 - teljes körű, soft-delete alapú auditálhatóság — semmi nem törlődik ténylegesen, minden változás naplózva van
 - Excel/PDF export minden fontosabb listánál és riportnál
 
-Az alkalmazás **kliensoldali, backend nélküli** SPA: minden adat a böngésző `localStorage`-ában tárolódik. Nincs szerver, nincs adatbázis, nincs bejelentkezés/jogosultságkezelés — egyetlen felhasználó, egyetlen böngésző-profil használja.
+Az alkalmazás alapból **kliensoldali, backend nélküli** SPA: minden üzleti adat (termékek, mozgások, pénzügyi napló stb.) a böngésző `localStorage`-ában tárolódik, egyetlen felhasználó/böngésző-profil használja — ez a mai éles (Vercel) deploy és a Windows asztali build viselkedése, változatlanul.
+
+Emellett opcionálisan bekapcsolható egy **különálló, additív SaaS/előfizetéses réteg** (cégenkénti regisztráció, bejelentkezés, próbaidőszak/előfizetés-kezelés, admin áttekintés — lásd **12. fejezet**), amely csak a *webes* verzióra vonatkozik, és amíg nincs Supabase-hez kötve, teljesen inaktív: az alkalmazás pontosan úgy működik, mint korábban.
 
 ---
 
@@ -41,6 +43,7 @@ Az alkalmazás **kliensoldali, backend nélküli** SPA: minden adat a böngész�
 | Linter | `oxlint` |
 | Asztali (Windows) build | Electron + `electron-builder`, GitHub Actions workflow-ból |
 | Webes hosting | Vercel (a `claude/inventory-management-app-yjc3v5` branch automatikus deploy-ja) |
+| SaaS réteg (opcionális, csak web) | Supabase (Postgres + Auth + Row Level Security), `@supabase/supabase-js` — lásd 12. fejezet |
 
 Fejlesztői parancsok (`package.json`):
 
@@ -79,10 +82,19 @@ src/
     usePersistedDateRange.ts  — localStorage-ban megmaradó dátumtartomány-szűrő
   components/               — újrahasznált UI-elemek és űrlapok (lásd 8. fejezet)
   pages/                     — egy-egy route-hoz tartozó oldal-komponensek
+    auth/                      — Register/Login/ForgotPassword/ResetPassword (SaaS réteg, 12. fejezet)
   App.tsx                     — route-tábla
+  lib/supabase.ts            — Supabase kliens + `isSupabaseConfigured` (12. fejezet)
+  lib/subscription.ts        — előfizetés-állapotgép tiszta logikája (12.4)
+  hooks/useAuth.tsx           — Auth/cég/előfizetés React context (12. fejezet)
+  types/auth.ts                — Company/Profile típusok + sor-mapperek
+  vite-env.d.ts                 — a `VITE_SUPABASE_*` env változók típusai
 electron/                     — Windows desktop csomagoló (Electron + electron-builder)
 .github/workflows/
   build-windows.yml           — Windows telepítő buildelése GitHub Actions-ben
+supabase/
+  schema.sql                  — a SaaS réteg adatbázis-sémája + RLS szabályok (12.2)
+  functions/create-checkout-session/ — előkészített, de NEM bekötött Stripe Edge Function váz (12.5)
 ```
 
 ---
@@ -300,6 +312,9 @@ A bal oldali menü (`components/Layout.tsx`) **8, lenyitható/összecsukható cs
 | **Riportok** | Riportok |
 | **Előzmények** | Audit napló |
 | **Beállítások** | Beállítások, Telephelyek |
+| **Fiók** *(csak ha a Supabase be van állítva és be van jelentkezve)* | Előfizetés, Admin *(Admin csak platform-adminnak)* |
+
+A "Fiók" csoport a `Layout.tsx` `buildNavGroups()` függvényével jön létre dinamikusan — amíg a SaaS réteg nincs bekonfigurálva (`isSupabaseConfigured === false`), ez a csoport egyáltalán nem jelenik meg, és a menü byte-azonos a korábbi állapottal. Lásd 12. fejezet.
 
 A "Fizetési kötelezettségek" menüpont a `/riasztasok?szuro=fizetesi` mélylinkre mutat (a Riasztások oldal saját szűrőjére) — ez **nem** duplikáció, hanem egy másik oldal saját szűrőjéhez vezető, kontextuálisan releváns parancsikon; az `isItemActive`/`activeGroupKey` logika a Layout.tsx-ben gondoskodik róla, hogy az aktív-jelölés a teljes útvonal+querystring alapján, ne csak az útvonal alapján történjen.
 
@@ -321,6 +336,8 @@ A "Fizetési kötelezettségek" menüpont a `/riasztasok?szuro=fizetesi` mélyli
 | `/napi-jelentesek` | `DailyReports.tsx` | Iroda-nézet: minden telephely zárása telephelyenként csoportosítva, megtekintés/jóváhagyás, hiányzó zárások listája — lásd 9.7 |
 | `/audit-naplo` | `AuditLog.tsx` | A teljes rendszer audit naplója, szűrhető és exportálható |
 | `/beallitasok` | `Settings.tsx` | Globális beállítások + "veszélyzóna" (demó adat visszaállítás / összes adat törlése) |
+| `/elofizetes` | `Subscription.tsx` | A cég előfizetési állapota, próbaidő/köv. fizetés, demó aktiválás/lemondás — lásd 12.4 |
+| `/admin` | `Admin.tsx` | Platform-admin nézet: minden regisztrált cég + becsült havi bevétel — lásd 12.6 |
 
 ### 8.3 Fontosabb újrahasznált komponensek
 
@@ -397,8 +414,10 @@ A `.github/workflows/build-windows.yml` GitHub Actions workflow (Windows runner-
 ### 11.1 `HashRouter` és az in-app "ugrás a szekcióhoz" linkek
 Az alkalmazás `HashRouter`-t használ (`#/utvonal` formátum), mert statikus fájl-hosting alól (Vercel + Electron `file://`) egyszerűbb így routolni szerver-oldali konfiguráció nélkül. **Fontos következmény**: egy sima `<a href="#szekcio-id">` horgony-link felülírná magát az útvonalat, mert a hash MAGA az útvonal-állapot. Ezért minden oldalon-belüli "ugrás a szekcióhoz" navigáció (pl. a Riportok oldal gyorsnavigációja) `element.scrollIntoView()`-t használ egy `onClick` handlerben, sosem `href="#..."`-t.
 
-### 11.2 Nincs valódi backend / többfelhasználós támogatás
-Minden adat egyetlen böngésző `localStorage`-ában él. Nincs szinkronizáció eszközök között, nincs több egyidejű felhasználó, nincs jogosultságkezelés. A `Settings` oldal "Veszélyzóna" szekciója (`resetToDemoData`/`clearAllData`) éles használatban félrekattintással adatvesztést okozhat — mindkettő megerősítő dialógust kér, de nincs "undo".
+### 11.2 Nincs valódi backend / többfelhasználós támogatás az üzleti adatokra
+Minden **üzleti** adat (termékek, mozgások, pénzügyi napló, audit napló stb.) továbbra is egyetlen böngésző `localStorage`-ában él. Nincs szinkronizáció eszközök között, nincs több egyidejű felhasználó ezekre az adatokra, nincs szerver-oldali jogosultságkezelés rajtuk. A `Settings` oldal "Veszélyzóna" szekciója (`resetToDemoData`/`clearAllData`) éles használatban félrekattintással adatvesztést okozhat — mindkettő megerősítő dialógust kér, de nincs "undo".
+
+**Ez a korlát külön áll a 12. fejezetben leírt SaaS rétegtől**: az utóbbi valódi, szerver-oldali (Supabase Auth + RLS) bejelentkezést és cég-elkülönítést ad a *fiók/előfizetés* adatokra, de az üzleti adatokat (termékek, mozgások stb.) egyelőre **nem** migrálja szerverre — lásd 12.7, ahol ez explicit ki van mondva.
 
 ### 11.3 A "duplikáció" elleni tudatos döntések
 A fejlesztés során több kör is zajlott a menü- és funkció-duplikációk felszámolására (lásd az audit naplóban/git történetben): önálló "Beszerzési tételek" és "Eladások" menüpontok megszűntek a Mozgásnapló szűrőinek javára; a "Szállítási költség kimutatás" egyetlen helyre került; a "Bevétel kereső" és "Vevői tartozás" riportok eltávolításra kerültek a Riportok oldalról (a felhasználó kifejezett kérésére); az ÁFA minden nézete egyetlen dedikált oldalra lett összevonva. **Ha valaki új menüpontot vagy riportot ad hozzá, érdemes előbb megnézni, nincs-e már ugyanaz a funkció máshol elérhető formában.**
@@ -411,7 +430,97 @@ A `computeMissingClosings` (7.8) tudatosan **nem** kéri számon minden naptári
 
 ---
 
-## 12. Hol keressem, ha...
+## 12. Előfizetéses réteg (SaaS)
+
+> **Ez a fejezet a B) réteget írja le: cégenkénti regisztráció/bejelentkezés, próbaidőszak/előfizetés-kezelés, admin áttekintés.** Kizárólag a webes verzióra vonatkozik — a Windows/Electron build változatlanul offline, egy-bérlős, bejelentkezés nélküli marad (ez szándékos döntés volt, lásd a fejlesztés során hozott döntést a 12.1-ben).
+
+### 12.1 Áttekintés és a `isSupabaseConfigured` kapcsoló
+
+A teljes réteg (regisztráció, bejelentkezés, előfizetés-oldal, admin nézet) **teljesen additív és alapból inaktív**. A `src/lib/supabase.ts` exportálja az `isSupabaseConfigured` boolean-t, ami csak akkor `true`, ha a `VITE_SUPABASE_URL` és `VITE_SUPABASE_ANON_KEY` build-időben be van állítva (lásd `.env.example`). Amíg ezek nincsenek beállítva:
+
+- a `src/components/AuthGate.tsx` egyszerűen átengedi a gyerek-komponenseket (`return <>{children}</>`) — nincs bejelentkezés-kényszer,
+- a `Layout.tsx`-ben a "Fiók" navigációs csoport (Előfizetés, Admin) egyáltalán nem jelenik meg,
+- a `/elofizetes` és `/admin` route-ok technikailag léteznek, de gyakorlatilag elérhetetlenek (nincs rájuk mutató link, és tartalmuk `useAuth()`-ból üres/`null` állapotot kapna).
+
+Ez azt jelenti, hogy a jelenlegi, konfigurálatlan éles (Vercel) deploy-t ennek a rétegnek a hozzáadása **nem érinti** — az alkalmazás pontosan úgy viselkedik, mint korábban, amíg valaki explicit nem hoz létre egy Supabase projektet és nem állítja be az env változókat.
+
+A desktop (Electron/Windows) build a felhasználó kifejezett döntése alapján **nem** kapja meg ezt a réteget — csak a webes verzió lett többbérlőssé téve.
+
+### 12.2 Adatbázis-séma és RLS (`supabase/schema.sql`)
+
+Két tábla, mindkettő Row Level Security-vel védve:
+
+- **`public.companies`** — egy regisztrált vállalkozás: név, `subscription_status` (`trial`/`active`/`expired`/`cancelled`), `trial_ends_at` (alapból `now() + 14 nap`), `plan`/`plan_price_huf`, `current_period_end`, `payment_failed_at`, `cancelled_at`, és előkészített (de üres) `stripe_customer_id`/`stripe_subscription_id` mezők.
+- **`public.profiles`** — egy `auth.users` felhasználót köt egy céghez, `is_platform_admin` flaggel.
+
+RLS policy-k biztosítják, hogy egy lekérdezés SQL-szinten se tudjon átlógni egy másik cég sorára:
+
+| Policy | Tábla | Mit enged |
+|---|---|---|
+| "Saját cég megtekintése" / "Saját cég módosítása" | `companies` | csak a saját `profiles.company_id`-hoz tartozó sort |
+| "Admin minden céget lát" | `companies` | `is_platform_admin = true` esetén az összeset |
+| "Saját profil megtekintése" | `profiles` | csak `id = auth.uid()` |
+| "Admin minden profilt lát" | `profiles` | `is_platform_admin = true` esetén az összeset |
+
+Két trigger egészíti ki:
+
+- **`handle_new_user`** (`security definer`, `auth.users`-re csatolva) — regisztrációkor automatikusan létrehoz egy `companies` sort (a névvel, amit a `signUp` hívás `company_name` metaadatként küld) és egy hozzá kapcsolt `profiles` sort. Emiatt a regisztráció egyetlen lépésben létrehozza a teljes, elkülönített céges adatteret.
+- **`prevent_self_admin_promotion`** — hard-blokkolja, hogy bárki saját magát `is_platform_admin = true`-ra állítsa, akár egy direkt `update` hívással is. Az első admin fiókot **kizárólag** a Supabase SQL Editorban lehet kijelölni (lásd a séma fájl végén lévő utasítást) — az alkalmazás felületén sehol nincs erre gomb.
+
+A sémát a Supabase Dashboard SQL Editorában kell lefuttatni, mielőtt az env változókat beállítod.
+
+### 12.3 Auth flow és a `HashRouter` ütközés elkerülése
+
+Az app `HashRouter`-t használ (`#/utvonal`), a Supabase alap (implicit) auth flow-ja viszont `#access_token=...`-t fűzne a redirect URL-hez — ez összeomlasztaná a route-állapotot. Emiatt:
+
+- a Supabase kliens `flowType: 'pkce'`-vel jön létre (`lib/supabase.ts`) — ez `?code=...` query paramot használ, ami a `#` ELŐTT van, tehát nem ütközik a hash-routing-gal,
+- a jelszó-visszaállítás `redirectTo` URL-je explicit nem tartalmaz hash-t (`hooks/useAuth.tsx` `requestPasswordReset`),
+- az `AuthGate.tsx` modul-betöltéskor (React state-en kívül) detektálja a `?code=` jelenlétét (`hasPasswordRecoveryCode`), és ha van, a `ResetPassword` képernyőt mutatja, függetlenül attól, hogy épp melyik route hash aktív.
+
+### 12.4 Előfizetés-állapotgép (`src/lib/subscription.ts`)
+
+```
+trial ──(trial_ends_at lejár)──► olvasásra korlátozva
+  │
+  ▼ (demoActivateSubscription / valós fizetés)
+active ──(payment_failed_at + 5 nap türelmi idő eltelik)──► olvasásra korlátozva
+  │
+  ▼ (lemondás / lejárat)
+expired / cancelled ──► mindig olvasásra korlátozva
+```
+
+A `computeIsReadOnly(company, now)` tiszta függvény adja meg, hogy a cég jelenleg csak-olvasható állapotban van-e — ezt használja a `useAuth()` hook `isReadOnly` mezője, amit a `Layout.tsx` egy piros figyelmeztető sávval jelez az oldal tetején, és amivel elrejti a gyors mozgásrögzítő lebegő gombot. **Fontos**: ez a "csak olvasható" gating jelenleg **reprezentatív, nem kimerítő** — a leggyakoribb belépési pont (a lebegő gomb) le van tiltva, de az egyes oldalak (Termékek, Mozgásnapló stb.) saját CRUD-gombjai nincsenek egyenként végigauditálva/letiltva ebben a körben. Ha ez kritikus, a következő lépés egy `useAuth().isReadOnly`-ra épülő, oldal-szintű `disabled` propagálás minden létrehozó/szerkesztő gombra.
+
+A `PAYMENT_FAILED_GRACE_DAYS` konstans (5 nap) szabályozza a türelmi időt sikertelen fizetés után.
+
+### 12.5 Fizetés: Stripe, de egyelőre KIZÁRÓLAG demó módban
+
+A felhasználó kifejezett kérésére a fizetési integráció **nincs éles Stripe-hoz kötve**. Ami készen van:
+
+- `src/pages/Subscription.tsx` — "Előfizetés indítása (demó)" / "Előfizetés lemondása" gombok, amik a `useAuth()` `demoActivateSubscription`/`demoCancelSubscription` függvényeit hívják. Ezek **közvetlenül a `companies` táblát írják át** a Supabase kliensen keresztül — nincs bankkártya-terhelés, nincs Stripe API-hívás. Az oldalon egy jól látható kék infó-doboz explicit közli, hogy ez demó mód.
+- `supabase/functions/create-checkout-session/index.ts` — egy **nem működő, nem deploy-olt** Deno Edge Function váz, ami megmutatja, hova kerülne egy valós Stripe Checkout Session létrehozása (`@ts-nocheck`-kel jelölve, szándékosan kimaradva a `tsconfig.app.json` buildjéből, hogy semmilyen módon ne befolyásolja a mostani buildet).
+
+**Ha valaha éles fizetést kell bekötni**, ehhez kellene: egy valós Stripe fiók + termék/ár létrehozása, a fenti Edge Function kitöltése és deploy-olása, egy Stripe webhook végpont a `payment_failed`/`invoice.paid` eseményekhez (ami a `companies.payment_failed_at`/`current_period_end`/`stripe_*` mezőket írná service role kulccsal), és a `Subscription.tsx` gombjainak átkötése a demó-függvényekről a valós Checkout Session indítására.
+
+### 12.6 Admin (üzemeltetői) nézet
+
+A `src/pages/Admin.tsx` (`/admin`) csak `profile.isPlatformAdmin === true` esetén mutat tartalmat — de a **valódi** határ az adatbázisban van: egy nem-admin felhasználó `companies` lekérdezése RLS miatt eleve csak a saját cégét adná vissza, akkor is, ha valahogy elérné ezt az oldalt. A nézet listázza az összes regisztrált céget, állapotukat, próbaidő/köv. fizetés dátumát, és egy becsült havi bevételt (`active` állapotú cégek `plan_price_huf` összege — mivel a fizetés demó módban fut, ez egy demonstrációs összeg, nem tényleges bevétel).
+
+Az első admin fiók bootstrap-olása kizárólag SQL-lel történik — lásd 12.2.
+
+### 12.7 Mi az, ami VALÓDI, tesztelt biztonsági határ — és mi nem
+
+Ez a szakasz szándékosan explicit, mert a felhasználói kérés kifejezetten "kritikus biztonsági pontként" nevezte meg az adatelkülönítést:
+
+**Valódi, adatbázis-szinten kikényszerített határ** (Supabase Auth + RLS, lásd 12.2): a `companies` és `profiles` táblák — vagyis *ki melyik céghez tartozik*, a cég neve, előfizetési állapota, próbaideje. Ezt egy rosszul írt frontend-hiba, elírt azonosító vagy hiányzó jogosultság-ellenőrzés sem tudja megkerülni, mert a Postgres maga tagadja meg a hozzáférést.
+
+**NEM (még) szerver-oldali, tehát NEM ugyanolyan erősségű határ**: minden **üzleti adat** — termékek, mozgások, vevők, beszállítók, pénzügyi napló, napi zárások, audit napló. Ezek ma is a böngésző `localStorage`-ában élnek, cégenkénti elkülönítés nélkül a szerveren, mert ez az adatréteg még nem lett migrálva Supabase-re (ez egy jelentős, önálló migrációs munka lenne: minden `store/useStore.ts` akciót Supabase lekérdezésekre kellene cserélni, RLS policy-kat írni minden táblához, és megoldani az offline/desktop build kompatibilitását). **Amíg ez nincs megcsinálva, több regisztrált cég egy közös géppel/böngészővel technikailag ugyanazt a `localStorage`-ot látná az üzleti adatokra** — ez a jelenlegi állapot explicit korlátja, nem egy elfelejtett részlet.
+
+Ha a több-cégnyi üzleti adat is szerver-oldali, RLS-szel garantált elkülönítést igényel, az egy külön, ennél lényegesen nagyobb következő lépés.
+
+---
+
+## 13. Hol keressem, ha...
 
 | Kérdés | Fájl |
 |---|---|
@@ -425,3 +534,7 @@ A `computeMissingClosings` (7.8) tudatosan **nem** kéri számon minden naptári
 | "Milyen demó adat töltődik be alapból?" | `store/seed.ts` |
 | "Hogyan működik a napi zárás?" | `lib/dailyClosing.ts`, `pages/DailyClosing.tsx`, `pages/DailyReports.tsx`, 7.8. és 9.7. fejezet |
 | "Miért nem tudom simán törölni ezt a mozgást?" | Valószínűleg az adott telephely+nap kombinációra már el lett küldve egy napi zárás - lásd 6.1 |
+| "Hogyan kapcsoljam be a bejelentkezést/előfizetést?" | `.env.example` + `supabase/schema.sql` + 12. fejezet |
+| "Miért nem lát senki bejelentkezés-kérést, pedig telepítettem a SaaS kódot?" | `lib/supabase.ts` `isSupabaseConfigured` — nincs beállítva a két `VITE_SUPABASE_*` env változó, lásd 12.1 |
+| "Hogyan lesz valakiből admin?" | Kézzel, a Supabase SQL Editorban - lásd 12.2 vége és 12.6 |
+| "Hol az igazi (nem demó) fizetési integráció?" | Nincs még - `supabase/functions/create-checkout-session/index.ts` egy nem bekötött váz, lásd 12.5 |

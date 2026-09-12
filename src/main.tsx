@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { AuthProvider } from './hooks/useAuth.tsx'
 
 // HashRouter (not BrowserRouter): the app is served from a plain static
 // host and also loaded from a local file:// path in the desktop build,
@@ -10,7 +11,9 @@ import App from './App.tsx'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </HashRouter>
   </StrictMode>,
 )

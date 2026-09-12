@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",

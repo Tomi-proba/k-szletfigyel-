@@ -1,11 +1,17 @@
-import { CircleSlash, FileSpreadsheet, FileText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCircle2, CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Modal } from '../components/Modal'
+import { PurchaseOrderForm } from '../components/PurchaseOrderForm'
+import { SalePrepForm } from '../components/SalePrepForm'
+import { ApprovePurchaseOrderModal } from '../components/ApprovePurchaseOrderModal'
+import { ApproveSaleModal } from '../components/ApproveSaleModal'
+import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
 import { Button, Card, Checkbox, EmptyState, Field, FieldGroup, Input, PageHeader, Select, Textarea } from '../components/ui'
 import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
@@ -82,6 +88,16 @@ export function Movements() {
   const [deleting, setDeleting] = useState<Movement | null>(null)
   const [editingVat, setEditingVat] = useState<Movement | null>(null)
   const [cancelling, setCancelling] = useState<Movement | null>(null)
+  // Kétlépcsős jóváhagyás (iroda <-> raktár, lásd DOCUMENTATION.md 15.
+  // fejezet): az iroda ad le rendelést, a raktáros hagyja jóvá a
+  // beérkezést; a raktáros készíti elő a kiszállítást, az iroda hagyja
+  // jóvá/utasítja el.
+  const [creatingOrder, setCreatingOrder] = useState(false)
+  const [creatingSalePrep, setCreatingSalePrep] = useState(false)
+  const [approvingPurchase, setApprovingPurchase] = useState<Movement | null>(null)
+  const [approvingSale, setApprovingSale] = useState<Movement | null>(null)
+  const [resubmitting, setResubmitting] = useState<Movement | null>(null)
+  const [deletingPending, setDeletingPending] = useState<Movement | null>(null)
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
@@ -185,6 +201,16 @@ export function Movements() {
             <Button variant="secondary" onClick={() => exportToPdf(`mozgasnaplo_${from}_${to}.pdf`, 'Mozgásnapló', columns, rows)}>
               <FileText size={16} /> PDF
             </Button>
+            {!isWarehouseUser && (
+              <Button onClick={() => setCreatingOrder(true)}>
+                <PackagePlus size={16} /> Rendelés leadása
+              </Button>
+            )}
+            {isWarehouseUser && (
+              <Button onClick={() => setCreatingSalePrep(true)}>
+                <ClipboardList size={16} /> Kiszállítás előkészítése
+              </Button>
+            )}
           </>
         }
       />
@@ -297,6 +323,19 @@ export function Movements() {
                       {m.correctsMovementId && (
                         <div className="text-xs font-medium text-[var(--color-warning)]">Korrekció - #{m.correctsMovementId.slice(0, 8)}</div>
                       )}
+                      {m.approvalStatus === 'pending' && (
+                        <div className="mt-0.5 inline-block rounded-full bg-[var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-warning)]">
+                          {m.type === 'in' ? 'Beérkezésre vár' : 'Jóváhagyásra vár'}
+                        </div>
+                      )}
+                      {m.approvalStatus === 'rejected' && (
+                        <div className="mt-0.5 inline-block rounded-full bg-[var(--color-danger-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-danger)]">
+                          Elutasítva{m.rejectReason ? ` - ${m.rejectReason}` : ''}
+                        </div>
+                      )}
+                      {m.discrepancyNote && (
+                        <div className="mt-0.5 text-xs text-[var(--color-warning)]">Eltérés: {m.discrepancyNote}</div>
+                      )}
                       {isDeleted && <div className="text-xs font-medium text-[var(--color-text-muted)]">Törölve</div>}
                     </td>
                     {locations.length > 1 && <td className="px-4 py-3">{locationById.get(m.locationId)?.name}</td>}
@@ -367,7 +406,7 @@ export function Movements() {
                       </td>
                     )}
                     <td className="whitespace-nowrap px-4 py-3">
-                      {m.type !== 'out' ? (
+                      {m.type !== 'out' || m.approvalStatus === 'pending' || m.approvalStatus === 'rejected' ? (
                         <span className="text-[var(--color-text-muted)]">—</span>
                       ) : isCancelled ? (
                         <div>
@@ -404,6 +443,46 @@ export function Movements() {
                         >
                           <RotateCcw size={16} />
                         </button>
+                      ) : m.approvalStatus === 'pending' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => (m.type === 'in' ? setApprovingPurchase(m) : setApprovingSale(m))}
+                            aria-label={m.type === 'in' ? 'Beérkezés jóváhagyása' : 'Kiszállítás jóváhagyása'}
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                            title={m.type === 'in' ? 'Beérkezés jóváhagyása' : 'Jóváhagyás / elutasítás'}
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingPending(m)}
+                            aria-label="Tétel törlése"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      ) : m.approvalStatus === 'rejected' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setResubmitting(m)}
+                            aria-label="Javítás és újraküldés"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-primary)]"
+                            title="Javítás és újraküldés"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingPending(m)}
+                            aria-label="Tétel törlése"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
                       ) : isCancelled ? null : (
                         <>
                           {m.type === 'out' && (
@@ -470,6 +549,38 @@ export function Movements() {
       {editingVat && <VatEditModal movement={editingVat} lot={lotByMovementId.get(editingVat.id) ?? null} onClose={() => setEditingVat(null)} />}
 
       {cancelling && <CancelSaleModal movement={cancelling} product={productById.get(cancelling.productId)} onClose={() => setCancelling(null)} />}
+
+      {creatingOrder && (
+        <Modal title="Rendelés leadása" onClose={() => setCreatingOrder(false)} wide>
+          <PurchaseOrderForm onDone={() => setCreatingOrder(false)} />
+        </Modal>
+      )}
+
+      {creatingSalePrep && (
+        <Modal title="Kiszállítás előkészítése" onClose={() => setCreatingSalePrep(false)}>
+          <SalePrepForm onDone={() => setCreatingSalePrep(false)} />
+        </Modal>
+      )}
+
+      {approvingPurchase && <ApprovePurchaseOrderModal movement={approvingPurchase} onClose={() => setApprovingPurchase(null)} />}
+
+      {approvingSale && <ApproveSaleModal movement={approvingSale} onClose={() => setApprovingSale(null)} />}
+
+      {resubmitting && <ResubmitSaleModal movement={resubmitting} onClose={() => setResubmitting(null)} />}
+
+      {deletingPending && (
+        <ConfirmDialog
+          title="Tétel törlése"
+          message={`Biztosan törlöd ezt a még jóvá nem hagyott tételt (${productById.get(deletingPending.productId)?.name ?? 'termék'}, ${deletingPending.quantity} db)? Mivel még nem érintette a készletet, egyszerű törlés elég.`}
+          confirmLabel="Törlés"
+          danger
+          onConfirm={() => {
+            deleteMovement(deletingPending.id, 'soft-delete' satisfies DeleteMovementMode)
+            setDeletingPending(null)
+          }}
+          onCancel={() => setDeletingPending(null)}
+        />
+      )}
     </div>
   )
 }

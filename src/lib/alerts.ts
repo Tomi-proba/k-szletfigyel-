@@ -56,9 +56,12 @@ export interface MarginReportRow {
 /** A movement counts toward stock/revenue calculations only while it's
  * neither soft-deleted nor a cancelled (stornó'd) sale - both are kept in
  * the data for auditability, but the correction/restock they trigger is
- * what should actually be counted instead. */
+ * what should actually be counted instead. A 'pending' or 'rejected'
+ * movement (see MovementApprovalStatus) hasn't happened yet either - it
+ * hasn't touched currentStock/FIFO lots, so it must never be counted here
+ * until it's actually approved. */
 function isActiveMovement(m: Movement): boolean {
-  return !m.deletedAt && !m.cancelled
+  return !m.deletedAt && !m.cancelled && m.approvalStatus !== 'pending' && m.approvalStatus !== 'rejected'
 }
 
 function sumMovementQty(movements: Movement[], productId: string, type: 'in' | 'out', fromISO: string, toISO: string): number {

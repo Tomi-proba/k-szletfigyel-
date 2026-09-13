@@ -5,9 +5,10 @@ import type { DailyClosing, DailyClosingProductRow, Location, Movement, Product 
 import { daysBetween, isoDaysAgo, todayISO } from './dates'
 
 /** A movement counts toward a closing only while it's neither soft-deleted
- * nor a cancelled (stornó'd) sale - mirrors isActiveMovement in lib/alerts.ts. */
+ * nor a cancelled (stornó'd) sale, and not still awaiting/refused approval
+ * (see MovementApprovalStatus) - mirrors isActiveMovement in lib/alerts.ts. */
 function isActiveMovement(m: Movement): boolean {
-  return !m.deletedAt && !m.cancelled
+  return !m.deletedAt && !m.cancelled && m.approvalStatus !== 'pending' && m.approvalStatus !== 'rejected'
 }
 
 export interface DailyClosingSummary {

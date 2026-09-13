@@ -586,10 +586,62 @@ Mivel a Supabase önkiszolgáló regisztrációja (`signUp`) csak új céget tud
 - **A "local-first, best-effort" szinkron** (14.4) nem garantálja tranzakciós erősséggel, hogy a memóriabeli és a Supabase-beli állapot mindig azonos - csak azt, hogy előbb-utóbb konvergálnak, amint a hálózat rendben van.
 - **A régi (migráció előtti) audit-bejegyzések nem kerültek át** Supabase-be - egy meglévő, korábban létrehozott cég `audit_log`-ja üresen indul, csak az ezután történő események kerülnek bele.
 - **A "Veszélyzóna" (demó adat visszaállítása / összes adat törlése)** a `Settings` oldalon `dataMode === 'remote'` esetén le van tiltva - egy éles, megosztott céges adatot egyetlen böngészőből visszaállítani/törölni túl kockázatos, ezért ez csak a helyi (nem cégekhez kötött) módban érhető el.
+- **A jóváhagyási munkafolyamat (15. fejezet) RLS-szabályai nem tesznek különbséget mozgás-irány/jóváhagyási-lépés szerint** - a `movements` tábla UPDATE policy-i telephely/cég-szinten engednek írást, nem "csak raktáros hagyhat jóvá beérkezést"/"csak iroda hagyhat jóvá kiszállítást" szinten. Vagyis egy technikailag hozzáértő raktáros direkt API-hívással elméletileg jóváhagyhatná a saját kiszállítását is, holott a felület ezt sosem ajánlja fel neki. Ugyanaz a korlát-osztály, mint a fenti oszlop-szintű pont.
 
 ---
 
-## 15. Hol keressem, ha...
+## 15. Kétlépcsős jóváhagyási munkafolyamat (beszerzés/eladás, iroda ↔ raktár)
+
+> Ez a fejezet a 14. fejezetre épül (raktáros/iroda szerepkör, megosztott Supabase-adat) - additív hozzá: a mozgás-rögzítés normál útja mostantól két lépésben történik, iroda és raktár között megosztva, ahelyett hogy bárki azonnal, egy lépésben rögzítené a végleges mozgást.
+
+### 15.1 A két irány
+
+**Bejövő (beszerzés) - iroda indítja, raktár hagyja jóvá:** az iroda a Mozgásnapló "Rendelés leadása" gombjával (`components/PurchaseOrderForm.tsx`) felvesz egy FÜGGŐBEN LÉVŐ 'in' mozgást (termék, mennyiség, várható ár/szállítás/ÁFA, dátum) - ez **nem** növeli a készletet, és nem jön létre hozzá `PurchaseLot`. A raktáros (a Mozgásnaplóban a "Beérkezésre vár" jelzésű sor jóváhagyás-gombjával, `components/ApprovePurchaseOrderModal.tsx`) hagyja jóvá a TÉNYLEGES beérkezéskor, a ténylegesen átvett mennyiséggel (ha eltér a rendelttől) - **csak ekkor** jön létre a valódi `PurchaseLot`, és nő a készlet/frissül a beszerzési ár (FIFO/átlagár, a beállított módszer szerint, változatlan logikával - lásd 7.1).
+
+**Kimenő (eladás) - raktár indítja, iroda hagyja jóvá:** a raktáros a Mozgásnapló "Kiszállítás előkészítése" gombjával (`components/SalePrepForm.tsx`) felvesz egy FÜGGŐBEN LÉVŐ 'out' mozgást - szándékosan **csak** terméket/mennyiséget/vevőt kérdez, árat/ÁFA-t nem, mert ez nem az ő adata (14.5). Ez **nem** csökkenti a készletet. Az iroda (`components/ApproveSaleModal.tsx`) hagyja jóvá - ekkor állítja be az ÁFA kulcsot és a fizetési állapotot, ekkor snapshotolódik az eladási ár, ekkor csökken ténylegesen a készlet FIFO-fogyással, és ekkor generálódik az automatikus ÁFA-tétel (lib/vat.ts változatlan logikájával). Az iroda **elutasíthatja** is, indoklással (`rejectSalePrep`) - a raktáros ekkor a "Javítás és újraküldés" gombbal (`components/ResubmitSaleModal.tsx`, `resubmitPendingMovement` store-akció) módosíthatja és újraküldheti, ami visszaállítja "jóváhagyásra vár" állapotba.
+
+### 15.2 Adatmodell (`Movement.approvalStatus`, lásd `types/index.ts`)
+
+`approvalStatus?: 'pending' | 'approved' | 'rejected'` - **`undefined` = már véglegesített**, azonos jelentéssel mint `'approved'`. Ez a kulcs a visszamenőleges kompatibilitáshoz: minden, e funkció előtt rögzített mozgás, és minden, a `recordMovement`-en (közvetlen/azonnali rögzítés - lásd 15.5) keresztül létrehozott mozgás automatikusan "már véglegesített"-nek számít, változtatás nélkül.
+
+Kiegészítő mezők, csak a pending/jóváhagyott 'in' mozgásokon értelmesek: `orderedQuantity` (az eredetileg rendelt mennyiség, megmarad a jóváhagyás utáni esetleges eltérés nyomon követhetőségéhez - a `quantity` mező jóváhagyás UTÁN a TÉNYLEGESEN beérkezett mennyiséget tartalmazza), `discrepancyNote` (eltérés/probléma szövege, mindkét irányon használható), `approvedAt`/`rejectedAt`/`rejectReason`.
+
+**Egyszerűsítés, amit tudni kell**: a felhasználói specifikáció három állapotot nevezett meg mindkét irányra (pl. bejövőre "Rendelve → Beérkezésre vár → Jóváhagyva"), de mivel nem volt leírva külön, kézi átmenet az első két állapot között, ez az implementáció **kettőre** vonja össze őket (`pending`, a felületen a kontextusnak megfelelő címkével jelenítve meg: "Rendelve"/"Beérkezésre vár" ugyanaz az egy adatpont, csak más-más oldalról nézve).
+
+### 15.3 A `useStore.ts` mutáló logikája **változatlan** maradt
+
+A meglévő `recordMovement`/`deleteMovement`/`cancelSale` teljes FIFO/átlagár/korrekciós/audit logikája egyetlen sorban sem változott. A jóváhagyási munkafolyamat egy KIEGÉSZÍTŐ akció-készlet:
+
+| Akció | Mit csinál |
+|---|---|
+| `createPendingPurchaseOrder` | Létrehoz egy `approvalStatus: 'pending'` 'in' mozgást - nincs készlet-/lot-hatás |
+| `approvePurchaseOrder(id, actualQuantity?, discrepancyNote?)` | Létrehozza a valódi `PurchaseLot`-ot a TÉNYLEGES mennyiséggel, frissíti a készletet/beszerzési árat (ugyanazzal a FIFO/átlagár logikával, mint `recordMovement`), és - ha a mozgás dátuma egy már lezárt napra esik - `flagClosingModified`-del jelzi az érintett napi zárást (lásd 9.7) |
+| `createPendingSalePrep` | Létrehoz egy `approvalStatus: 'pending'` 'out' mozgást - nincs készlethatás |
+| `approveSalePrep(id, { vatRatePercent?, isPaid? }, opts?)` | FIFO-fogyás a JÓVÁHAGYÁS pillanatában érvényes tételekből (nem az előkészítéskori állapotból!) - emiatt a jóváhagyás `insufficient-stock`-kal elutasulhat, ha a készlet közben elfogyott; sikeres jóváhagyáskor csökken a készlet, snapshotolódik az eladási ár/egységköltség, beállítódik az ÁFA |
+| `rejectSalePrep(id, reason)` | `approvalStatus: 'rejected'`, semmilyen készlethatás |
+| `resubmitPendingMovement(id, { quantity?, customerId?, note? })` | Egy `pending` vagy `rejected` tétel mennyiségét/vevőjét/megjegyzését módosítja, és visszaállítja `pending`-re |
+
+`deleteMovement` és `cancelSale` ennek megfelelően ágaznak: egy `pending`/`rejected` mozgás (sosem érintette a készletet) egyszerű `deleteMovement`-tel törölhető, a zárt-napos korrekciós szabály és a `cancelSale` stornó-folyamat rá nem vonatkozik (`cancelSale` explicit `not-approved` hibával utasítja el, ha megpróbálják rajta meghívni); egy már jóváhagyott (vagy a funkció előtti, `approvalStatus` nélküli) mozgásra változatlanul a teljes, korábban leírt logika vonatkozik (6.1, 9.4).
+
+### 15.4 Miért nem számít bele semmilyen riasztásba/ÁFA-ba/zárásba egy függő tétel
+
+A `lib/alerts.ts`, `lib/dailyClosing.ts` és `lib/vat.ts` "aktív mozgás" szűrői (`isActiveMovement` és a VAT-sor szűrők) kiegészültek: egy `pending` vagy `rejected` mozgás ugyanúgy kizáródik, mint egy soft-deletelt vagy stornózott. Emiatt egy függő tétel nem jelenik meg a készletszint-számításban, a haszonkulcs-riportban, az ÁFA-egyenlegben, vagy egy napi zárás összegzésében - pontosan addig, amíg jóvá nem hagyják.
+
+### 15.5 Mi maradt: a közvetlen/azonnali rögzítés
+
+A meglévő `MovementForm`/gyors-mozgásrögzítés (Kezdőlap, lebegő gomb) **változatlanul elérhető marad** mindkét szerepkörnek - ez a jóváhagyási munkafolyamatot **kiegészíti**, nem váltja ki (a felhasználói kérés explicit ezt kérte). Ezt a formot érdemes olyan esetekre fenntartani, ahol a kétlépcsős egyeztetés felesleges lenne (pl. leltári korrekció, egyszemélyes/kis vállalkozás, ahol ugyanaz az ember tölti be mindkét szerepet). **Ez egy tudatos értelmezési döntés** - ha a szándék az volt, hogy az azonnali rögzítés teljesen megszűnjön és minden bejövő/kimenő tétel kötelezően a jóváhagyási úton menjen, ezt jelezni kell, és a `MovementForm`-ot route-/szerepkör-szinten le kell tiltani.
+
+### 15.6 Szándékosan NEM implementált: foglalt készlet
+
+A specifikáció explicit kérte, hogy egy jóváhagyásra váró kimenő tétel **ne** zárjon el mennyiséget más elől (`currentStock` csak jóváhagyáskor változik). Ez azt jelenti, hogy két egyidejűleg előkészített kiszállítás elméletileg ugyanarra a korlátozott készletre hivatkozhat, és csak a MÁSODIK jóváhagyása bukik el `insufficient-stock`-kal (ezt a 15.3 táblázat jelzi). A kódstruktúra ezt tudatosan nem zárja ki egy jövőbeli bővítéstől: egy `reservedQuantity` nézet a `pending` 'out' mozgások mennyiségeinek összegéből egyszerűen levezethető lenne, a jelenlegi logika átírása nélkül.
+
+### 15.7 Dashboard/Riasztások integráció
+
+`useAlerts.ts` három új, **nem** irodai-only mezőt ad (`pendingPurchaseApprovals`, `pendingSaleApprovals`, `rejectedSales`) - ezek szándékosan NEM szűrődnek `isWarehouseUser` szerint, mert pont a raktárosnak szólnak elsősorban. A Kezdőlapon (`pages/Dashboard.tsx`) egy "Jóváhagyásra váró tételek" kártya jelenik meg, szerepkör szerint más tartalommal: raktáros a beérkezésre váró rendeléseit és az elutasított (javításra váró) kiszállításait látja, iroda a rá váró kiszállítás-jóváhagyásokat.
+
+---
+
+## 16. Hol keressem, ha...
 
 | Kérdés | Fájl |
 |---|---|
@@ -610,3 +662,5 @@ Mivel a Supabase önkiszolgáló regisztrációja (`signUp`) csak új céget tud
 | "Hogyan hívok meg egy raktárost?" | `pages/Team.tsx` (`/csapat`, iroda-only) - lásd 14.6 |
 | "Miért lát a raktáros mindent/semmit sem?" | `hooks/useAuth.tsx` `isWarehouseUser` + `components/RoleGate.tsx` + `lib/remoteSync.ts` RLS-szűrés - lásd 14. fejezet |
 | "Hogyan kerül az üzleti adat Supabase-be?" | `lib/remoteSync.ts` (mapperek + fetch/upsert), `store/useStore.ts` `hydrateFromRemote`/a `set` wrapper - lásd 14.4 |
+| "Hogyan működik a beszerzés/eladás jóváhagyása?" | `Movement.approvalStatus` (`types/index.ts`), a jóváhagyási store-akciók (`store/useStore.ts`), `components/PurchaseOrderForm.tsx`/`ApprovePurchaseOrderModal.tsx`/`SalePrepForm.tsx`/`ApproveSaleModal.tsx`/`ResubmitSaleModal.tsx` - lásd 15. fejezet |
+| "Miért nem jelenik meg egy függő tétel a riasztásokban/ÁFA-ban/zárásban?" | `isActiveMovement` (`lib/alerts.ts`, `lib/dailyClosing.ts`) és a VAT-sor szűrők kizárják a `pending`/`rejected` mozgásokat - lásd 15.4 |

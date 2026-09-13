@@ -39,7 +39,16 @@ export function computeAutoVatTotals(lots: PurchaseLot[], movements: Movement[],
     else totals.purchaseReclaimable += lotVatAmountHuf(l)
   }
   for (const m of movements) {
-    if (m.type !== 'out' || m.vatRatePercent === undefined || !inRange(m.date, fromISO, toISO) || m.deletedAt || m.cancelled) continue
+    if (
+      m.type !== 'out' ||
+      m.vatRatePercent === undefined ||
+      !inRange(m.date, fromISO, toISO) ||
+      m.deletedAt ||
+      m.cancelled ||
+      m.approvalStatus === 'pending' ||
+      m.approvalStatus === 'rejected'
+    )
+      continue
     totals.sale += movementVatAmountHuf(m)
   }
   return totals
@@ -96,7 +105,15 @@ export function listAutoVatRows(
     })
 
   const saleRows: AutoVatRow[] = movements
-    .filter((m) => m.type === 'out' && m.vatRatePercent !== undefined && inRange(m.date, fromISO, toISO) && !m.deletedAt)
+    .filter(
+      (m) =>
+        m.type === 'out' &&
+        m.vatRatePercent !== undefined &&
+        inRange(m.date, fromISO, toISO) &&
+        !m.deletedAt &&
+        m.approvalStatus !== 'pending' &&
+        m.approvalStatus !== 'rejected',
+    )
     .map((m) => {
       const product = productById.get(m.productId)
       return {

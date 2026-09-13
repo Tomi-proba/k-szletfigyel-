@@ -63,6 +63,9 @@ const FIELD_LABELS: Record<AuditEntityType, Record<string, string>> = {
     vatRatePercent: 'ÁFA kulcs',
     saleStatus: 'Eladási státusz',
     dueDate: 'Fizetési határidő',
+    approvalStatus: 'Jóváhagyási állapot',
+    discrepancyNote: 'Eltérés megjegyzése',
+    rejectReason: 'Elutasítás indoka',
   },
   customer: {
     name: 'Név',

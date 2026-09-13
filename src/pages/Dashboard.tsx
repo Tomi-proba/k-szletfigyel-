@@ -1,4 +1,15 @@
-import { AlertTriangle, ArrowLeftRight, CalendarClock, CircleDollarSign, ClipboardX, PackageMinus, Truck, TrendingDown } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  CalendarClock,
+  CircleDollarSign,
+  ClipboardCheck,
+  ClipboardX,
+  PackageMinus,
+  Truck,
+  TrendingDown,
+  XCircle,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
@@ -106,6 +117,46 @@ export function Dashboard() {
               tone="danger"
             />
           </div>
+
+          {(isWarehouseUser ? alerts.pendingPurchaseApprovals.length + alerts.rejectedSales.length : alerts.pendingSaleApprovals.length) > 0 && (
+            <Card>
+              <div className="mb-2 flex items-center gap-2 text-[var(--color-text)]">
+                <ClipboardCheck size={18} className="text-[var(--color-warning)]" />
+                <h2 className="text-base font-semibold">Jóváhagyásra váró tételek</h2>
+              </div>
+              <ul className="divide-y divide-[var(--color-border)] text-sm">
+                {isWarehouseUser ? (
+                  <>
+                    {alerts.pendingPurchaseApprovals.length > 0 && (
+                      <li className="flex items-center justify-between py-2">
+                        <span>{alerts.pendingPurchaseApprovals.length} beérkezésre váró rendelés</span>
+                        <Link to="/mozgasnaplo?tipus=in" className="font-medium text-[var(--color-primary)] hover:underline">
+                          Megnyitás
+                        </Link>
+                      </li>
+                    )}
+                    {alerts.rejectedSales.length > 0 && (
+                      <li className="flex items-center justify-between py-2">
+                        <span className="flex items-center gap-1.5 text-[var(--color-danger)]">
+                          <XCircle size={14} /> {alerts.rejectedSales.length} elutasított kiszállítás javításra vár
+                        </span>
+                        <Link to="/mozgasnaplo?tipus=out" className="font-medium text-[var(--color-primary)] hover:underline">
+                          Megnyitás
+                        </Link>
+                      </li>
+                    )}
+                  </>
+                ) : (
+                  <li className="flex items-center justify-between py-2">
+                    <span>{alerts.pendingSaleApprovals.length} jóváhagyásra váró kiszállítás</span>
+                    <Link to="/mozgasnaplo?tipus=out" className="font-medium text-[var(--color-primary)] hover:underline">
+                      Megnyitás
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            </Card>
+          )}
 
           {alerts.transferSuggestions.length > 0 && (
             <Card>

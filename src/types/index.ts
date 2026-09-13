@@ -128,6 +128,24 @@ export interface PurchaseLot extends SoftDeletable {
  * 'delivered' - the customer has it - cancelling from here needs extra confirmation. */
 export type SaleStatus = 'pending' | 'shipping' | 'delivered'
 
+/** Two-step approval workflow, office <-> raktár, kept independent of
+ * SaleStatus (which only tracks a finalized sale's own fulfillment).
+ * `undefined` on a Movement means "already finalized" - identical to
+ * 'approved' - so every movement recorded before this feature existed
+ * (or recorded through the direct/immediate path, see recordMovement)
+ * behaves exactly as it always has. While 'pending', a movement has NOT
+ * yet touched currentStock/FIFO lots/VAT/alerts/napi zárás - see
+ * isFinalizedMovement-style checks in lib/alerts.ts, lib/dailyClosing.ts
+ * and lib/vat.ts. 'in': the office creates 'pending' (a purchase order);
+ * a raktáros 'approves' it once the goods actually arrive (optionally
+ * correcting `quantity` to what was actually received) - never
+ * 'rejected', since an order that shouldn't happen is simply deleted
+ * (see deleteMovement). 'out': a raktáros creates 'pending' (goods
+ * prepared for shipment); the office 'approves' (finalizes the sale -
+ * stock decreases, VAT generates) or 'rejects' (sends it back to the
+ * raktáros for correction, with a reason). */
+export type MovementApprovalStatus = 'pending' | 'approved' | 'rejected'
+
 export interface Movement extends SoftDeletable {
   id: string
   productId: string
@@ -194,6 +212,24 @@ export interface Movement extends SoftDeletable {
    * from deleteMovement's "korrekciós tétel" option) - points at the
    * original movement's id so the pair stays traceable both ways. */
   correctsMovementId?: string
+  /** See MovementApprovalStatus. Omitted = already finalized (identical to
+   * 'approved') - the default for every direct/immediate recordMovement
+   * call and every movement recorded before this feature existed. */
+  approvalStatus?: MovementApprovalStatus
+  /** 'in' + ever-pending only: the quantity originally ordered by the
+   * office. Once approved, `quantity` holds the ACTUALLY received amount
+   * (which is what affects stock) - this field preserves what was
+   * requested, so a shortage/overage stays traceable instead of silently
+   * overwriting the order. */
+  orderedQuantity?: number
+  /** Free-text note recorded at approval/rejection time when the actual
+   * outcome differs from what was proposed (short/damaged delivery, a
+   * data problem on a sale) - this is the "notification" the other side
+   * sees: it just surfaces on the movement in their own list/history. */
+  discrepancyNote?: string
+  approvedAt?: string
+  rejectedAt?: string
+  rejectReason?: string
 }
 
 export type LedgerEntryType = 'income' | 'expense'

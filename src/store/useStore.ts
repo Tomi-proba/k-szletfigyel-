@@ -111,11 +111,65 @@ export type DeleteLedgerEntryMode = 'correction' | 'soft-delete'
 
 export type CancelSaleResult =
   | { ok: true; wasPaid: boolean }
-  | { ok: false; reason: 'not-found' | 'not-a-sale' | 'already-cancelled' }
+  | { ok: false; reason: 'not-found' | 'not-a-sale' | 'already-cancelled' | 'not-approved' }
 
 export type SubmitDailyClosingResult =
   | { ok: true; closingId: string }
   | { ok: false; reason: 'already-closed' | 'no-movements' | 'location-not-found' }
+
+// --- Kétlépcsős jóváhagyási munkafolyamat (iroda <-> raktár) ---------------
+// Bejövő: az iroda "rendelést ad le" (pending 'in' mozgás, még nincs
+// készlethatása/FIFO-tétele), majd a raktáros "jóváhagyja" a TÉNYLEGESEN
+// beérkezett mennyiséggel (ha eltér a rendelttől) - csak EKKOR jön létre a
+// valódi PurchaseLot és nő a készlet. Kimenő: a raktáros "előkészíti" a
+// kiszállítást (pending 'out' mozgás, még nem csökkenti a készletet), az
+// iroda "jóváhagyja" (ekkor csökken a készlet, FIFO-fogyás történik és
+// generálódik az ÁFA) vagy "elutasítja" (indoklással, vissza a raktárosnak
+// javításra). Lásd Movement.approvalStatus és DOCUMENTATION.md 15. fejezet.
+//
+// Szándékosan NEM implementált még (de a fenti szétválasztás miatt később
+// könnyen hozzáadható): "foglalt készlet" - egy jóváhagyásra váró kimenő
+// tétel ma nem zár el mennyiséget más elől, mert `currentStock` csak
+// jóváhagyáskor változik. Egy jövőbeli "reservedQuantity" nézet a pending
+// 'out' mozgások összegéből simán levezethető lenne anélkül, hogy a
+// jelenlegi logikát át kellene írni.
+
+export interface CreatePendingPurchaseInput {
+  productId: string
+  quantity: number
+  date: string
+  note?: string
+  /** Várható egységár/szállítási költség - a tényleges lot csak
+   * jóváhagyáskor jön létre, ezekkel az (esetlegesen módosított) adatokkal. */
+  unitPrice?: number
+  shippingCost?: number
+  currency?: Currency
+  exchangeRate?: number
+  /** Várható ÁFA kulcs - jóváhagyáskor kerül át a létrejövő PurchaseLot-ra. */
+  vatRatePercent?: number
+}
+
+export type ApprovePurchaseOrderResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'not-pending' | 'invalid-quantity' }
+
+export interface CreatePendingSaleInput {
+  productId: string
+  quantity: number
+  date: string
+  customerId?: string
+  note?: string
+}
+
+export type ApproveSaleResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'not-pending' | 'insufficient-stock'; resultingStock?: number }
+
+export type RejectSaleResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' }
+
+export type ResubmitPendingMovementResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'not-editable' | 'invalid-quantity' }
 
 interface AppState {
   locations: Location[]
@@ -168,6 +222,19 @@ interface AppState {
   recordMovement: (input: RecordMovementInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   deleteMovement: (id: string, mode: DeleteMovementMode) => void
   restoreMovement: (id: string) => void
+
+  // Kétlépcsős jóváhagyás (iroda <-> raktár)
+  createPendingPurchaseOrder: (input: CreatePendingPurchaseInput) => RecordMovementResult
+  approvePurchaseOrder: (id: string, actualQuantity?: number, discrepancyNote?: string) => ApprovePurchaseOrderResult
+  createPendingSalePrep: (input: CreatePendingSaleInput) => RecordMovementResult
+  approveSalePrep: (
+    id: string,
+    input?: { vatRatePercent?: number; isPaid?: boolean },
+    opts?: { allowNegativeStock?: boolean },
+  ) => ApproveSaleResult
+  rejectSalePrep: (id: string, reason?: string) => RejectSaleResult
+  resubmitPendingMovement: (id: string, updates: { quantity?: number; customerId?: string; note?: string }) => ResubmitPendingMovementResult
+
   setMovementPaid: (movementId: string, isPaid: boolean) => void
   setLotPaid: (lotId: string, isPaid: boolean) => void
   setLedgerEntryPaid: (entryId: string, isPaid: boolean) => void
@@ -709,7 +776,16 @@ export const useStore = create<AppState>()(
       setSaleStatus: (movementId, status) =>
         set((state) => {
           const movement = state.movements.find((m) => m.id === movementId)
-          if (!movement || movement.type !== 'out' || movement.deletedAt || movement.cancelled || movement.saleStatus === status) return state
+          if (
+            !movement ||
+            movement.type !== 'out' ||
+            movement.deletedAt ||
+            movement.cancelled ||
+            movement.saleStatus === status ||
+            movement.approvalStatus === 'pending' ||
+            movement.approvalStatus === 'rejected'
+          )
+            return state
           const product = state.products.find((p) => p.id === movement.productId)
           const changes = diffFields('movement', { saleStatus: movement.saleStatus }, { saleStatus: status })
           return {
@@ -728,6 +804,12 @@ export const useStore = create<AppState>()(
         if (!movement) return { ok: false, reason: 'not-found' }
         if (movement.type !== 'out') return { ok: false, reason: 'not-a-sale' }
         if (movement.cancelled) return { ok: false, reason: 'already-cancelled' }
+        // A jóváhagyásra váró/elutasított kiszállítás sosem érintette
+        // ténylegesen a készletet - "visszavonni" nincs mit, egyszerű
+        // törlés (deleteMovement) elég neki, lásd ott.
+        if (movement.approvalStatus === 'pending' || movement.approvalStatus === 'rejected') {
+          return { ok: false, reason: 'not-approved' }
+        }
 
         const product = get().products.find((p) => p.id === movement.productId)
         // A cash/walk-in sale (no tracked customer) is always treated as
@@ -774,6 +856,28 @@ export const useStore = create<AppState>()(
         if (!movement) return
         const product = get().products.find((p) => p.id === movement.productId)
         const label = `${product?.name ?? 'Törölt termék'} (${movement.quantity} db)`
+
+        // A még jóvá nem hagyott (vagy elutasított) tétel sosem érintette
+        // ténylegesen a készletet/FIFO-tételeket - egyszerű törlés elég neki,
+        // jóváhagyás vagy a zárt-napos korrekciós szabály nélkül is (lásd
+        // Movement.approvalStatus). A `mode` paramétert ez a normál eset
+        // felülírja, mert itt nincs mit "korrigálni".
+        if (movement.approvalStatus === 'pending' || movement.approvalStatus === 'rejected') {
+          set((state) => ({
+            movements: state.movements.map((m) => (m.id === id ? { ...m, deletedAt: new Date().toISOString() } : m)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry(
+                'movement',
+                id,
+                label,
+                'delete',
+                `Még jóvá nem hagyott tétel törölve (${movement.type === 'in' ? 'beszerzési rendelés' : 'kiszállítás'})`,
+              ),
+            ],
+          }))
+          return
+        }
 
         // Once a day has a napi zárás (in any status), its movements can no
         // longer be freely soft-deleted at the location level - only the
@@ -831,7 +935,11 @@ export const useStore = create<AppState>()(
           const movement = state.movements.find((m) => m.id === id)
           if (!movement || !movement.deletedAt) return state
           const product = state.products.find((p) => p.id === movement.productId)
-          const reapplyDelta = movement.type === 'in' ? movement.quantity : -movement.quantity
+          // A pending/rejected mozgás törlésekor (lásd deleteMovement) sosem
+          // volt tényleges készlethatása - visszaállításkor sem szabad hát
+          // ismét hozzáadni/levonni semmit, csak a deletedAt-et törölni.
+          const wasNeverApplied = movement.approvalStatus === 'pending' || movement.approvalStatus === 'rejected'
+          const reapplyDelta = wasNeverApplied ? 0 : movement.type === 'in' ? movement.quantity : -movement.quantity
           return {
             movements: state.movements.map((m) => (m.id === id ? { ...m, deletedAt: undefined } : m)),
             lots: movement.type === 'in' ? state.lots.map((l) => (l.movementId === id ? { ...l, deletedAt: undefined } : l)) : state.lots,
@@ -842,6 +950,270 @@ export const useStore = create<AppState>()(
             ],
           }
         }),
+
+      createPendingPurchaseOrder: (input) => {
+        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent } = input
+        if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+        if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) return { ok: false, reason: 'invalid-quantity' }
+        if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) return { ok: false, reason: 'invalid-quantity' }
+        const enteringPrice = unitPrice !== undefined
+        const orderCurrency: Currency = enteringPrice ? (currency ?? 'HUF') : 'HUF'
+        if (enteringPrice && orderCurrency !== 'HUF' && (!Number.isFinite(exchangeRate) || (exchangeRate ?? 0) <= 0)) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        const product = get().products.find((p) => p.id === productId)
+        if (!product) return { ok: false, reason: 'product-not-found' }
+
+        const movementId = createId()
+        const label = `${product.name} (${quantity} ${product.unit})`
+        set((state) => ({
+          movements: [
+            ...state.movements,
+            {
+              id: movementId,
+              productId,
+              locationId: product.locationId,
+              date,
+              type: 'in',
+              quantity,
+              orderedQuantity: quantity,
+              note: note?.trim() || undefined,
+              createdAt: new Date().toISOString(),
+              unitPrice,
+              shippingCost,
+              currency: enteringPrice && orderCurrency !== 'HUF' ? orderCurrency : undefined,
+              exchangeRate: enteringPrice && orderCurrency !== 'HUF' ? exchangeRate : undefined,
+              vatRatePercent,
+              approvalStatus: 'pending',
+            },
+          ],
+          auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Rendelés leadva - ${label}`)],
+        }))
+        return { ok: true }
+      },
+
+      approvePurchaseOrder: (id, actualQuantity, discrepancyNote) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (movement.type !== 'in' || movement.approvalStatus !== 'pending') return { ok: false, reason: 'not-pending' }
+        const finalQuantity = actualQuantity ?? movement.quantity
+        if (!Number.isFinite(finalQuantity) || finalQuantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+
+        const product = get().products.find((p) => p.id === movement.productId)
+        if (!product) return { ok: false, reason: 'not-found' }
+
+        const { costingMethod } = get().settings
+        const lotCurrency: Currency = movement.currency ?? 'HUF'
+        const lotExchangeRate = movement.exchangeRate ?? 1
+        const effectiveUnitPrice = movement.unitPrice ?? product.purchasePrice
+        const effectiveShipping = movement.shippingCost ?? 0
+        const vatRatePercent = movement.vatRatePercent
+        const vatReclaimable = vatRatePercent !== undefined ? true : undefined
+        const batchUnitCost = lotUnitCost({
+          unitPrice: effectiveUnitPrice,
+          shippingCost: effectiveShipping,
+          quantity: finalQuantity,
+          exchangeRate: lotExchangeRate,
+          vatRatePercent,
+          vatReclaimable,
+        })
+
+        const newLot: PurchaseLot = {
+          id: createId(),
+          productId: movement.productId,
+          movementId: movement.id,
+          date: movement.date,
+          quantity: finalQuantity,
+          remainingQuantity: finalQuantity,
+          unitPrice: effectiveUnitPrice,
+          shippingCost: effectiveShipping,
+          currency: lotCurrency,
+          exchangeRate: lotExchangeRate,
+          createdAt: new Date().toISOString(),
+          vatRatePercent,
+          vatReclaimable,
+        }
+
+        const nextPurchasePrice =
+          costingMethod === 'average'
+            ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, finalQuantity, batchUnitCost)
+            : Math.round(batchUnitCost * 100) / 100
+
+        const quantityMismatch = finalQuantity !== movement.quantity
+        const finalNote =
+          discrepancyNote?.trim() || (quantityMismatch ? `Eltérés: ${movement.quantity} helyett ${finalQuantity} érkezett.` : undefined)
+
+        const now = new Date().toISOString()
+        const label = `${product.name} (${finalQuantity} ${product.unit})`
+        const affectedClosing = get().dailyClosings.find((c) => c.locationId === movement.locationId && c.date === movement.date)
+
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === product.id ? { ...p, currentStock: p.currentStock + finalQuantity, purchasePrice: nextPurchasePrice, updatedAt: now } : p,
+          ),
+          lots: [...state.lots, newLot],
+          movements: state.movements.map((m) =>
+            m.id === id
+              ? { ...m, quantity: finalQuantity, vatRatePercent: undefined, approvalStatus: 'approved', approvedAt: now, discrepancyNote: finalNote }
+              : m,
+          ),
+          dailyClosings: flagClosingModified(state.dailyClosings, movement.locationId, movement.date),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', id, label, 'update', `Beérkezés jóváhagyva - ${label}${finalNote ? ` (${finalNote})` : ''}`),
+            ...(affectedClosing
+              ? [
+                  auditEntry(
+                    'dailyClosing',
+                    affectedClosing.id,
+                    `${movement.date} - napi zárás`,
+                    'update',
+                    `A(z) ${movement.date} napi zárás módosult egy utólagos jóváhagyás miatt (${label})`,
+                  ),
+                ]
+              : []),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      createPendingSalePrep: (input) => {
+        const { productId, quantity, date, customerId, note } = input
+        if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+        const product = get().products.find((p) => p.id === productId)
+        if (!product) return { ok: false, reason: 'product-not-found' }
+
+        const movementId = createId()
+        const label = `${product.name} (${quantity} ${product.unit})`
+        set((state) => ({
+          movements: [
+            ...state.movements,
+            {
+              id: movementId,
+              productId,
+              locationId: product.locationId,
+              date,
+              type: 'out',
+              quantity,
+              note: note?.trim() || undefined,
+              createdAt: new Date().toISOString(),
+              customerId,
+              approvalStatus: 'pending',
+            },
+          ],
+          auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Kiszállítás előkészítve - ${label}`)],
+        }))
+        return { ok: true }
+      },
+
+      approveSalePrep: (id, input, opts) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (movement.type !== 'out' || movement.approvalStatus !== 'pending') return { ok: false, reason: 'not-pending' }
+        const product = get().products.find((p) => p.id === movement.productId)
+        if (!product) return { ok: false, reason: 'not-found' }
+
+        const resultingStock = product.currentStock - movement.quantity
+        if (resultingStock < 0 && !opts?.allowNegativeStock) {
+          return { ok: false, reason: 'insufficient-stock', resultingStock }
+        }
+
+        const { costingMethod } = get().settings
+        const fifoResult = consumeFifo(get().lots, movement.productId, movement.quantity, product.purchasePrice)
+        const movementUnitCost = Math.round((costingMethod === 'fifo' ? fifoResult.unitCost : product.purchasePrice) * 100) / 100
+
+        const vatRatePercent = input?.vatRatePercent
+        const isPaid = movement.customerId ? (input?.isPaid ?? true) : undefined
+        const now = new Date().toISOString()
+        const label = `${product.name} (${movement.quantity} ${product.unit})`
+        const affectedClosing = get().dailyClosings.find((c) => c.locationId === movement.locationId && c.date === movement.date)
+
+        set((state) => ({
+          products: state.products.map((p) => (p.id === product.id ? { ...p, currentStock: resultingStock } : p)),
+          lots: fifoResult.updatedLots,
+          movements: state.movements.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  unitCost: movementUnitCost,
+                  saleUnitPrice: product.salePrice,
+                  isPaid,
+                  vatRatePercent,
+                  saleStatus: 'pending',
+                  saleStatusChangedAt: now,
+                  approvalStatus: 'approved',
+                  approvedAt: now,
+                }
+              : m,
+          ),
+          dailyClosings: flagClosingModified(state.dailyClosings, movement.locationId, movement.date),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', id, label, 'update', `Kiszállítás jóváhagyva - ${label}`),
+            ...(affectedClosing
+              ? [
+                  auditEntry(
+                    'dailyClosing',
+                    affectedClosing.id,
+                    `${movement.date} - napi zárás`,
+                    'update',
+                    `A(z) ${movement.date} napi zárás módosult egy utólagos jóváhagyás miatt (${label})`,
+                  ),
+                ]
+              : []),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      rejectSalePrep: (id, reason) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (movement.type !== 'out' || movement.approvalStatus !== 'pending') return { ok: false, reason: 'not-pending' }
+        const product = get().products.find((p) => p.id === movement.productId)
+        const label = `${product?.name ?? 'Törölt termék'} (${movement.quantity} ${product?.unit ?? 'db'})`
+        const now = new Date().toISOString()
+        const trimmedReason = reason?.trim() || undefined
+        set((state) => ({
+          movements: state.movements.map((m) =>
+            m.id === id ? { ...m, approvalStatus: 'rejected', rejectedAt: now, rejectReason: trimmedReason } : m,
+          ),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', id, label, 'update', `Kiszállítás elutasítva - ${label}${trimmedReason ? ` (${trimmedReason})` : ''}`),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      resubmitPendingMovement: (id, updates) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (movement.approvalStatus !== 'pending' && movement.approvalStatus !== 'rejected') return { ok: false, reason: 'not-editable' }
+        if (updates.quantity !== undefined && (!Number.isFinite(updates.quantity) || updates.quantity <= 0)) {
+          return { ok: false, reason: 'invalid-quantity' }
+        }
+        const product = get().products.find((p) => p.id === movement.productId)
+        const label = `${product?.name ?? 'Törölt termék'} (${updates.quantity ?? movement.quantity} ${product?.unit ?? 'db'})`
+        set((state) => ({
+          movements: state.movements.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  quantity: updates.quantity ?? m.quantity,
+                  orderedQuantity: m.type === 'in' ? (updates.quantity ?? m.orderedQuantity) : m.orderedQuantity,
+                  customerId: updates.customerId !== undefined ? updates.customerId : m.customerId,
+                  note: updates.note !== undefined ? updates.note.trim() || undefined : m.note,
+                  approvalStatus: 'pending',
+                  rejectedAt: undefined,
+                  rejectReason: undefined,
+                }
+              : m,
+          ),
+          auditLog: [...state.auditLog, auditEntry('movement', id, label, 'update', `Tétel javítva és újra beküldve jóváhagyásra - ${label}`)],
+        }))
+        return { ok: true }
+      },
 
       submitDailyClosing: (locationId, date) => {
         const location = get().locations.find((l) => l.id === locationId)

@@ -20,7 +20,7 @@ import {
 import { computePayableObligations, type PayableObligation } from '../lib/payables'
 import { computeMissingClosings, type MissingClosingAlert } from '../lib/dailyClosing'
 import { todayISO } from '../lib/dates'
-import type { Product } from '../types'
+import type { Movement, Product } from '../types'
 
 export interface ProductAlertInfo {
   product: Product
@@ -47,6 +47,12 @@ export interface AlertsData {
   /** Locations that had movement activity on a day but never submitted a
    * napi zárás for it - see computeMissingClosings. */
   missingClosings: MissingClosingAlert[]
+  /** Kétlépcsős jóváhagyás (lásd DOCUMENTATION.md 15. fejezet) - ezek NEM
+   * irodai-only adatok, szándékosan mindkét szerepkörnek látszanak (a
+   * raktáros pont ezekre vár/ezeket küldte be, nem elrejteni kell előle). */
+  pendingPurchaseApprovals: Movement[]
+  pendingSaleApprovals: Movement[]
+  rejectedSales: Movement[]
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -93,6 +99,11 @@ export function useAlerts(): AlertsData {
     const openSales = isWarehouseUser ? [] : computeOpenSales(movements, products, customers)
     const missingClosings = computeMissingClosings(locations, movements, dailyClosings, settings.missingClosingGraceDays, todayISO())
 
+    const activeMovements = movements.filter((m) => !m.deletedAt)
+    const pendingPurchaseApprovals = activeMovements.filter((m) => m.type === 'in' && m.approvalStatus === 'pending')
+    const pendingSaleApprovals = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'pending')
+    const rejectedSales = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'rejected')
+
     return {
       byProductId,
       all,
@@ -106,6 +117,9 @@ export function useAlerts(): AlertsData {
       urgentPayables,
       openSales,
       missingClosings,
+      pendingPurchaseApprovals,
+      pendingSaleApprovals,
+      rejectedSales,
     }
   }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser])
 }

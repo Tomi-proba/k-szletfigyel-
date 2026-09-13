@@ -223,7 +223,13 @@ export function Layout() {
     alerts.transferSuggestions.length +
     alerts.unpaidSales.length +
     alerts.urgentPayables.length +
-    alerts.openSales.length
+    alerts.openSales.length +
+    // A raktáros elsősorban a saját beadott/rá váró jóváhagyásait látja itt
+    // (lásd DOCUMENTATION.md 15. fejezet); iroda az irodát terhelő
+    // kiszállítás-jóváhagyásokat is beleszámolja.
+    alerts.pendingPurchaseApprovals.length +
+    alerts.pendingSaleApprovals.length +
+    alerts.rejectedSales.length
   const location = useLocation()
   const isDashboard = location.pathname === '/'
   const currentGroupKey = activeGroupKey(navGroups, location.pathname, location.search)

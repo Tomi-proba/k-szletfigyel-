@@ -374,7 +374,17 @@ create table if not exists public.movements (
   cancelled_at timestamptz,
   cancel_reason text,
   corrects_movement_id uuid,
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  -- Kétlépcsős jóváhagyási munkafolyamat (iroda <-> raktár) - lásd
+  -- DOCUMENTATION.md 15. fejezet. NULL = már véglegesített (ugyanaz, mint
+  -- 'approved') - minden, e funkció előtt rögzített mozgás így marad
+  -- értelmezhető változtatás nélkül.
+  approval_status text check (approval_status in ('pending', 'approved', 'rejected')),
+  ordered_quantity numeric,
+  discrepancy_note text,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  reject_reason text
 );
 
 create index if not exists movements_company_id_idx on public.movements (company_id);

@@ -165,6 +165,12 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     cancelReason: (row.cancel_reason as string | null) ?? undefined,
     correctsMovementId: (row.corrects_movement_id as string | null) ?? undefined,
     deletedAt: (row.deleted_at as string | null) ?? undefined,
+    approvalStatus: (row.approval_status as Movement['approvalStatus']) ?? undefined,
+    orderedQuantity: row.ordered_quantity === null || row.ordered_quantity === undefined ? undefined : Number(row.ordered_quantity),
+    discrepancyNote: (row.discrepancy_note as string | null) ?? undefined,
+    approvedAt: (row.approved_at as string | null) ?? undefined,
+    rejectedAt: (row.rejected_at as string | null) ?? undefined,
+    rejectReason: (row.reject_reason as string | null) ?? undefined,
   }
 }
 function movementToRow(companyId: string, m: Movement) {
@@ -194,6 +200,12 @@ function movementToRow(companyId: string, m: Movement) {
     cancel_reason: m.cancelReason ?? null,
     corrects_movement_id: m.correctsMovementId ?? null,
     deleted_at: m.deletedAt ?? null,
+    approval_status: m.approvalStatus ?? null,
+    ordered_quantity: m.orderedQuantity ?? null,
+    discrepancy_note: m.discrepancyNote ?? null,
+    approved_at: m.approvedAt ?? null,
+    rejected_at: m.rejectedAt ?? null,
+    reject_reason: m.rejectReason ?? null,
   }
 }
 

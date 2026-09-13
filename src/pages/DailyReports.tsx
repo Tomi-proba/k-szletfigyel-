@@ -2,12 +2,13 @@
 // zárás in one place, grouped by location, with view/approve actions and
 // the same missing-closing alert that also shows up on the Riasztások page
 // (see useAlerts - one shared computation, not a separate channel).
-import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, FileText } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Eye, FileSpreadsheet, FileText } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { useAlerts } from '../hooks/useAlerts'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
+import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import type { DailyClosing, DailyClosingStatus } from '../types'
 import { Modal } from '../components/Modal'
 import { Button, Card, EmptyState, PageHeader, Select, Input } from '../components/ui'
@@ -38,6 +39,8 @@ interface ReportRow {
 
 export function DailyReports() {
   const locations = useStore((s) => s.locations)
+  const products = useStore((s) => s.products)
+  const movements = useStore((s) => s.movements)
   const dailyClosings = useStore((s) => s.dailyClosings)
   const markDailyClosingViewed = useStore((s) => s.markDailyClosingViewed)
   const approveDailyClosing = useStore((s) => s.approveDailyClosing)
@@ -45,6 +48,24 @@ export function DailyReports() {
 
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
   const activeLocations = useMemo(() => locations.filter((l) => !l.deletedAt), [locations])
+
+  // Élő, MÉG NEM VÉGLEGESÍTETT állapot a mai napra, telephelyenként - mivel
+  // egy telephely naponta csak egyszer küld napi zárást, eddig az iroda
+  // teljesen vakon lett volna a nap közben rögzített mozgásokra nézve. Ez a
+  // pontosan ugyanazt a `buildDailyClosingSummary`-t hívja, amit a raktár
+  // oldali "Napi zárás" előnézete is használ (`pages/DailyClosing.tsx`),
+  // úgyhogy a két nézet sosem térhet el egymástól - és mivel `movements`
+  // reaktívan van olvasva a store-ból, ez a szakasz magától frissül, amint
+  // a raktáros rögzít valamit (cross-tab esetén a storage-event-alapú
+  // rehidrálás miatt is - lásd App.tsx).
+  const today = todayISO()
+  const inProgressToday = useMemo(() => {
+    const closedLocationIds = new Set(dailyClosings.filter((c) => c.date === today).map((c) => c.locationId))
+    return activeLocations
+      .filter((l) => !closedLocationIds.has(l.id))
+      .map((l) => ({ location: l, summary: buildDailyClosingSummary(movements, products, l.id, today) }))
+      .filter((r) => r.summary.inCount > 0 || r.summary.outCount > 0)
+  }, [activeLocations, dailyClosings, movements, products, today])
 
   const { from, to, setFrom, setTo } = usePersistedDateRange('keszletfigyelo-napi-jelentesek-daterange', () => ({
     from: isoDaysAgo(30),
@@ -114,6 +135,30 @@ export function DailyReports() {
           </>
         }
       />
+
+      {inProgressToday.length > 0 && (
+        <Card className="mb-5 border-l-4 border-l-[var(--color-primary)]">
+          <div className="mb-2 flex items-center gap-2">
+            <Clock size={18} className="text-[var(--color-primary)]" />
+            <h2 className="text-base font-semibold text-[var(--color-text)]">Folyamatban - mai nap (még nincs lezárva)</h2>
+          </div>
+          <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+            Élő állapot, még nem véglegesített napi zárás - a számok a raktáros rögzítésével együtt frissülnek, jóváhagyás itt nem
+            lehetséges, amíg a telephely el nem küldi a zárást.
+          </p>
+          <ul className="divide-y divide-[var(--color-border)]">
+            {inProgressToday.map(({ location, summary }) => (
+              <li key={location.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <span className="text-[var(--color-text)]">{location.name}</span>
+                <span className="whitespace-nowrap">
+                  <span className="text-[var(--color-success)]">{formatNumber(summary.inCount)} be</span> /{' '}
+                  <span className="text-[var(--color-danger)]">{formatNumber(summary.outCount)} ki</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {alerts.missingClosings.length > 0 && (
         <Card className="mb-5 border-l-4 border-l-[var(--color-danger)]">

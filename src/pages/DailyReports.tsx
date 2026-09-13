@@ -8,8 +8,8 @@ import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { useAlerts } from '../hooks/useAlerts'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
-import { buildDailyClosingSummary } from '../lib/dailyClosing'
-import type { DailyClosing, DailyClosingStatus } from '../types'
+import { buildDailyClosingSummary, type DailyClosingSummary } from '../lib/dailyClosing'
+import type { DailyClosing, DailyClosingStatus, Location } from '../types'
 import { Modal } from '../components/Modal'
 import { Button, Card, EmptyState, PageHeader, Select, Input } from '../components/ui'
 import { formatDate, formatDateTime, formatNumber } from '../lib/format'
@@ -74,6 +74,7 @@ export function DailyReports() {
   const [locationFilter, setLocationFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | DailyClosingStatus>('')
   const [detail, setDetail] = useState<DailyClosing | null>(null)
+  const [inProgressDetail, setInProgressDetail] = useState<{ location: Location; summary: DailyClosingSummary } | null>(null)
 
   const filtered = useMemo(
     () =>
@@ -148,12 +149,19 @@ export function DailyReports() {
           </p>
           <ul className="divide-y divide-[var(--color-border)]">
             {inProgressToday.map(({ location, summary }) => (
-              <li key={location.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <span className="text-[var(--color-text)]">{location.name}</span>
-                <span className="whitespace-nowrap">
-                  <span className="text-[var(--color-success)]">{formatNumber(summary.inCount)} be</span> /{' '}
-                  <span className="text-[var(--color-danger)]">{formatNumber(summary.outCount)} ki</span>
-                </span>
+              <li key={location.id}>
+                <button
+                  type="button"
+                  onClick={() => setInProgressDetail({ location, summary })}
+                  className="flex w-full items-center justify-between gap-2 py-2 text-left text-sm hover:bg-black/5"
+                >
+                  <span className="text-[var(--color-text)]">{location.name}</span>
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="text-[var(--color-success)]">{formatNumber(summary.inCount)} be</span> /{' '}
+                    <span className="text-[var(--color-danger)]">{formatNumber(summary.outCount)} ki</span>
+                    <Eye size={14} className="text-[var(--color-text-muted)]" />
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
@@ -341,6 +349,62 @@ export function DailyReports() {
                 <CheckCircle2 size={16} /> Jóváhagyás
               </Button>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {inProgressDetail && (
+        <Modal title={`${inProgressDetail.location.name} - ${formatDate(today)}`} onClose={() => setInProgressDetail(null)}>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-[var(--color-info-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)]">
+              Folyamatban, még nincs lezárva
+            </span>
+          </div>
+          <div className="mb-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-[var(--color-text-muted)]">Bejövő tételek</div>
+              <div className="font-semibold text-[var(--color-success)]">{formatNumber(inProgressDetail.summary.inCount)}</div>
+            </div>
+            <div>
+              <div className="text-[var(--color-text-muted)]">Kimenő tételek</div>
+              <div className="font-semibold text-[var(--color-danger)]">{formatNumber(inProgressDetail.summary.outCount)}</div>
+            </div>
+          </div>
+          {inProgressDetail.summary.productBreakdown.length === 0 ? (
+            <EmptyState>Nincs termékenkénti tétel a mai napra.</EmptyState>
+          ) : (
+            <div className="mb-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                    <th className="py-2 pr-4 font-medium">Termék</th>
+                    <th className="py-2 pr-4 text-right font-medium">Bejövő</th>
+                    <th className="py-2 text-right font-medium">Kimenő</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inProgressDetail.summary.productBreakdown.map((r) => (
+                    <tr key={r.productId} className="border-b border-[var(--color-border)] last:border-b-0">
+                      <td className="py-2 pr-4">{r.productName}</td>
+                      <td className="py-2 pr-4 text-right text-[var(--color-success)]">
+                        {r.inQuantity > 0 ? `${formatNumber(r.inQuantity)} ${r.unit}` : '—'}
+                      </td>
+                      <td className="py-2 text-right text-[var(--color-danger)]">
+                        {r.outQuantity > 0 ? `${formatNumber(r.outQuantity)} ${r.unit}` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mb-4 text-xs text-[var(--color-text-muted)]">
+            Jóváhagyás itt nem lehetséges - ez élő előnézet, a telephely még nem küldte el a napi zárást.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setInProgressDetail(null)}>
+              Bezárás
+            </Button>
           </div>
         </Modal>
       )}

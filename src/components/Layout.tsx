@@ -368,6 +368,12 @@ export function Layout() {
         )}
 
         <main className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 md:pb-10">
+          {!isSupabaseConfigured && isWarehouseUser && (
+            <div className="mb-5 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-info-bg)] p-3 text-sm text-[var(--color-primary)]">
+              DEMO MÓD: ideiglenes "raktáros" nézet-szimuláció (`?demo_szerepkor=raktaros`), Supabase-bejelentkezés nélkül - ez nem valódi
+              jogosultság-ellenőrzés, csak a felület kipróbálásához. Töröld ezt a szakaszt, ha már nincs rá szükség.
+            </div>
+          )}
           {isReadOnly && (
             <div className="mb-5 flex items-start gap-2 rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
               <AlertTriangle size={18} className="mt-0.5 shrink-0" />

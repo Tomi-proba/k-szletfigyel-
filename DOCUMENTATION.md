@@ -653,7 +653,24 @@ A raktáros mozgást (akár a 15. fejezet jóváhagyási workflow-ján, akár a 
 
 ---
 
-## 17. Hol keressem, ha...
+## 17. TEMP: `?demo_szerepkor=` - ideiglenes szerepkör-szimuláció Supabase nélkül
+
+> **Ez egy átmeneti, kifejezetten a fejlesztés/tesztelés megkönnyítésére szánt réteg, NEM biztonsági funkció.** Törölhető, amint valódi Supabase-projekt van bekötve, és onnantól nincs is hatása.
+
+Amíg nincs élesben Supabase-projekt (12. fejezet), a raktáros/iroda szerepkör-szétválasztás és a 15. fejezetbeli jóváhagyási workflow kipróbálásához nem kell bejelentkezés - egy query parammal szimulálható:
+
+- `https://<a-deploy-url>/?demo_szerepkor=iroda#/` - teljes hozzáférésű nézet.
+- `https://<a-deploy-url>/?demo_szerepkor=raktaros#/` - korlátozott, raktáros nézet, jól látható "DEMO MÓD" sávval a tetején.
+
+**Fontos, hogy a paramétert a `#` ELÉ kell írni**, ugyanúgy, mint a jelszó-visszaállítás `?code=` vagy a meghívó `?meghivo=` paraméterét (11.1, 12.3) - a `HashRouter` mindent a `#` UTÁN route-ként értelmez.
+
+Működés (`hooks/useAuth.tsx` `readDemoRole`): a paraméter csak akkor olvasódik ki, ha `isSupabaseConfigured` `false` - tehát valódi Supabase-bejelentkezés mellett ennek a paraméternek soha nincs hatása, nem gyengítheti a valódi RLS-alapú védelmet. `RoleGate` és minden `isWarehouseUser`-t használó oldal az így kapott `effectiveRole`-t nézi, pontosan úgy, mintha valódi `profile.role` lenne.
+
+**Két fül, közös adat**: mivel demo módban nincs Supabase, mindkét "szerepkör" ugyanazt a böngésző `localStorage`-át olvassa - ha a KÉT URL-t ugyanabban a böngészőben, két külön fülön nyitod meg, mindkettő ugyanazt az üzleti adatot látja (csak más-más szűréssel/jogosultsággal). Egy `App.tsx`-beli `storage` esemény-figyelő gondoskodik róla, hogy amit az egyik fülön csinálsz (pl. rendelés leadása), a másik fülön (frissítés/navigálás után) megjelenjen - ez a fül-közti szinkron nem csak a demóhoz hasznos, a valódi, egy-eszközös, több-fülös használatot is javítja.
+
+---
+
+## 18. Hol keressem, ha...
 
 | Kérdés | Fájl |
 |---|---|

@@ -6,20 +6,17 @@
 // the first place.
 import type { ReactNode } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { isSupabaseConfigured } from '../lib/supabase'
 import type { UserRole } from '../types/auth'
 import { EmptyState, PageHeader } from './ui'
 
 export function RoleGate({ roles, children }: { roles: UserRole[]; children: ReactNode }) {
-  const { profile } = useAuth()
+  const { effectiveRole } = useAuth()
 
-  // The raktáros/iroda role split only exists once the SaaS/multi-user layer
-  // is active. The single-tenant app (Supabase not configured - the current
-  // unconfigured web deploy, or the Electron desktop build) has no concept
-  // of roles at all, so it keeps showing everything, exactly as before this
-  // feature existed.
-  if (!isSupabaseConfigured) return <>{children}</>
-  if (!profile || roles.includes(profile.role)) return <>{children}</>
+  // No role at all (no Supabase configured and no "?demo_szerepkor=" - see
+  // useAuth.tsx readDemoRole - or Supabase configured but the profile
+  // hasn't loaded yet) means the raktáros/iroda split doesn't apply here,
+  // so everything stays visible, exactly as before this feature existed.
+  if (!effectiveRole || roles.includes(effectiveRole)) return <>{children}</>
 
   return (
     <div>

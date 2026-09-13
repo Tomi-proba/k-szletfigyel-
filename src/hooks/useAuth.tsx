@@ -5,11 +5,24 @@
 // subscription state layered on top.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
-import { mapCompanyRow, mapProfileRow, type Company, type Profile } from '../types/auth'
+import { mapCompanyRow, mapProfileRow, type Company, type Profile, type UserRole } from '../types/auth'
 import { emptyBusinessSlices, fetchBusinessData } from '../lib/remoteSync'
 import { hydrateFromRemote, resetToLocalMode } from '../store/useStore'
+
+/** TEMP DEMO HOOK - a Supabase nélküli, ideiglenes szerepkör-szimulációhoz
+ * (két böngészőfül, ugyanaz a localStorage, más-más "?demo_szerepkor="
+ * paraméter), amíg nincs élesben Supabase-projekt bekötve a teszteléshez.
+ * Szándékosan CSAK akkor él, ha `isSupabaseConfigured` false - így valódi
+ * Supabase-bejelentkezés mellett semmilyen hatása nincs, és sosem gyengíti
+ * a valódi (RLS-alapú) jogosultság-ellenőrzést. Törölhető, ha már nincs rá
+ * szükség - lásd DOCUMENTATION.md 17. fejezet. */
+function readDemoRole(): UserRole | null {
+  if (isSupabaseConfigured || typeof window === 'undefined') return null
+  const value = new URLSearchParams(window.location.search).get('demo_szerepkor')
+  return value === 'raktaros' || value === 'iroda' ? value : null
+}
 
 interface AuthResult {
   error: string | null
@@ -21,10 +34,16 @@ interface AuthContextValue {
   profile: Profile | null
   company: Company | null
   isReadOnly: boolean
-  /** True once profile.role === 'raktaros' - the restricted, single-location
-   * warehouse view. See DOCUMENTATION.md 14. fejezet for what this does and
-   * doesn't restrict. */
+  /** True once profile.role === 'raktaros' (or, temporarily, the
+   * `?demo_szerepkor=raktaros` override - see readDemoRole above) - the
+   * restricted, single-location warehouse view. See DOCUMENTATION.md 14.
+   * fejezet for what this does and doesn't restrict. */
   isWarehouseUser: boolean
+  /** profile?.role when Supabase is configured, the `?demo_szerepkor=`
+   * override otherwise, null if neither applies. RoleGate reads this so
+   * the same demo override also gates full pages, not just isWarehouseUser
+   * checks inside them. */
+  effectiveRole: UserRole | null
   /** companyName is only used for a brand-new company (no inviteToken).
    * When inviteToken is set, the account joins that invite's existing
    * company/role/location instead - see handle_new_user() in schema.sql. */
@@ -193,7 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [company, refreshCompany])
 
   const isReadOnly = useMemo(() => computeIsReadOnly(company), [company])
-  const isWarehouseUser = profile?.role === 'raktaros'
+  const effectiveRole: UserRole | null = profile?.role ?? readDemoRole()
+  const isWarehouseUser = effectiveRole === 'raktaros'
 
   const value: AuthContextValue = {
     loading,
@@ -202,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     company,
     isReadOnly,
     isWarehouseUser,
+    effectiveRole,
     signUp,
     signIn,
     signOut,

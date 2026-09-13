@@ -641,7 +641,19 @@ A specifikáció explicit kérte, hogy egy jóváhagyásra váró kimenő tétel
 
 ---
 
-## 16. Hol keressem, ha...
+## 16. Csak iroda hozhat létre új terméktörzsadatot
+
+A raktáros mozgást (akár a 15. fejezet jóváhagyási workflow-ján, akár a közvetlen `MovementForm`-on keresztül) kizárólag már létező, iroda által felvitt termékhez rögzíthet - új termék "menet közbeni" létrehozására sehol nincs felület. Három, egymástól független szinten van kikényszerítve:
+
+1. **Felület**: `pages/Products.tsx` az "Új termék" gombot (és vele a létrehozó `ProductForm` modal teljes elérési útját) `!isWarehouseUser` mögé rejti - raktáros szerepkörben a `creating` állapot sehonnan nem állítható be.
+2. **Nincs inline létrehozás a mozgásrögzítő űrlapokon**: `components/ProductPicker.tsx` (amit `MovementForm`/`PurchaseOrderForm`/`SalePrepForm` egyaránt használ termékválasztásra) kizárólag a már meglévő `products` tömbből keres/választ - nincs "új termék" opciója. Az `addProduct` store-akciót az egész kódbázisban egyedül a `ProductForm` hívja, ami viszont csak az 1. ponton leírt, elrejtett úton érhető el.
+3. **Adatréteg** (a valódi, megkerülhetetlen határ): a `products` táblán a Supabase RLS-ben (`supabase/schema.sql`) **nincs INSERT policy raktáros szerepkörre** - csak `"Iroda terméket létrehozhat"` létezik, `role = 'iroda'`-ra szűkítve. Egy raktáros felhasználó tehát adatbázis-szinten sem tudna terméket beszúrni, akkor sem, ha valahogy megkerülné a felületet. Emellett a `store/useStore.ts` `addProduct` akciója is védve van egy kliens-oldali `remoteRole` ellenőrzéssel (`state.dataMode === 'remote' && state.remoteRole === 'raktaros'` esetén no-op) - ez nem önmagában a biztonsági határ (azt az RLS adja), hanem azért kell, hogy a helyi (optimista) állapot sose térjen el attól, amit a szerver úgyis elutasítana.
+
+`remoteRole` (`store/useStore.ts` `AppState`) a `hooks/useAuth.tsx`-ből, a `hydrateFromRemote(companyId, slices, role)` hívással kerül be a store-ba bejelentkezéskor - `null` marad a helyi (nem Supabase-hez kötött) módban, ahol egyáltalán nincs szerepkör-fogalom.
+
+---
+
+## 17. Hol keressem, ha...
 
 | Kérdés | Fájl |
 |---|---|
@@ -664,3 +676,4 @@ A specifikáció explicit kérte, hogy egy jóváhagyásra váró kimenő tétel
 | "Hogyan kerül az üzleti adat Supabase-be?" | `lib/remoteSync.ts` (mapperek + fetch/upsert), `store/useStore.ts` `hydrateFromRemote`/a `set` wrapper - lásd 14.4 |
 | "Hogyan működik a beszerzés/eladás jóváhagyása?" | `Movement.approvalStatus` (`types/index.ts`), a jóváhagyási store-akciók (`store/useStore.ts`), `components/PurchaseOrderForm.tsx`/`ApprovePurchaseOrderModal.tsx`/`SalePrepForm.tsx`/`ApproveSaleModal.tsx`/`ResubmitSaleModal.tsx` - lásd 15. fejezet |
 | "Miért nem jelenik meg egy függő tétel a riasztásokban/ÁFA-ban/zárásban?" | `isActiveMovement` (`lib/alerts.ts`, `lib/dailyClosing.ts`) és a VAT-sor szűrők kizárják a `pending`/`rejected` mozgásokat - lásd 15.4 |
+| "Ki hozhat létre új terméket?" | Csak iroda - `pages/Products.tsx` (felület), `store/useStore.ts` `addProduct` (`remoteRole` guard), Supabase RLS (nincs raktáros INSERT policy a `products` táblán) - lásd 16. fejezet |

@@ -193,6 +193,15 @@ interface AppState {
    * way. Never set directly - see hydrateFromRemote/resetToLocalMode below. */
   dataMode: 'local' | 'remote'
   remoteCompanyId: string | null
+  /** The signed-in user's company role while in remote mode (null in local
+   * mode, where there's no role concept at all) - lets a handful of store
+   * actions (see addProduct) enforce a role restriction at the data layer
+   * itself, not just by hiding a button. The real, unbypassable boundary is
+   * still the Supabase RLS policy (no INSERT policy for raktáros on
+   * products - see supabase/schema.sql); this just keeps the local
+   * (optimistic) state from ever drifting out of sync with that by locally
+   * accepting a write the server would reject anyway. */
+  remoteRole: 'raktaros' | 'iroda' | null
 
   // Locations
   addLocation: (name: string) => void
@@ -287,6 +296,7 @@ export const useStore = create<AppState>()(
       settings: DEFAULT_SETTINGS,
       dataMode: 'local' as const,
       remoteCompanyId: null,
+      remoteRole: null,
 
       addLocation: (name) =>
         set((state) => {
@@ -425,6 +435,15 @@ export const useStore = create<AppState>()(
 
       addProduct: (input) =>
         set((state) => {
+          // Csak iroda hozhat létre új terméktörzsadatot - lásd
+          // DOCUMENTATION.md 16. fejezet. Products.tsx már elrejti ehhez a
+          // gombot raktáros elől, és a mozgásrögzítő űrlapok (ProductPicker)
+          // sosem engednek új terméket menet közben felvenni - ez a guard a
+          // store szintjén véd, hogy egy megkerült/direkt hívás se hozzon
+          // létre HELYI állapotot, amit a Supabase úgyis elutasítana (nincs
+          // INSERT policy raktárosnak a products táblán - a valódi,
+          // megkerülhetetlen határ ott van).
+          if (state.dataMode === 'remote' && state.remoteRole === 'raktaros') return state
           const now = new Date().toISOString()
           const product: Product = { ...input, id: createId(), createdAt: now, updatedAt: now }
           return {
@@ -1428,6 +1447,7 @@ export const useStore = create<AppState>()(
         ...state,
         dataMode: 'local' as const,
         remoteCompanyId: null,
+        remoteRole: null,
         ...(state.dataMode === 'remote'
           ? { locations: [], products: [], lots: [], movements: [], dailyClosings: [], auditLog: [] }
           : {}),
@@ -1441,10 +1461,11 @@ export const useStore = create<AppState>()(
  * company+profile become available - see hooks/useAuth.tsx. Uses
  * useStore.setState directly (bypassing the sync wrapper above) since this
  * is a download, not a local mutation that needs pushing back. */
-export function hydrateFromRemote(companyId: string, slices: BusinessSlices) {
+export function hydrateFromRemote(companyId: string, slices: BusinessSlices, role: 'raktaros' | 'iroda') {
   useStore.setState({
     dataMode: 'remote',
     remoteCompanyId: companyId,
+    remoteRole: role,
     locations: slices.locations,
     products: slices.products,
     lots: slices.lots,
@@ -1462,6 +1483,7 @@ export function resetToLocalMode() {
   useStore.setState({
     dataMode: 'local',
     remoteCompanyId: null,
+    remoteRole: null,
     locations: [],
     products: [],
     lots: [],

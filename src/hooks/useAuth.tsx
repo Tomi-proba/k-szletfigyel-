@@ -86,10 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // browser's local copy.
     try {
       const slices = await fetchBusinessData()
-      hydrateFromRemote(mappedProfile.companyId, slices)
+      hydrateFromRemote(mappedProfile.companyId, slices, mappedProfile.role)
     } catch (err) {
       console.error('[useAuth] failed to load business data from Supabase', err)
-      hydrateFromRemote(mappedProfile.companyId, emptyBusinessSlices)
+      hydrateFromRemote(mappedProfile.companyId, emptyBusinessSlices, mappedProfile.role)
     }
   }, [])
 

@@ -4,7 +4,7 @@
 // felhasználható, 7 napig érvényes token - lásd supabase/schema.sql
 // invites tábla + handle_new_user() trigger, és pages/auth/Register.tsx a
 // csatlakozás oldalán.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
@@ -23,7 +23,14 @@ interface CompanyUserRow {
 
 export function Team() {
   const { profile, company } = useAuth()
-  const locations = useStore((s) => s.locations.filter((l) => !l.deletedAt))
+  // A `.filter()`-t NEM szabad közvetlenül a Zustand selectorban hívni -
+  // az minden hívásnál új tömböt adna vissza, amit a React
+  // useSyncExternalStore (amire a Zustand épül) instabil pillanatképnek
+  // lát, és ez végtelen render-ciklust ("Maximum update depth exceeded",
+  // React error #185) okoz - pontosan ez történt élesben. A nyers tömböt
+  // kell kiolvasni, és a szűrést külön useMemo-ban elvégezni.
+  const allLocations = useStore((s) => s.locations)
+  const locations = useMemo(() => allLocations.filter((l) => !l.deletedAt), [allLocations])
 
   const [users, setUsers] = useState<CompanyUserRow[] | null>(null)
   const [invites, setInvites] = useState<Invite[] | null>(null)

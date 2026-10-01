@@ -177,6 +177,17 @@ create table if not exists public.locations (
 
 create index if not exists locations_company_id_idx on public.locations (company_id);
 
+-- A profiles tábla szerepkör/telephely-mezői ITT, a locations tábla
+-- létrehozása UTÁN kerülnek fel (az assigned_location_id erre hivatkozik
+-- idegen kulcsként), de MÉG A locations-RLS-SZABÁLYOK ELŐTT, mert azok már
+-- a profiles.role és profiles.assigned_location_id oszlopokra
+-- hivatkoznak - enélkül a sorrend nélkül a lenti CREATE POLICY
+-- "column profiles.role does not exist" hibával állna le.
+alter table public.profiles
+  add column if not exists role text not null default 'iroda' check (role in ('raktaros', 'iroda')),
+  add column if not exists assigned_location_id uuid references public.locations (id),
+  add column if not exists assigned_location_name text;
+
 alter table public.locations enable row level security;
 
 create policy "Iroda minden telephelyet lát" on public.locations
@@ -509,17 +520,15 @@ create policy "Bármelyik céges felhasználó naplózhat" on public.audit_log
     company_id in (select company_id from public.profiles where profiles.id = auth.uid())
   );
 
--- --- profiles: szerepkör + telephely-hozzárendelés ---------------------------
--- Nincs UPDATE policy a profiles táblán (lásd fentebb) - így sem a
--- raktáros, sem az iroda nem tudja saját magát/másokat direkt API-hívással
--- átállítani másik szerepkörre/telephelyre vagy admin jogra. Szerepkört és
--- telephelyet KIZÁRÓLAG a lentebbi handle_new_user() trigger állíthat be,
--- regisztrációkor (meghívó alapján), vagy az üzemeltető SQL-ből.
-
-alter table public.profiles
-  add column if not exists role text not null default 'iroda' check (role in ('raktaros', 'iroda')),
-  add column if not exists assigned_location_id uuid references public.locations (id),
-  add column if not exists assigned_location_name text;
+-- --- profiles: iroda látja a cége felhasználóit -----------------------------
+-- (A role/assigned_location_id/assigned_location_name oszlopok fentebb, a
+-- locations tábla létrehozása után kerültek fel - lásd az ottani
+-- megjegyzést. Nincs UPDATE policy a profiles táblán (lásd a fájl elején) -
+-- így sem a raktáros, sem az iroda nem tudja saját magát/másokat direkt
+-- API-hívással átállítani másik szerepkörre/telephelyre vagy admin jogra.
+-- Szerepkört és telephelyet KIZÁRÓLAG a lentebbi handle_new_user() trigger
+-- állíthat be, regisztrációkor (meghívó alapján), vagy az üzemeltető
+-- SQL-ből.)
 
 -- Iroda látja a saját cége összes felhasználóját (kell a Csapat oldalhoz,
 -- hogy lássa, mely raktáros melyik telephelyhez van rendelve) - a

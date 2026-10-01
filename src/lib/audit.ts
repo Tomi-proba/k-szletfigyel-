@@ -21,6 +21,7 @@ export const ENTITY_TYPE_LABELS: Record<AuditEntityType, string> = {
   supplier: 'Beszállító',
   location: 'Telephely',
   ledgerEntry: 'Napló tétel',
+  recurringLedgerEntry: 'Ismétlődő tétel',
   dailyClosing: 'Napi zárás',
 }
 
@@ -95,6 +96,19 @@ const FIELD_LABELS: Record<AuditEntityType, Record<string, string>> = {
     vatDirection: 'ÁFA irány',
     dueDate: 'Fizetési határidő',
     isPaid: 'Kifizetve',
+  },
+  recurringLedgerEntry: {
+    type: 'Típus',
+    category: 'Kategória',
+    description: 'Megnevezés',
+    amount: 'Összeg',
+    currency: 'Pénznem',
+    exchangeRate: 'Árfolyam',
+    note: 'Megjegyzés',
+    dayOfMonth: 'Hónap napja',
+    startDate: 'Kezdő dátum',
+    endDate: 'Végdátum',
+    active: 'Aktív',
   },
   dailyClosing: {
     status: 'Állapot',

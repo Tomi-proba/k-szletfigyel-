@@ -695,3 +695,16 @@ Működés (`hooks/useAuth.tsx` `readDemoRole`): a paraméter csak akkor olvasó
 | "Hogyan működik a beszerzés/eladás jóváhagyása?" | `Movement.approvalStatus` (`types/index.ts`), a jóváhagyási store-akciók (`store/useStore.ts`), `components/PurchaseOrderForm.tsx`/`ApprovePurchaseOrderModal.tsx`/`SalePrepForm.tsx`/`ApproveSaleModal.tsx`/`ResubmitSaleModal.tsx` - lásd 15. fejezet |
 | "Miért nem jelenik meg egy függő tétel a riasztásokban/ÁFA-ban/zárásban?" | `isActiveMovement` (`lib/alerts.ts`, `lib/dailyClosing.ts`) és a VAT-sor szűrők kizárják a `pending`/`rejected` mozgásokat - lásd 15.4 |
 | "Ki hozhat létre új terméket?" | Csak iroda - `pages/Products.tsx` (felület), `store/useStore.ts` `addProduct` (`remoteRole` guard), Supabase RLS (nincs raktáros INSERT policy a `products` táblán) - lásd 16. fejezet |
+| "Hogyan működik a havonta ismétlődő napló tétel (pl. bérleti díj)?" | `types/index.ts` `RecurringLedgerEntry`, `lib/ledger.ts` `computeDueRecurringOccurrences`, `store/useStore.ts` `generateDueRecurringLedgerEntries`, `pages/Ledger.tsx` "Ismétlődő tételek" kártya - lásd 19. fejezet |
+
+---
+
+## 19. Havonta ismétlődő napló tétel (pl. bérleti díj, előfizetés)
+
+A Pénzügyi napló oldalon (`pages/Ledger.tsx`) egy külön "Ismétlődő tételek" kártya alatt felvehető egy sablon (`RecurringLedgerEntry`, `components/RecurringLedgerEntryForm.tsx`): típus (bevétel/kiadás), kategória, megnevezés, összeg/pénznem, a hónap melyik napján esedékes, mettől-meddig fusson. Ez maga **nem** egy napló tétel és nem számít bele semmilyen összesítésbe - csak az ismétlődést írja le.
+
+**Generálás** (`lib/ledger.ts` `computeDueRecurringOccurrences`, tisztán függvény, store-független): minden app-indításkor (`App.tsx`, hidratálás után) és minden alkalommal, amikor a Pénzügyi napló oldal megnyílik (`pages/Ledger.tsx` mount), lefut a `generateDueRecurringLedgerEntries` store-akció. Ez minden aktív, nem törölt sablonra megnézi, mely hónapok váltak esedékessé a `lastGeneratedMonth` óta (egy már teljesen eltelt hónap mindig esedékes, a folyó hónap csak akkor, ha a megadott nap már elmúlt), és azokra egy teljesen normál `LedgerEntry`-t hoz létre (`recurringEntryId` mezővel visszajelölve a sablonra) - ez onnantól kezdve pontosan úgy viselkedik, mint egy kézzel felvitt tétel: szabadon szerkeszthető/törölhető, benne van az exportban, a P&L-ben, a fizetési határidő-követésben. Rövidebb hónapban (pl. február 31. helyett) az adott hónap utolsó napján könyvelődik.
+
+A sablon szerkesztése/szüneteltetése/törlése a MÁR legenerált tételeket nem érinti - azok önálló életet élnek. A törlés csak a jövőbeli generálást állítja le (soft-delete, visszaállítható). Mindhárom (`tulajdonos` olvasó-only szerepkör kizárása, a sablon CRUD-ja, a generálás) ugyanazt a mintát követi, mint a már meglévő napló tétel CRUD (6., 18. fejezet) - lásd `store/useStore.ts` `addRecurringLedgerEntry`/`updateRecurringLedgerEntry`/`deleteRecurringLedgerEntry`/`restoreRecurringLedgerEntry`.
+
+**Megjegyzés**: ez a funkció egyelőre csak helyi (eszközönkénti) adat, ugyanúgy mint a `ledgerEntries` általában (lásd 14.2) - nincs Supabase-be szinkronizálva, tehát egy adott böngésző/eszköz saját ismétlődő tételei nem látszanak egy másik eszközön.

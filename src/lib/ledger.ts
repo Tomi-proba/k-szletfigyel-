@@ -1,6 +1,6 @@
 // Business logic for the general financial ledger (income/expense journal),
 // kept separate from stock/customer logic and pure like the rest of lib/.
-import { VAT_CATEGORY, type LedgerEntry } from '../types'
+import { VAT_CATEGORY, type LedgerEntry, type RecurringLedgerEntry } from '../types'
 
 /** An entry's amount converted to HUF - the currency/exchangeRate pattern
  * mirrors PurchaseLot (see lib/costing.ts). */
@@ -109,4 +109,60 @@ export function computeFinancialSummary(
     totalExpense,
     netResult: totalIncome - totalExpense,
   }
+}
+
+function daysInMonth(year: number, monthIndex0: number): number {
+  return new Date(year, monthIndex0 + 1, 0).getDate()
+}
+
+/** The "YYYY-MM-DD" due date for a given "YYYY-MM" month and target day of
+ * month, clamping to that month's last day when it's shorter (e.g. 31 in
+ * February becomes the 28th/29th). */
+function monthDueDate(monthKey: string, dayOfMonth: number): string {
+  const [year, month] = monthKey.split('-').map(Number)
+  const day = Math.min(dayOfMonth, daysInMonth(year, month - 1))
+  return `${monthKey}-${String(day).padStart(2, '0')}`
+}
+
+function nextMonthKey(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number)
+  const d = new Date(year, month, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+export interface DueRecurringOccurrence {
+  /** "YYYY-MM" - also what gets stored back as lastGeneratedMonth. */
+  month: string
+  /** "YYYY-MM-DD" the generated LedgerEntry should be dated. */
+  date: string
+}
+
+/** Every month between a recurring entry's last-generated month (exclusive)
+ * and today (inclusive) whose due date has already arrived - i.e. what
+ * generateDueRecurringLedgerEntries needs to turn into real LedgerEntry rows
+ * right now. A month already fully elapsed is always included (its due date
+ * is necessarily in the past); the current month is only included once
+ * `dayOfMonth` has actually been reached. Pure and independent of the store
+ * so it's easy to reason about/test in isolation. */
+export function computeDueRecurringOccurrences(
+  r: Pick<RecurringLedgerEntry, 'dayOfMonth' | 'startDate' | 'endDate' | 'lastGeneratedMonth'>,
+  todayISO: string,
+): DueRecurringOccurrence[] {
+  const todayMonth = todayISO.slice(0, 7)
+  let monthCursor = r.lastGeneratedMonth ? nextMonthKey(r.lastGeneratedMonth) : r.startDate.slice(0, 7)
+  const occurrences: DueRecurringOccurrence[] = []
+  let guard = 0
+  while (monthCursor <= todayMonth && guard < 1200) {
+    guard++
+    const dueDate = monthDueDate(monthCursor, r.dayOfMonth)
+    if (dueDate < r.startDate) {
+      monthCursor = nextMonthKey(monthCursor)
+      continue
+    }
+    if (r.endDate && dueDate > r.endDate) break
+    if (monthCursor === todayMonth && dueDate > todayISO) break
+    occurrences.push({ month: monthCursor, date: dueDate })
+    monthCursor = nextMonthKey(monthCursor)
+  }
+  return occurrences
 }

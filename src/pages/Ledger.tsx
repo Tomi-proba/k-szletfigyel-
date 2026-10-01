@@ -1,6 +1,7 @@
-import { FileSpreadsheet, FileText, Pencil, Plus, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { FileSpreadsheet, FileText, Pause, Pencil, Play, Plus, CheckCircle2, RotateCcw, Repeat, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
@@ -8,9 +9,10 @@ import { computeMarginReport } from '../lib/alerts'
 import { computeInventoryPurchaseCost } from '../lib/costing'
 import { computeFinancialSummary, ledgerEntryHuf } from '../lib/ledger'
 import { computeAutoVatTotals } from '../lib/vat'
-import { VAT_CATEGORY, type LedgerEntry } from '../types'
+import { VAT_CATEGORY, type LedgerEntry, type RecurringLedgerEntry } from '../types'
 import { Modal } from '../components/Modal'
 import { LedgerEntryForm } from '../components/LedgerEntryForm'
+import { RecurringLedgerEntryForm } from '../components/RecurringLedgerEntryForm'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
 import { Button, Card, Checkbox, EmptyState, Input, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
@@ -29,6 +31,7 @@ interface LedgerRow {
 }
 
 export function Ledger() {
+  const { isReadOnlyViewer } = useAuth()
   const entries = useStore((s) => s.ledgerEntries)
   const categories = useStore((s) => s.ledgerCategories)
   const products = useStore((s) => s.products)
@@ -37,6 +40,21 @@ export function Ledger() {
   const deleteLedgerEntry = useStore((s) => s.deleteLedgerEntry)
   const restoreLedgerEntry = useStore((s) => s.restoreLedgerEntry)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
+  const recurringEntries = useStore((s) => s.recurringLedgerEntries)
+  const updateRecurringLedgerEntry = useStore((s) => s.updateRecurringLedgerEntry)
+  const deleteRecurringLedgerEntry = useStore((s) => s.deleteRecurringLedgerEntry)
+  const restoreRecurringLedgerEntry = useStore((s) => s.restoreRecurringLedgerEntry)
+  const generateDueRecurringLedgerEntries = useStore((s) => s.generateDueRecurringLedgerEntries)
+
+  // Minden belépéskor ellenőrizzük, nincs-e esedékes, még le nem könyvelt
+  // ismétlődő tétel - lásd store/useStore.ts generateDueRecurringLedgerEntries
+  // (olcsó, idempotens hívás, ha nincs mit generálni, nem csinál semmit).
+  // Ez emellett az App.tsx-ben is lefut egyszer induláskor, hogy a
+  // dashboard/P&L akkor is naprakész legyen, ha valaki meg sem nyitja ezt
+  // az oldalt.
+  useEffect(() => {
+    generateDueRecurringLedgerEntries()
+  }, [generateDueRecurringLedgerEntries])
 
   const { from, to, setFrom, setTo, setRange } = usePersistedDateRange('keszletfigyelo-penzugyi-naplo-daterange', currentMonthRange)
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -45,6 +63,15 @@ export function Ledger() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<LedgerEntry | null>(null)
   const [deleting, setDeleting] = useState<LedgerEntry | null>(null)
+  const [creatingRecurring, setCreatingRecurring] = useState(false)
+  const [editingRecurring, setEditingRecurring] = useState<RecurringLedgerEntry | null>(null)
+  const [deletingRecurring, setDeletingRecurring] = useState<RecurringLedgerEntry | null>(null)
+  const [showDeletedRecurring, setShowDeletedRecurring] = useState(false)
+
+  const visibleRecurring = useMemo(
+    () => recurringEntries.filter((r) => showDeletedRecurring || !r.deletedAt).sort((a, b) => a.description.localeCompare(b.description, 'hu')),
+    [recurringEntries, showDeletedRecurring],
+  )
 
   const filtered = useMemo(
     () =>
@@ -118,9 +145,11 @@ export function Ledger() {
             <Button variant="secondary" onClick={() => exportToPdf(`penzugyi_naplo_${from}_${to}.pdf`, 'Pénzügyi napló', columns, rows)}>
               <FileText size={16} /> PDF
             </Button>
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új tétel
-            </Button>
+            {!isReadOnlyViewer && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus size={18} /> Új tétel
+              </Button>
+            )}
           </>
         }
       />
@@ -293,6 +322,11 @@ export function Ledger() {
                           Korrekció - #{e.correctsEntryId.slice(0, 8)} tételhez
                         </div>
                       )}
+                      {e.recurringEntryId && (
+                        <div className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
+                          <Repeat size={11} /> Ismétlődő tételből
+                        </div>
+                      )}
                       {!isDeleted && e.dueDate &&
                         (e.isPaid ? (
                           <div className="text-xs text-[var(--color-success)]">
@@ -314,7 +348,7 @@ export function Ledger() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {isDeleted ? (
+                      {isReadOnlyViewer ? null : isDeleted ? (
                         <button
                           type="button"
                           onClick={() => restoreLedgerEntry(e.id)}
@@ -362,6 +396,118 @@ export function Ledger() {
         </Card>
       )}
 
+      <Card className="mb-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text)]">
+              <Repeat size={16} /> Ismétlődő tételek
+            </h2>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              Havonta ismétlődő bevétel/kiadás (pl. bérleti díj, előfizetés) - a megadott napon automatikusan létrejön belőle a normál napló tétel.
+            </p>
+          </div>
+          {!isReadOnlyViewer && (
+            <Button onClick={() => setCreatingRecurring(true)}>
+              <Plus size={18} /> Új ismétlődő tétel
+            </Button>
+          )}
+        </div>
+
+        {visibleRecurring.length === 0 ? (
+          <EmptyState>Nincs ismétlődő tétel beállítva.</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                  <th className="py-2 pr-4 font-medium">Megnevezés</th>
+                  <th className="py-2 pr-4 font-medium">Kategória</th>
+                  <th className="py-2 pr-4 text-right font-medium">Összeg</th>
+                  <th className="py-2 pr-4 font-medium">Esedékesség</th>
+                  <th className="py-2 pr-4 font-medium">Állapot</th>
+                  <th className="py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRecurring.map((r) => {
+                  const isDeleted = Boolean(r.deletedAt)
+                  return (
+                    <tr key={r.id} className={`border-b border-[var(--color-border)] last:border-b-0 ${isDeleted ? 'opacity-60' : ''}`}>
+                      <td className="py-2 pr-4">
+                        <div className={isDeleted ? 'line-through' : ''}>{r.description}</div>
+                        {isDeleted && <div className="text-xs font-medium text-[var(--color-text-muted)]">Törölve</div>}
+                      </td>
+                      <td className="py-2 pr-4">{r.category}</td>
+                      <td className="whitespace-nowrap py-2 pr-4 text-right">
+                        <span className={r.type === 'income' ? 'font-semibold text-[var(--color-success)]' : 'font-semibold text-[var(--color-danger)]'}>
+                          {r.type === 'income' ? '+' : '-'}
+                          {r.currency === 'HUF' ? formatCurrency(r.amount) : `${formatMoney(r.amount, r.currency)} (≈${formatCurrency(r.amount * r.exchangeRate)})`}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap py-2 pr-4">
+                        minden hó {r.dayOfMonth}.{r.endDate ? ` · ${formatDate(r.startDate)} - ${formatDate(r.endDate)}` : ` · ${formatDate(r.startDate)}-tól`}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {isDeleted ? (
+                          <span className="text-xs text-[var(--color-text-muted)]">—</span>
+                        ) : r.active ? (
+                          <span className="text-xs font-medium text-[var(--color-success)]">Aktív</span>
+                        ) : (
+                          <span className="text-xs font-medium text-[var(--color-text-muted)]">Szüneteltetve</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap py-2 text-right">
+                        {isReadOnlyViewer ? null : isDeleted ? (
+                          <button
+                            type="button"
+                            onClick={() => restoreRecurringLedgerEntry(r.id)}
+                            aria-label="Visszaállítás"
+                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => updateRecurringLedgerEntry(r.id, { ...r, active: !r.active })}
+                              aria-label={r.active ? 'Szüneteltetés' : 'Aktiválás'}
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
+                            >
+                              {r.active ? <Pause size={16} /> : <Play size={16} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingRecurring(r)}
+                              aria-label="Szerkesztés"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingRecurring(r)}
+                              aria-label="Törlés"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+          <Checkbox label="Törölt ismétlődő tételek megjelenítése" checked={showDeletedRecurring} onChange={(e) => setShowDeletedRecurring(e.target.checked)} />
+        </div>
+      </Card>
+
       {creating && (
         <Modal title="Új tétel" onClose={() => setCreating(false)}>
           <LedgerEntryForm onDone={() => setCreating(false)} />
@@ -386,6 +532,39 @@ export function Ledger() {
           }}
           onCancel={() => setDeleting(null)}
         />
+      )}
+
+      {creatingRecurring && (
+        <Modal title="Új ismétlődő tétel" onClose={() => setCreatingRecurring(false)}>
+          <RecurringLedgerEntryForm onDone={() => setCreatingRecurring(false)} />
+        </Modal>
+      )}
+      {editingRecurring && (
+        <Modal title="Ismétlődő tétel szerkesztése" onClose={() => setEditingRecurring(null)}>
+          <RecurringLedgerEntryForm entry={editingRecurring} onDone={() => setEditingRecurring(null)} />
+        </Modal>
+      )}
+      {deletingRecurring && (
+        <Modal title="Ismétlődő tétel törlése" onClose={() => setDeletingRecurring(null)}>
+          <p className="mb-4 text-sm text-[var(--color-text)]">
+            Biztosan törlöd a(z) "{deletingRecurring.description}" ismétlődő tételt? A már korábban ebből legenerált napló tételek megmaradnak -
+            csak a jövőbeni, automatikus könyvelés áll le.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setDeletingRecurring(null)}>
+              Mégse
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                deleteRecurringLedgerEntry(deletingRecurring.id)
+                setDeletingRecurring(null)
+              }}
+            >
+              Törlés
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   )

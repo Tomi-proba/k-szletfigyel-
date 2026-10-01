@@ -52,6 +52,18 @@ function App() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
+  // Minden app-indításkor leellenőrizzük, nincs-e esedékessé vált, még le
+  // nem könyvelt ismétlődő napló tétel (lásd store/useStore.ts
+  // generateDueRecurringLedgerEntries) - így a dashboard/pénzügyi napló
+  // mindig naprakész, akkor is, ha a felhasználó meg sem nyitja a
+  // Pénzügyi napló oldalt. Csak hidratálás UTÁN fut (a store ekkor már a
+  // valós, mentett ismétlődő tételeket tartalmazza, nem az üres kezdeti
+  // állapotot).
+  useEffect(() => {
+    if (!hydrated) return
+    useStore.getState().generateDueRecurringLedgerEntries()
+  }, [hydrated])
+
   if (!hydrated) {
     return <div className="flex min-h-screen items-center justify-center text-[var(--color-text-muted)]">Betöltés…</div>
   }

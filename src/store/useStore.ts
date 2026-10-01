@@ -7,6 +7,7 @@ import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import { pushBusinessDiffs, type BusinessSlices } from '../lib/remoteSync'
+import { computeDueRecurringOccurrences } from '../lib/ledger'
 import type { PendingChange, PendingChangeAction, PendingChangeEntityType, UserRole } from '../types/auth'
 import {
   DEFAULT_LEDGER_CATEGORIES,
@@ -24,6 +25,7 @@ import {
   type MovementType,
   type Product,
   type PurchaseLot,
+  type RecurringLedgerEntry,
   type SaleStatus,
   type Settings,
   type Supplier,
@@ -181,6 +183,7 @@ interface AppState {
   lots: PurchaseLot[]
   ledgerEntries: LedgerEntry[]
   ledgerCategories: string[]
+  recurringLedgerEntries: RecurringLedgerEntry[]
   dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
   settings: Settings
@@ -294,6 +297,22 @@ interface AppState {
   deleteLedgerEntry: (id: string, mode: DeleteLedgerEntryMode) => void
   restoreLedgerEntry: (id: string) => void
 
+  // Recurring ledger entries (havonta ismétlődő bevétel/kiadás, pl. bérleti díj)
+  addRecurringLedgerEntry: (input: Omit<RecurringLedgerEntry, 'id' | 'createdAt' | 'updatedAt' | 'lastGeneratedMonth'>) => void
+  updateRecurringLedgerEntry: (
+    id: string,
+    input: Omit<RecurringLedgerEntry, 'id' | 'createdAt' | 'updatedAt' | 'lastGeneratedMonth'>,
+  ) => void
+  deleteRecurringLedgerEntry: (id: string) => void
+  restoreRecurringLedgerEntry: (id: string) => void
+  /** Checks every active recurring entry against today's date and books a
+   * normal LedgerEntry for every month that's come due since it was last
+   * checked - see lib/ledger.ts computeDueRecurringOccurrences. Idempotent
+   * and cheap to call repeatedly (no-ops once everything due is generated);
+   * called once on app load (see App.tsx) so the P&L is always current even
+   * if the user never opens the Pénzügyi napló page itself. */
+  generateDueRecurringLedgerEntries: () => void
+
   // Settings
   updateSettings: (settings: Settings) => void
 
@@ -326,6 +345,7 @@ export const useStore = create<AppState>()(
       ...buildSeedData(),
       settings: DEFAULT_SETTINGS,
       pendingChanges: [],
+      recurringLedgerEntries: [],
       dataMode: 'local' as const,
       remoteCompanyId: null,
       remoteRole: null,
@@ -1520,6 +1540,121 @@ export const useStore = create<AppState>()(
           }
         }),
 
+      addRecurringLedgerEntry: (input) =>
+        set((state) => {
+          const category = input.category.trim()
+          const now = new Date().toISOString()
+          const entry: RecurringLedgerEntry = { ...input, category, id: createId(), createdAt: now, updatedAt: now }
+          return {
+            ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
+            recurringLedgerEntries: [...state.recurringLedgerEntries, entry],
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('recurringLedgerEntry', entry.id, entry.description, 'create', `"${entry.description}" ismétlődő tétel létrehozva`),
+            ],
+          }
+        }),
+
+      updateRecurringLedgerEntry: (id, input) =>
+        set((state) => {
+          const existing = state.recurringLedgerEntries.find((r) => r.id === id)
+          if (!existing) return state
+          const category = input.category.trim()
+          const updated: RecurringLedgerEntry = {
+            ...input,
+            category,
+            id,
+            createdAt: existing.createdAt,
+            updatedAt: new Date().toISOString(),
+            deletedAt: existing.deletedAt,
+            // A szerkesztés nem írja felül, meddig lett már legenerálva -
+            // csak az összeg/nap/stb. módosul, a már lekönyvelt hónapok
+            // nem jönnek létre újra.
+            lastGeneratedMonth: existing.lastGeneratedMonth,
+          }
+          const changes = diffFields('recurringLedgerEntry', existing, updated)
+          return {
+            ledgerCategories: state.ledgerCategories.includes(category) ? state.ledgerCategories : [...state.ledgerCategories, category],
+            recurringLedgerEntries: state.recurringLedgerEntries.map((r) => (r.id === id ? updated : r)),
+            auditLog:
+              changes.length > 0
+                ? [
+                    ...state.auditLog,
+                    auditEntry('recurringLedgerEntry', id, updated.description, 'update', `"${updated.description}" ismétlődő tétel módosult`, changes),
+                  ]
+                : state.auditLog,
+          }
+        }),
+
+      deleteRecurringLedgerEntry: (id) =>
+        set((state) => {
+          const entry = state.recurringLedgerEntries.find((r) => r.id === id)
+          if (!entry) return state
+          return {
+            recurringLedgerEntries: state.recurringLedgerEntries.map((r) => (r.id === id ? { ...r, deletedAt: new Date().toISOString() } : r)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('recurringLedgerEntry', id, entry.description, 'delete', `"${entry.description}" ismétlődő tétel törölve`),
+            ],
+          }
+        }),
+
+      restoreRecurringLedgerEntry: (id) =>
+        set((state) => {
+          const entry = state.recurringLedgerEntries.find((r) => r.id === id)
+          if (!entry || !entry.deletedAt) return state
+          return {
+            recurringLedgerEntries: state.recurringLedgerEntries.map((r) => (r.id === id ? { ...r, deletedAt: undefined } : r)),
+            auditLog: [
+              ...state.auditLog,
+              auditEntry('recurringLedgerEntry', id, entry.description, 'restore', `"${entry.description}" ismétlődő tétel visszaállítva`),
+            ],
+          }
+        }),
+
+      generateDueRecurringLedgerEntries: () =>
+        set((state) => {
+          const today = todayISO()
+          let ledgerEntries = state.ledgerEntries
+          let ledgerCategories = state.ledgerCategories
+          let auditLog = state.auditLog
+          let changed = false
+
+          const recurringLedgerEntries = state.recurringLedgerEntries.map((r) => {
+            if (!r.active || r.deletedAt) return r
+            const occurrences = computeDueRecurringOccurrences(r, today)
+            if (occurrences.length === 0) return r
+            changed = true
+            for (const occ of occurrences) {
+              const now = new Date().toISOString()
+              const entry: LedgerEntry = {
+                id: createId(),
+                date: occ.date,
+                type: r.type,
+                category: r.category,
+                description: r.description,
+                amount: r.amount,
+                currency: r.currency,
+                exchangeRate: r.exchangeRate,
+                note: r.note,
+                recurringEntryId: r.id,
+                createdAt: now,
+                updatedAt: now,
+              }
+              ledgerEntries = [...ledgerEntries, entry]
+              if (!ledgerCategories.includes(r.category)) ledgerCategories = [...ledgerCategories, r.category]
+              auditLog = [
+                ...auditLog,
+                auditEntry('ledgerEntry', entry.id, entry.description, 'create', `"${entry.description}" ismétlődő tételből automatikusan létrehozva`),
+              ]
+            }
+            return { ...r, lastGeneratedMonth: occurrences[occurrences.length - 1].month }
+          })
+
+          if (!changed) return {}
+          return { ledgerEntries, ledgerCategories, auditLog, recurringLedgerEntries }
+        }),
+
       updateSettings: (settings) => set({ settings }),
 
       // Both danger-zone actions are no-ops once a real company's data is
@@ -1546,6 +1681,7 @@ export const useStore = create<AppState>()(
             lots: [],
             ledgerEntries: [],
             ledgerCategories: [...DEFAULT_LEDGER_CATEGORIES],
+            recurringLedgerEntries: [],
             dailyClosings: [],
             auditLog: [],
             settings: DEFAULT_SETTINGS,

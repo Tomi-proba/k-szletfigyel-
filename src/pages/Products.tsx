@@ -43,7 +43,14 @@ export function Products() {
   // szűrni): a `products`/`locations` tömb már csak a raktáros saját
   // telephelyét tartalmazza, mert a Supabase RLS eleve úgy szűri a
   // lekérdezést - lásd supabase/schema.sql.
-  const { isWarehouseUser } = useAuth()
+  const { isWarehouseUser, isReadOnlyViewer, effectiveRole } = useAuth()
+  // Tulajdonos szerepkör sosem írhat semmit (lásd DOCUMENTATION.md, a
+  // 2026-10-01-i szerepkör-bővítés) - a létrehozás/szerkesztés/törlés
+  // gombok neki el vannak rejtve, a raktárosnak pedig változatlanul
+  // (törzsadat-módosítás nem is az ő joga). Iroda szerepkörben a gombok
+  // LÁTSZANAK, de a kattintás a store-ban (requestChange) jóváhagyásra váró
+  // kérést hoz létre a valódi módosítás helyett - lásd store/useStore.ts.
+  const canEditProducts = !isWarehouseUser && !isReadOnlyViewer
 
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -115,7 +122,7 @@ export function Products() {
             <Button variant="secondary" onClick={() => exportToPdf('keszletlista.pdf', 'Készletlista', inventoryColumns, inventoryRows)}>
               <FileText size={16} /> PDF
             </Button>
-            {!isWarehouseUser && (
+            {canEditProducts && (
               <Button onClick={() => setCreating(true)}>
                 <Plus size={18} /> Új termék
               </Button>
@@ -123,6 +130,13 @@ export function Products() {
           </>
         }
       />
+
+      {effectiveRole === 'iroda' && (
+        <Card className="mb-5 border-l-4 border-l-[var(--color-primary)] text-sm text-[var(--color-text-muted)]">
+          A termékek létrehozása/szerkesztése/törlése itt jóváhagyásra vár - a fő iroda bírálja el a Jóváhagyások oldalon, utána lép
+          életbe.
+        </Card>
+      )}
 
       <Card className="mb-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -204,7 +218,7 @@ export function Products() {
                   <span>Eladási ár: {formatCurrency(product.salePrice)}</span>
                 </div>
 
-                {!isWarehouseUser && (
+                {canEditProducts && (
                   <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
                     {isDeleted ? (
                       <Button variant="secondary" onClick={() => restoreProduct(product.id)}>

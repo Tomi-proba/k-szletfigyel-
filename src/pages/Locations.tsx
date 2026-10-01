@@ -1,5 +1,6 @@
 import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Location } from '../types'
 import { Modal } from '../components/Modal'
@@ -50,6 +51,7 @@ export function Locations() {
   const products = useStore((s) => s.products)
   const deleteLocation = useStore((s) => s.deleteLocation)
   const restoreLocation = useStore((s) => s.restoreLocation)
+  const { isReadOnlyViewer, effectiveRole } = useAuth()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Location | null>(null)
   const [deleting, setDeleting] = useState<Location | null>(null)
@@ -64,11 +66,20 @@ export function Locations() {
         title="Telephelyek"
         subtitle="Több telephely esetén a készlet telephelyenként külön kezelhető"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={18} /> Új telephely
-          </Button>
+          !isReadOnlyViewer && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={18} /> Új telephely
+            </Button>
+          )
         }
       />
+
+      {effectiveRole === 'iroda' && (
+        <Card className="mb-4 border-l-4 border-l-[var(--color-primary)] text-sm text-[var(--color-text-muted)]">
+          A telephelyek létrehozása/szerkesztése/törlése itt jóváhagyásra vár - a fő iroda bírálja el a Jóváhagyások oldalon, utána lép
+          életbe.
+        </Card>
+      )}
 
       <div className="mb-4">
         <Checkbox label="Törölt telephelyek megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
@@ -90,27 +101,29 @@ export function Locations() {
                 )}
               </div>
               <div className="text-xs text-[var(--color-text-muted)]">{productCount} termék ezen a telephelyen</div>
-              <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                {isDeleted ? (
-                  <Button variant="secondary" onClick={() => restoreLocation(l.id)}>
-                    <RotateCcw size={16} /> Visszaállítás
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="secondary" onClick={() => setEditing(l)}>
-                      <Pencil size={16} /> Szerkesztés
+              {!isReadOnlyViewer && (
+                <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
+                  {isDeleted ? (
+                    <Button variant="secondary" onClick={() => restoreLocation(l.id)}>
+                      <RotateCcw size={16} /> Visszaállítás
                     </Button>
-                    <Button
-                      variant="danger"
-                      disabled={!canDelete}
-                      title={!canDelete ? 'Csak üres telephely törölhető, és legalább egynek aktívnak kell maradnia' : undefined}
-                      onClick={() => setDeleting(l)}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </>
-                )}
-              </div>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={() => setEditing(l)}>
+                        <Pencil size={16} /> Szerkesztés
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={!canDelete}
+                        title={!canDelete ? 'Csak üres telephely törölhető, és legalább egynek aktívnak kell maradnia' : undefined}
+                        onClick={() => setDeleting(l)}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </Card>
           )
         })}

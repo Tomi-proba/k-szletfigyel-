@@ -21,7 +21,7 @@ import { hydrateFromRemote, resetToLocalMode } from '../store/useStore'
 function readDemoRole(): UserRole | null {
   if (isSupabaseConfigured || typeof window === 'undefined') return null
   const value = new URLSearchParams(window.location.search).get('demo_szerepkor')
-  return value === 'raktaros' || value === 'iroda' ? value : null
+  return value === 'raktaros' || value === 'iroda' || value === 'fo_iroda' || value === 'tulajdonos' ? value : null
 }
 
 interface AuthResult {
@@ -44,6 +44,22 @@ interface AuthContextValue {
    * the same demo override also gates full pages, not just isWarehouseUser
    * checks inside them. */
   effectiveRole: UserRole | null
+  /** True for 'fo_iroda', and also true with no Supabase/role concept at
+   * all (local/demo mode) - full, IMMEDIATE write access to the shared
+   * törzsadat (telephely/termék). 'iroda' is NOT this - its writes go
+   * through requestChange/pending_changes instead (see store/useStore.ts).
+   * 'tulajdonos' and 'raktaros' (outside its own location) are never this. */
+  canWriteDirectly: boolean
+  /** 'tulajdonos' - lát mindent, de SEMMIT nem írhat, még jóváhagyásra váró
+   * kérést sem adhat be. Kizárólag UI-kényelem (gombok elrejtése) - a
+   * valódi, megkerülhetetlen határ a Supabase RLS (nincs INSERT/UPDATE
+   * policy tulajdonosnak semmilyen táblán). */
+  isReadOnlyViewer: boolean
+  /** Igaz, ha ez a szerepkör jóváhagyhatja/elutasíthatja a raktáros
+   * beérkezés/kiszállítás-kéréseit (movements.approval_status) - fő iroda
+   * ÉS iroda is (2026-10-01-től, korábban csak "iroda" volt). Tulajdonos és
+   * raktáros soha. */
+  canApproveWarehouseRequests: boolean
   /** companyName is only used for a brand-new company (no inviteToken).
    * When inviteToken is set, the account joins that invite's existing
    * company/role/location instead - see handle_new_user() in schema.sql. */
@@ -109,10 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // browser's local copy.
     try {
       const slices = await fetchBusinessData()
-      hydrateFromRemote(mappedProfile.companyId, slices, mappedProfile.role)
+      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, slices, mappedProfile.role)
     } catch (err) {
       console.error('[useAuth] failed to load business data from Supabase', err)
-      hydrateFromRemote(mappedProfile.companyId, emptyBusinessSlices, mappedProfile.role)
+      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, emptyBusinessSlices, mappedProfile.role)
     }
   }, [])
 
@@ -218,6 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isReadOnly = useMemo(() => computeIsReadOnly(company), [company])
   const effectiveRole: UserRole | null = profile?.role ?? readDemoRole()
   const isWarehouseUser = effectiveRole === 'raktaros'
+  const canWriteDirectly = !effectiveRole || effectiveRole === 'fo_iroda'
+  const isReadOnlyViewer = effectiveRole === 'tulajdonos'
+  const canApproveWarehouseRequests = effectiveRole === 'fo_iroda' || effectiveRole === 'iroda'
 
   const value: AuthContextValue = {
     loading,
@@ -227,6 +246,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isReadOnly,
     isWarehouseUser,
     effectiveRole,
+    canWriteDirectly,
+    isReadOnlyViewer,
+    canApproveWarehouseRequests,
     signUp,
     signIn,
     signOut,

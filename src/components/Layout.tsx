@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
+import { useStore } from '../store/useStore'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { Modal } from './Modal'
 import { MovementForm } from './MovementForm'
@@ -171,14 +172,21 @@ function activeGroupKey(groups: NavGroup[], pathname: string, search: string): s
 /** The "Fiók" (account) group only exists once Supabase is actually
  * configured and someone is logged in - so the nav is byte-for-byte
  * unchanged for the existing single-tenant app. A raktáros gets the reduced
- * RAKTAROS_NAV_GROUPS and never sees Előfizetés/Csapat (both iroda-only,
- * see RoleGate on their routes) - "Admin" is independent of company role,
+ * RAKTAROS_NAV_GROUPS and never sees Előfizetés/Csapat (iroda-szintű jog,
+ * lásd RoleGate a route-táblán) - "Admin" is independent of company role,
  * for the platform operator's own account. */
-function buildNavGroups(isWarehouseUser: boolean, showAccount: boolean, isIroda: boolean, showAdmin: boolean): NavGroup[] {
-  const baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
+function buildNavGroups(isWarehouseUser: boolean, showAccount: boolean, canManageTeam: boolean, isFoIroda: boolean, showAdmin: boolean): NavGroup[] {
+  let baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
+  // "Jóváhagyások" kizárólag fő iroda nézetben jelenik meg - ő bírálja el
+  // az iroda törzsadat-módosítási kéréseit (lásd pages/Approvals.tsx).
+  if (isFoIroda && !isWarehouseUser) {
+    baseGroups = baseGroups.map((g) =>
+      g.key === 'attekintes' ? { ...g, items: [...g.items, { to: '/jovahagyasok', label: 'Jóváhagyások', badge: true }] } : g,
+    )
+  }
   if (!showAccount) return baseGroups
   const items: NavItem[] = []
-  if (isIroda) items.push({ to: '/elofizetes', label: 'Előfizetés' }, { to: '/csapat', label: 'Csapat' })
+  if (canManageTeam) items.push({ to: '/elofizetes', label: 'Előfizetés' }, { to: '/csapat', label: 'Csapat' })
   if (showAdmin) items.push({ to: '/admin', label: 'Admin' })
   if (items.length === 0) return baseGroups
   return [...baseGroups, { key: 'fiok', label: 'Fiók', icon: CreditCard, items }]
@@ -214,9 +222,15 @@ export function Layout() {
   // follow-up one.
   const [lastAutoExpandedFor, setLastAutoExpandedFor] = useState<string | null>(null)
   const alerts = useAlerts()
-  const { session, profile, isReadOnly, isWarehouseUser, signOut } = useAuth()
+  const { session, profile, isReadOnly, isWarehouseUser, effectiveRole, signOut } = useAuth()
+  const pendingChanges = useStore((s) => s.pendingChanges)
   const showAccountGroup = isSupabaseConfigured && !!session
-  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, profile?.role === 'iroda', !!profile?.isPlatformAdmin)
+  // effectiveRole (nem profile?.role) kell ide, mert ez veszi figyelembe a
+  // `?demo_szerepkor=` ideiglenes szimulátort is (lásd useAuth.tsx) -
+  // ugyanaz a minta, mint a már meglévő isWarehouseUser.
+  const isFoIroda = effectiveRole === 'fo_iroda'
+  const canManageTeam = effectiveRole === 'iroda' || isFoIroda
+  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, canManageTeam, isFoIroda, !!profile?.isPlatformAdmin)
   const alertCount =
     alerts.needsReorder.length +
     alerts.slowMoving.length +
@@ -225,11 +239,14 @@ export function Layout() {
     alerts.urgentPayables.length +
     alerts.openSales.length +
     // A raktáros elsősorban a saját beadott/rá váró jóváhagyásait látja itt
-    // (lásd DOCUMENTATION.md 15. fejezet); iroda az irodát terhelő
+    // (lásd DOCUMENTATION.md 15. fejezet); iroda/fő iroda az irodát terhelő
     // kiszállítás-jóváhagyásokat is beleszámolja.
     alerts.pendingPurchaseApprovals.length +
     alerts.pendingSaleApprovals.length +
-    alerts.rejectedSales.length
+    alerts.rejectedSales.length +
+    // Fő iroda számára a rá váró törzsadat-jóváhagyási kérések is
+    // riasztásnak számítanak (lásd pages/Approvals.tsx).
+    (isFoIroda ? pendingChanges.filter((c) => c.status === 'pending').length : 0)
   const location = useLocation()
   const isDashboard = location.pathname === '/'
   const currentGroupKey = activeGroupKey(navGroups, location.pathname, location.search)

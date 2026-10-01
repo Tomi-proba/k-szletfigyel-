@@ -22,6 +22,7 @@ import { Settings } from './pages/Settings'
 import { Subscription } from './pages/Subscription'
 import { Admin } from './pages/Admin'
 import { Team } from './pages/Team'
+import { Approvals } from './pages/Approvals'
 
 function App() {
   const hydrated = useHydrated()
@@ -66,7 +67,7 @@ function App() {
           <Route
             path="beszallitok"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Suppliers />
               </RoleGate>
             }
@@ -74,7 +75,7 @@ function App() {
           <Route
             path="vevok"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Customers />
               </RoleGate>
             }
@@ -82,7 +83,7 @@ function App() {
           <Route
             path="telephelyek"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Locations />
               </RoleGate>
             }
@@ -90,7 +91,7 @@ function App() {
           <Route
             path="riportok"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Reports />
               </RoleGate>
             }
@@ -98,7 +99,7 @@ function App() {
           <Route
             path="penzugyi-naplo"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Ledger />
               </RoleGate>
             }
@@ -106,7 +107,7 @@ function App() {
           <Route
             path="afa"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Vat />
               </RoleGate>
             }
@@ -115,15 +116,23 @@ function App() {
           <Route
             path="napi-jelentesek"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <DailyReports />
+              </RoleGate>
+            }
+          />
+          <Route
+            path="jovahagyasok"
+            element={
+              <RoleGate roles={['fo_iroda']}>
+                <Approvals />
               </RoleGate>
             }
           />
           <Route
             path="audit-naplo"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <AuditLog />
               </RoleGate>
             }
@@ -131,7 +140,7 @@ function App() {
           <Route
             path="beallitasok"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
                 <Settings />
               </RoleGate>
             }
@@ -139,7 +148,7 @@ function App() {
           <Route
             path="elofizetes"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda']}>
                 <Subscription />
               </RoleGate>
             }
@@ -147,7 +156,7 @@ function App() {
           <Route
             path="csapat"
             element={
-              <RoleGate roles={['iroda']}>
+              <RoleGate roles={['iroda', 'fo_iroda']}>
                 <Team />
               </RoleGate>
             }

@@ -22,6 +22,7 @@
 // rolled back locally - see DOCUMENTATION.md 14. fejezet for this tradeoff.
 import { supabase } from './supabase'
 import type { AuditLogEntry, DailyClosing, Location, Movement, Product, PurchaseLot } from '../types'
+import { mapPendingChangeRow, type PendingChange } from '../types/auth'
 
 export interface BusinessSlices {
   locations: Location[]
@@ -30,6 +31,7 @@ export interface BusinessSlices {
   movements: Movement[]
   dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
+  pendingChanges: PendingChange[]
 }
 
 export const emptyBusinessSlices: BusinessSlices = {
@@ -39,6 +41,7 @@ export const emptyBusinessSlices: BusinessSlices = {
   movements: [],
   dailyClosings: [],
   auditLog: [],
+  pendingChanges: [],
 }
 
 function client() {
@@ -273,19 +276,40 @@ function auditToRow(companyId: string, a: AuditLogEntry) {
   }
 }
 
+function pendingChangeToRow(companyId: string, c: PendingChange) {
+  return {
+    id: c.id,
+    company_id: companyId,
+    entity_type: c.entityType,
+    entity_id: c.entityId,
+    action: c.action,
+    payload: c.payload,
+    summary: c.summary,
+    requested_by: c.requestedBy,
+    requested_by_email: c.requestedByEmail,
+    requested_at: c.requestedAt,
+    status: c.status,
+    reviewed_by: c.reviewedBy,
+    reviewed_by_email: c.reviewedByEmail,
+    reviewed_at: c.reviewedAt,
+    reject_reason: c.rejectReason,
+  }
+}
+
 // --- fetch (RLS on the server does all the company/location filtering) -----
 
 export async function fetchBusinessData(): Promise<BusinessSlices> {
   const db = client()
-  const [locations, products, lots, movements, dailyClosings, auditLog] = await Promise.all([
+  const [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges] = await Promise.all([
     db.from('locations').select('*'),
     db.from('products').select('*'),
     db.from('purchase_lots').select('*'),
     db.from('movements').select('*'),
     db.from('daily_closings').select('*'),
     db.from('audit_log').select('*').order('event_timestamp', { ascending: true }),
+    db.from('pending_changes').select('*').order('requested_at', { ascending: false }),
   ])
-  for (const result of [locations, products, lots, movements, dailyClosings, auditLog]) {
+  for (const result of [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges]) {
     if (result.error) throw result.error
   }
   return {
@@ -295,6 +319,7 @@ export async function fetchBusinessData(): Promise<BusinessSlices> {
     movements: (movements.data ?? []).map(movementFromRow),
     dailyClosings: (dailyClosings.data ?? []).map(closingFromRow),
     auditLog: (auditLog.data ?? []).map(auditFromRow),
+    pendingChanges: (pendingChanges.data ?? []).map(mapPendingChangeRow),
   }
 }
 
@@ -337,9 +362,13 @@ async function insertAudit(companyId: string, a: AuditLogEntry) {
   const { error } = await client().from('audit_log').upsert(auditToRow(companyId, a))
   if (error) throw error
 }
+async function upsertPendingChange(companyId: string, c: PendingChange) {
+  const { error } = await client().from('pending_changes').upsert(pendingChangeToRow(companyId, c))
+  if (error) throw error
+}
 
 /** Called by useStore after every state update while in remote mode - diffs
- * each of the 6 synced slices against their pre-update value BY REFERENCE
+ * each of the 7 synced slices against their pre-update value BY REFERENCE
  * and pushes whatever changed. See the file-level comment for why reference
  * equality is a safe and sufficient diffing strategy here. */
 export function pushBusinessDiffs(companyId: string, prev: BusinessSlices, next: BusinessSlices) {
@@ -349,4 +378,5 @@ export function pushBusinessDiffs(companyId: string, prev: BusinessSlices, next:
   pushChangedRows(companyId, next.movements, prev.movements, upsertMovement)
   pushChangedRows(companyId, next.dailyClosings, prev.dailyClosings, upsertClosing)
   pushChangedRows(companyId, next.auditLog, prev.auditLog, insertAudit)
+  pushChangedRows(companyId, next.pendingChanges, prev.pendingChanges, upsertPendingChange)
 }

@@ -7,6 +7,7 @@ import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import { pushBusinessDiffs, type BusinessSlices } from '../lib/remoteSync'
+import type { PendingChange, PendingChangeAction, PendingChangeEntityType, UserRole } from '../types/auth'
 import {
   DEFAULT_LEDGER_CATEGORIES,
   DEFAULT_SETTINGS,
@@ -183,31 +184,61 @@ interface AppState {
   dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
   settings: Settings
+  /** 'iroda' szerepkör által beadott, fő iroda jóváhagyására váró
+   * telephely/termék törzsadat-módosítások - lásd requestChange/
+   * approvePendingChange/rejectPendingChange lentebb. */
+  pendingChanges: PendingChange[]
 
   /** 'local' - the original, single-tenant localStorage-only behaviour
    * (Electron build, or web without Supabase configured/logged in) -
    * completely unchanged. 'remote' - locations/products/movements/lots/
-   * dailyClosings/auditLog are backed by Supabase (see lib/remoteSync.ts)
-   * for the raktáros/iroda role-based views to work across separate
+   * dailyClosings/auditLog/pendingChanges are backed by Supabase (see
+   * lib/remoteSync.ts) for the role-based views to work across separate
    * devices; suppliers/customers/ledgerEntries/settings stay local either
    * way. Never set directly - see hydrateFromRemote/resetToLocalMode below. */
   dataMode: 'local' | 'remote'
   remoteCompanyId: string | null
   /** The signed-in user's company role while in remote mode (null in local
    * mode, where there's no role concept at all) - lets a handful of store
-   * actions (see addProduct) enforce a role restriction at the data layer
-   * itself, not just by hiding a button. The real, unbypassable boundary is
-   * still the Supabase RLS policy (no INSERT policy for raktáros on
-   * products - see supabase/schema.sql); this just keeps the local
-   * (optimistic) state from ever drifting out of sync with that by locally
-   * accepting a write the server would reject anyway. */
-  remoteRole: 'raktaros' | 'iroda' | null
+   * actions (see addProduct, addLocation) enforce a role restriction at the
+   * data layer itself, not just by hiding a button. The real, unbypassable
+   * boundary is still the Supabase RLS policy (lásd supabase/schema.sql);
+   * this just keeps the local (optimistic) state from ever drifting out of
+   * sync with that by locally accepting a write the server would reject
+   * anyway, and routes 'iroda' writes through requestChange instead. */
+  remoteRole: UserRole | null
+  /** A bejelentkezett felhasználó id/email-je remote módban - a
+   * pending_changes requested_by/reviewed_by mezőihez kell (ki kérte, ki
+   * hagyta jóvá). Null helyi módban. */
+  remoteUserId: string | null
+  remoteUserEmail: string | null
 
   // Locations
   addLocation: (name: string) => void
   updateLocation: (id: string, name: string) => void
   deleteLocation: (id: string) => void
   restoreLocation: (id: string) => void
+
+  // Jóváhagyási munkafolyamat (iroda törzsadat-módosítása -> fő iroda
+  // jóváhagyása) - lásd types/auth.ts PendingChange és supabase/schema.sql
+  // pending_changes tábla.
+  /** Belső segédfüggvény - addLocation/updateLocation/.../addProduct/...
+   * hívja, mielőtt bármit tenne. 'iroda' esetén pending_changes sort szúr
+   * be és true-t ad vissza (a hívó action-nek ekkor azonnal meg kell
+   * állnia, üres objektumot visszaadva, NEM a teljes `state`-et - lásd a
+   * hívási helyeken lévő megjegyzést). 'tulajdonos' esetén is true-t ad
+   * vissza, de kérés nélkül (ő soha nem írhat semmit). Minden más esetben
+   * (fő iroda, raktáros - ahol külön guard van -, helyi/demó mód) false-t
+   * ad vissza, és a hívó a megszokott módon alkalmazza a módosítást. */
+  requestOrBlock: (
+    entityType: PendingChangeEntityType,
+    action: PendingChangeAction,
+    entityId: string | null,
+    payload: Record<string, unknown> | null,
+    summary: string,
+  ) => boolean
+  approvePendingChange: (id: string) => void
+  rejectPendingChange: (id: string, reason?: string) => void
 
   // Suppliers
   addSupplier: (input: Omit<Supplier, 'id'>) => void
@@ -294,12 +325,98 @@ export const useStore = create<AppState>()(
       return {
       ...buildSeedData(),
       settings: DEFAULT_SETTINGS,
+      pendingChanges: [],
       dataMode: 'local' as const,
       remoteCompanyId: null,
       remoteRole: null,
+      remoteUserId: null,
+      remoteUserEmail: null,
+
+      // 'iroda' szerepkörben a telephely/termék törzsadat-módosítás nem
+      // azonnal hat - ehelyett egy pending_changes sort szúr be a payload-
+      // dal, amit a fő iroda hagy jóvá (approvePendingChange). Ez a
+      // belső segédfüggvény az a KÖZÖS logika, amit addLocation/
+      // updateLocation/deleteLocation/restoreLocation és addProduct/
+      // updateProduct/deleteProduct/restoreProduct is hív, mielőtt
+      // bármit tenne - true-t ad vissza, ha a hívásnak itt meg KELL
+      // állnia (mert kérésként lett beadva, vagy mert tulajdonos szerepkör
+      // soha nem írhat semmit, még kérést sem).
+      requestOrBlock: (entityType: PendingChangeEntityType, action: PendingChangeAction, entityId: string | null, payload: Record<string, unknown> | null, summary: string) => {
+        const state = get()
+        if (state.dataMode !== 'remote') return false
+        if (state.remoteRole === 'tulajdonos') return true
+        if (state.remoteRole !== 'iroda') return false
+        const change: PendingChange = {
+          id: createId(),
+          companyId: state.remoteCompanyId ?? '',
+          entityType,
+          entityId,
+          action,
+          payload,
+          summary,
+          requestedBy: state.remoteUserId,
+          requestedByEmail: state.remoteUserEmail,
+          requestedAt: new Date().toISOString(),
+          status: 'pending',
+          reviewedBy: null,
+          reviewedByEmail: null,
+          reviewedAt: null,
+          rejectReason: null,
+        }
+        set((s) => ({ pendingChanges: [...s.pendingChanges, change] }))
+        return true
+      },
+
+      approvePendingChange: (id) => {
+        const change = get().pendingChanges.find((c) => c.id === id && c.status === 'pending')
+        if (!change) return
+        if (change.entityType === 'location') {
+          const payload = change.payload as { name: string } | null
+          if (change.action === 'create' && payload) get().addLocation(payload.name)
+          else if (change.action === 'update' && change.entityId && payload) get().updateLocation(change.entityId, payload.name)
+          else if (change.action === 'delete' && change.entityId) get().deleteLocation(change.entityId)
+          else if (change.action === 'restore' && change.entityId) get().restoreLocation(change.entityId)
+        } else if (change.entityType === 'product') {
+          const payload = change.payload as Omit<Product, 'id' | 'createdAt' | 'updatedAt'> | null
+          if (change.action === 'create' && payload) get().addProduct(payload)
+          else if (change.action === 'update' && change.entityId && payload) get().updateProduct(change.entityId, payload)
+          else if (change.action === 'delete' && change.entityId) get().deleteProduct(change.entityId)
+          else if (change.action === 'restore' && change.entityId) get().restoreProduct(change.entityId)
+        }
+        const reviewerState = get()
+        set((s) => ({
+          pendingChanges: s.pendingChanges.map((c) =>
+            c.id === id
+              ? { ...c, status: 'approved' as const, reviewedBy: reviewerState.remoteUserId, reviewedByEmail: reviewerState.remoteUserEmail, reviewedAt: new Date().toISOString() }
+              : c,
+          ),
+        }))
+      },
+
+      rejectPendingChange: (id, reason) =>
+        set((state) => ({
+          pendingChanges: state.pendingChanges.map((c) =>
+            c.id === id && c.status === 'pending'
+              ? {
+                  ...c,
+                  status: 'rejected' as const,
+                  reviewedBy: state.remoteUserId,
+                  reviewedByEmail: state.remoteUserEmail,
+                  reviewedAt: new Date().toISOString(),
+                  rejectReason: reason ?? null,
+                }
+              : c,
+          ),
+        })),
 
       addLocation: (name) =>
         set((state) => {
+          // Ha a hívást jóváhagyási kérésként kezeltük (vagy tulajdonos
+          // szerepkörben eldobtuk), itt ÜRES objektumot kell visszaadni, NEM
+          // a (már elavult) `state`-et - egy teljes `state` visszaadása a
+          // Zustand shallow-merge-je miatt felülírná a requestOrBlock által
+          // épp az imént beírt pendingChanges sort a régi értékkel.
+          if (state.requestOrBlock('location', 'create', null, { name: name.trim() }, `"${name.trim()}" telephely létrehozása`)) return {}
           const location: Location = { id: createId(), name: name.trim() }
           return {
             locations: [...state.locations, location],
@@ -312,6 +429,7 @@ export const useStore = create<AppState>()(
           const existing = state.locations.find((l) => l.id === id)
           if (!existing) return state
           const trimmed = name.trim()
+          if (state.requestOrBlock('location', 'update', id, { name: trimmed }, `"${trimmed}" telephely módosítása`)) return {}
           const changes = diffFields('location', { name: existing.name }, { name: trimmed })
           return {
             locations: state.locations.map((l) => (l.id === id ? { ...l, name: trimmed } : l)),
@@ -329,6 +447,7 @@ export const useStore = create<AppState>()(
           const activeLocations = state.locations.filter((l) => !l.deletedAt)
           const inUse = state.products.some((p) => p.locationId === id && !p.deletedAt)
           if (inUse || activeLocations.length <= 1) return state
+          if (state.requestOrBlock('location', 'delete', id, null, `"${location.name}" telephely törlése`)) return {}
           return {
             locations: state.locations.map((l) => (l.id === id ? { ...l, deletedAt: new Date().toISOString() } : l)),
             auditLog: [...state.auditLog, auditEntry('location', id, location.name, 'delete', `"${location.name}" telephely törölve`)],
@@ -339,6 +458,7 @@ export const useStore = create<AppState>()(
         set((state) => {
           const location = state.locations.find((l) => l.id === id)
           if (!location || !location.deletedAt) return state
+          if (state.requestOrBlock('location', 'restore', id, null, `"${location.name}" telephely visszaállítása`)) return {}
           return {
             locations: state.locations.map((l) => (l.id === id ? { ...l, deletedAt: undefined } : l)),
             auditLog: [...state.auditLog, auditEntry('location', id, location.name, 'restore', `"${location.name}" telephely visszaállítva`)],
@@ -435,15 +555,14 @@ export const useStore = create<AppState>()(
 
       addProduct: (input) =>
         set((state) => {
-          // Csak iroda hozhat létre új terméktörzsadatot - lásd
-          // DOCUMENTATION.md 16. fejezet. Products.tsx már elrejti ehhez a
-          // gombot raktáros elől, és a mozgásrögzítő űrlapok (ProductPicker)
-          // sosem engednek új terméket menet közben felvenni - ez a guard a
-          // store szintjén véd, hogy egy megkerült/direkt hívás se hozzon
-          // létre HELYI állapotot, amit a Supabase úgyis elutasítana (nincs
-          // INSERT policy raktárosnak a products táblán - a valódi,
-          // megkerülhetetlen határ ott van).
+          // Csak iroda-szintű szerepkörök (fő iroda/iroda) hozhatnak létre
+          // terméktörzsadatot - raktáros soha, sem közvetlenül, sem
+          // jóváhagyásra váró kérésként. Lásd DOCUMENTATION.md 16. fejezet.
+          // Ez a guard a store szintjén véd, hogy egy megkerült/direkt
+          // hívás se hozzon létre HELYI állapotot, amit a Supabase úgyis
+          // elutasítana - a valódi, megkerülhetetlen határ ott van (RLS).
           if (state.dataMode === 'remote' && state.remoteRole === 'raktaros') return state
+          if (state.requestOrBlock('product', 'create', null, input, `"${input.name}" termék létrehozása`)) return {}
           const now = new Date().toISOString()
           const product: Product = { ...input, id: createId(), createdAt: now, updatedAt: now }
           return {
@@ -456,6 +575,7 @@ export const useStore = create<AppState>()(
         set((state) => {
           const existing = state.products.find((p) => p.id === id)
           if (!existing) return state
+          if (state.requestOrBlock('product', 'update', id, input, `"${input.name}" termék módosítása`)) return {}
           const updated: Product = { ...input, id, createdAt: existing.createdAt, updatedAt: new Date().toISOString(), deletedAt: existing.deletedAt }
           const changes = diffFields('product', existing, updated)
           return {
@@ -471,6 +591,7 @@ export const useStore = create<AppState>()(
         set((state) => {
           const product = state.products.find((p) => p.id === id)
           if (!product) return state
+          if (state.requestOrBlock('product', 'delete', id, null, `"${product.name}" termék törlése`)) return {}
           return {
             products: state.products.map((p) => (p.id === id ? { ...p, deletedAt: new Date().toISOString() } : p)),
             auditLog: [...state.auditLog, auditEntry('product', id, product.name, 'delete', `"${product.name}" termék törölve`)],
@@ -481,6 +602,7 @@ export const useStore = create<AppState>()(
         set((state) => {
           const product = state.products.find((p) => p.id === id)
           if (!product || !product.deletedAt) return state
+          if (state.requestOrBlock('product', 'restore', id, null, `"${product.name}" termék visszaállítása`)) return {}
           return {
             products: state.products.map((p) => (p.id === id ? { ...p, deletedAt: undefined } : p)),
             auditLog: [...state.auditLog, auditEntry('product', id, product.name, 'restore', `"${product.name}" termék visszaállítva`)],
@@ -1448,8 +1570,10 @@ export const useStore = create<AppState>()(
         dataMode: 'local' as const,
         remoteCompanyId: null,
         remoteRole: null,
+        remoteUserId: null,
+        remoteUserEmail: null,
         ...(state.dataMode === 'remote'
-          ? { locations: [], products: [], lots: [], movements: [], dailyClosings: [], auditLog: [] }
+          ? { locations: [], products: [], lots: [], movements: [], dailyClosings: [], auditLog: [], pendingChanges: [] }
           : {}),
       }),
     },
@@ -1461,17 +1585,20 @@ export const useStore = create<AppState>()(
  * company+profile become available - see hooks/useAuth.tsx. Uses
  * useStore.setState directly (bypassing the sync wrapper above) since this
  * is a download, not a local mutation that needs pushing back. */
-export function hydrateFromRemote(companyId: string, slices: BusinessSlices, role: 'raktaros' | 'iroda') {
+export function hydrateFromRemote(companyId: string, userId: string, userEmail: string, slices: BusinessSlices, role: UserRole) {
   useStore.setState({
     dataMode: 'remote',
     remoteCompanyId: companyId,
     remoteRole: role,
+    remoteUserId: userId,
+    remoteUserEmail: userEmail,
     locations: slices.locations,
     products: slices.products,
     lots: slices.lots,
     movements: slices.movements,
     dailyClosings: slices.dailyClosings,
     auditLog: slices.auditLog,
+    pendingChanges: slices.pendingChanges,
   })
 }
 
@@ -1484,12 +1611,15 @@ export function resetToLocalMode() {
     dataMode: 'local',
     remoteCompanyId: null,
     remoteRole: null,
+    remoteUserId: null,
+    remoteUserEmail: null,
     locations: [],
     products: [],
     lots: [],
     movements: [],
     dailyClosings: [],
     auditLog: [],
+    pendingChanges: [],
   })
   useStore.persist.rehydrate()
 }

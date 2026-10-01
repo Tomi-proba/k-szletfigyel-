@@ -21,6 +21,13 @@ interface CompanyUserRow {
   isPlatformAdmin: boolean
 }
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  raktaros: 'Raktáros',
+  iroda: 'Iroda',
+  fo_iroda: 'Fő iroda',
+  tulajdonos: 'Tulajdonos (csak olvasó)',
+}
+
 /** Elég erős, könnyen diktálható ideiglenes jelszó - a meghívott utána a
  * "Beállítások" oldalon vagy az "Elfelejtett jelszó" folyamattal bármikor
  * lecserélheti sajátra. */
@@ -32,7 +39,12 @@ function generateTempPassword(): string {
 }
 
 export function Team() {
-  const { company } = useAuth()
+  const { company, effectiveRole } = useAuth()
+  // 'iroda' csak raktáros/iroda szintű felhasználót hozhat létre - magasabb
+  // jogú (fő iroda, tulajdonos) fiók létrehozása kizárólag fő iroda joga.
+  // Lásd ugyanez az ellenőrzés szerver oldalon is: create-team-member Edge
+  // Function (ez itt csak UI-kényelem, a valódi határ ott van).
+  const assignableRoles: UserRole[] = effectiveRole === 'fo_iroda' ? ['raktaros', 'iroda', 'fo_iroda', 'tulajdonos'] : ['raktaros', 'iroda']
   // A `.filter()`-t NEM szabad közvetlenül a Zustand selectorban hívni -
   // az minden hívásnál új tömböt adna vissza, amit a React
   // useSyncExternalStore (amire a Zustand épül) instabil pillanatképnek
@@ -124,8 +136,11 @@ export function Team() {
           </Field>
           <Field label="Szerepkör">
             <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
-              <option value="raktaros">Raktáros (egy telephelyhez kötve)</option>
-              <option value="iroda">Iroda (teljes hozzáférés)</option>
+              {assignableRoles.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </option>
+              ))}
             </Select>
           </Field>
           {role === 'raktaros' && (
@@ -190,7 +205,7 @@ export function Team() {
                     <td className="py-2">
                       {u.email} {u.isPlatformAdmin && <span className="text-xs text-[var(--color-text-muted)]">(üzemeltető)</span>}
                     </td>
-                    <td className="py-2">{u.role === 'raktaros' ? 'Raktáros' : 'Iroda'}</td>
+                    <td className="py-2">{ROLE_LABELS[u.role] ?? u.role}</td>
                     <td className="py-2">{u.assignedLocationName ?? '—'}</td>
                   </tr>
                 ))}

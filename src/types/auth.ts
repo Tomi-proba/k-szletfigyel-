@@ -19,16 +19,26 @@ export interface Company {
   stripeSubscriptionId: string | null
 }
 
-/** 'iroda' - full access to every module across every location (the
- * pre-existing single-role app's behaviour). 'raktaros' - restricted to a
- * single assigned location, see hooks/useAuth.tsx isWarehouseUser and the
- * RLS policies in supabase/schema.sql that enforce this at the database
- * level too, not just in the UI.
- *
- * (A fő iroda / iroda-jóváhagyás / tulajdonos-csak-olvasó szerepkör-bővítés
- * külön, nagyobb munkaként van tervben - lásd a beszélgetésben a 2026-10-01-i
- * megbeszélést - ez a fájl egyelőre a meglévő 2 szerepkörnél maradt.) */
-export type UserRole = 'raktaros' | 'iroda'
+/** Négy szerepkör:
+ * - 'fo_iroda' (fő iroda) - teljes írási jog a megosztott üzleti adatra
+ *   (telephely/termék törzsadat). Ő hagyja jóvá az 'iroda' szerepkör
+ *   módosítási kéréseit (pending_changes) és a raktáros beérkezés/
+ *   kiszállítás-kéréseit is.
+ * - 'iroda' - ugyanazt LÁTJA, amit a fő iroda (teljes, cégen belüli
+ *   rálátás), de a telephely/termék törzsadat-módosításai nem azonnal
+ *   hatnak, hanem egy pending_changes sorként várnak a fő iroda
+ *   jóváhagyására - lásd store/useStore.ts requestChange/
+ *   approvePendingChange. Mozgást (be/ki) viszont közvetlenül rögzíthet, és
+ *   raktáros-kérést is jóváhagyhat, pont úgy, mint a fő iroda.
+ * - 'tulajdonos' - ugyanaz a teljes rálátás, mint a fő irodának, de
+ *   KIZÁRÓLAG olvasó jogú - sem közvetlen módosítást, sem jóváhagyási
+ *   kérést nem adhat be, semmilyen táblán. Ez adatbázis-szinten (RLS) is
+ *   kikényszerítve van, nem csak a felületen.
+ * - 'raktaros' - egyetlen hozzárendelt telephelyre korlátozva, lásd
+ *   hooks/useAuth.tsx isWarehouseUser.
+ * Mindegyik korlátozás a supabase/schema.sql RLS policy-jain keresztül is
+ * érvényesül, nem csak a UI-n. */
+export type UserRole = 'raktaros' | 'iroda' | 'fo_iroda' | 'tulajdonos'
 
 export interface Profile {
   id: string
@@ -53,6 +63,35 @@ export interface Invite {
   createdAt: string
   expiresAt: string
   usedAt: string | null
+}
+
+export type PendingChangeEntityType = 'location' | 'product'
+export type PendingChangeAction = 'create' | 'update' | 'delete' | 'restore'
+export type PendingChangeStatus = 'pending' | 'approved' | 'rejected'
+
+/** Egy 'iroda' szerepkör által beadott, fő iroda jóváhagyására váró
+ * telephely/termék törzsadat-módosítás - lásd store/useStore.ts
+ * requestChange/approvePendingChange és supabase/schema.sql
+ * pending_changes tábla. */
+export interface PendingChange {
+  id: string
+  companyId: string
+  entityType: PendingChangeEntityType
+  /** null, ha 'create' - akkor még nincs valódi entitás-azonosító. */
+  entityId: string | null
+  action: PendingChangeAction
+  /** A tervezett új állapot (create/update esetén a mezők) - delete/restore
+   * esetén lehet null, elég az entityId + action. */
+  payload: Record<string, unknown> | null
+  summary: string
+  requestedBy: string | null
+  requestedByEmail: string | null
+  requestedAt: string
+  status: PendingChangeStatus
+  reviewedBy: string | null
+  reviewedByEmail: string | null
+  reviewedAt: string | null
+  rejectReason: string | null
 }
 
 /** Maps a public.companies row (snake_case, as Supabase returns it) to the
@@ -98,5 +137,25 @@ export function mapInviteRow(row: Record<string, unknown>): Invite {
     createdAt: row.created_at as string,
     expiresAt: row.expires_at as string,
     usedAt: (row.used_at as string | null) ?? null,
+  }
+}
+
+export function mapPendingChangeRow(row: Record<string, unknown>): PendingChange {
+  return {
+    id: row.id as string,
+    companyId: row.company_id as string,
+    entityType: row.entity_type as PendingChangeEntityType,
+    entityId: (row.entity_id as string | null) ?? null,
+    action: row.action as PendingChangeAction,
+    payload: (row.payload as Record<string, unknown> | null) ?? null,
+    summary: row.summary as string,
+    requestedBy: (row.requested_by as string | null) ?? null,
+    requestedByEmail: (row.requested_by_email as string | null) ?? null,
+    requestedAt: row.requested_at as string,
+    status: row.status as PendingChangeStatus,
+    reviewedBy: (row.reviewed_by as string | null) ?? null,
+    reviewedByEmail: (row.reviewed_by_email as string | null) ?? null,
+    reviewedAt: (row.reviewed_at as string | null) ?? null,
+    rejectReason: (row.reject_reason as string | null) ?? null,
   }
 }

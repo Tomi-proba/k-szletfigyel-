@@ -34,7 +34,10 @@
 // - ugyanaz a minta, mint a meglévő create-checkout-session stub-ban.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const ALLOWED_ROLES = ['raktaros', 'iroda']
+const ALL_ROLES = ['raktaros', 'iroda', 'fo_iroda', 'tulajdonos']
+// 'iroda' csak raktáros/iroda szintű felhasználót hozhat létre - magasabb
+// jogú (fő iroda, tulajdonos) fiók létrehozása kizárólag fő iroda joga.
+const IRODA_CREATABLE_ROLES = ['raktaros', 'iroda']
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -66,8 +69,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const { data: callerProfile } = await callerClient.from('profiles').select('role, company_id').eq('id', callerUser.id).maybeSingle()
-  if (!callerProfile || callerProfile.role !== 'iroda') {
-    return new Response(JSON.stringify({ error: 'Csak iroda-jogosultsággal hozható létre új felhasználó.' }), { status: 403 })
+  if (!callerProfile || (callerProfile.role !== 'iroda' && callerProfile.role !== 'fo_iroda')) {
+    return new Response(JSON.stringify({ error: 'Csak iroda vagy fő iroda jogosultsággal hozható létre új felhasználó.' }), { status: 403 })
   }
 
   let body: { email?: string; password?: string; role?: string; assignedLocationId?: string | null; assignedLocationName?: string | null }
@@ -81,8 +84,11 @@ Deno.serve(async (req: Request) => {
   const password = body.password
   const role = body.role
 
-  if (!email || !password || !role || !ALLOWED_ROLES.includes(role)) {
+  if (!email || !password || !role || !ALL_ROLES.includes(role)) {
     return new Response(JSON.stringify({ error: 'Hiányzó vagy érvénytelen mezők.' }), { status: 400 })
+  }
+  if (callerProfile.role === 'iroda' && !IRODA_CREATABLE_ROLES.includes(role)) {
+    return new Response(JSON.stringify({ error: 'Iroda csak raktáros vagy iroda szerepkört hozhat létre - fő iroda/tulajdonos fiókot csak a fő iroda.' }), { status: 403 })
   }
   if (password.length < 6) {
     return new Response(JSON.stringify({ error: 'A jelszónak legalább 6 karakter hosszúnak kell lennie.' }), { status: 400 })

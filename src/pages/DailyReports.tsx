@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Clock, Eye, FileSpreadsheet, FileText } fr
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
+import { useAuth } from '../hooks/useAuth'
 import { useAlerts } from '../hooks/useAlerts'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { buildDailyClosingSummary, type DailyClosingSummary } from '../lib/dailyClosing'
@@ -38,6 +39,7 @@ interface ReportRow {
 }
 
 export function DailyReports() {
+  const { isReadOnlyViewer } = useAuth()
   const locations = useStore((s) => s.locations)
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
@@ -265,7 +267,7 @@ export function DailyReports() {
                           >
                             <Eye size={16} />
                           </button>
-                          {c.status !== 'approved' && (
+                          {c.status !== 'approved' && !isReadOnlyViewer && (
                             <button
                               type="button"
                               onClick={() => approveDailyClosing(c.id)}
@@ -339,7 +341,7 @@ export function DailyReports() {
             <Button variant="secondary" onClick={() => setDetail(null)}>
               Bezárás
             </Button>
-            {detail.status !== 'approved' && (
+            {detail.status !== 'approved' && !isReadOnlyViewer && (
               <Button
                 onClick={() => {
                   approveDailyClosing(detail.id)

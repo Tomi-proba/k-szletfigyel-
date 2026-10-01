@@ -63,7 +63,7 @@ export function Dashboard() {
   // vevő/fizetés-jellegű kártyák (kifizetetlen eladás, fizetési
   // kötelezettség, nyitott eladás) irodai adatnak számítanak, ezért rejtve
   // maradnak.
-  const { isWarehouseUser } = useAuth()
+  const { isWarehouseUser, isReadOnlyViewer } = useAuth()
 
   const urgent = alerts.needsReorder
     .filter((a) => a.insight.reorderUrgent)
@@ -77,11 +77,13 @@ export function Dashboard() {
     <div>
       <PageHeader title="Kezdőlap" subtitle={`${products.length} termék, ${locations.length} telephely nyilvántartva`} />
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,420px)_1fr]">
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Gyors mozgásrögzítés</h2>
-          <MovementForm />
-        </Card>
+      <div className={`mb-6 grid gap-4 ${isReadOnlyViewer ? '' : 'lg:grid-cols-[minmax(0,420px)_1fr]'}`}>
+        {!isReadOnlyViewer && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Gyors mozgásrögzítés</h2>
+            <MovementForm />
+          </Card>
+        )}
 
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

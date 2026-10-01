@@ -1,6 +1,7 @@
 import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import { useAuth } from '../hooks/useAuth'
 import { useAlerts } from '../hooks/useAlerts'
 import type { Customer } from '../types'
 import { Modal } from '../components/Modal'
@@ -67,6 +68,7 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
 }
 
 export function Customers() {
+  const { isReadOnlyViewer } = useAuth()
   const customers = useStore((s) => s.customers)
   const deleteCustomer = useStore((s) => s.deleteCustomer)
   const restoreCustomer = useStore((s) => s.restoreCustomer)
@@ -87,9 +89,11 @@ export function Customers() {
         title="Vevők"
         subtitle="Névre rögzített eladások és fizetési állapotuk nyomon követése"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={18} /> Új vevő
-          </Button>
+          !isReadOnlyViewer && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={18} /> Új vevő
+            </Button>
+          )
         }
       />
 
@@ -111,9 +115,11 @@ export function Customers() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
-                  <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
-                    <CheckCircle2 size={16} /> Kifizetve
-                  </Button>
+                  {!isReadOnlyViewer && (
+                    <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                      <CheckCircle2 size={16} /> Kifizetve
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -151,22 +157,24 @@ export function Customers() {
                 <div className="text-sm text-[var(--color-text-muted)]">{c.phone || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">{c.email || '—'}</div>
                 {c.notes && <div className="text-xs text-[var(--color-text-muted)]">{c.notes}</div>}
-                <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  {isDeleted ? (
-                    <Button variant="secondary" onClick={() => restoreCustomer(c.id)}>
-                      <RotateCcw size={16} /> Visszaállítás
-                    </Button>
-                  ) : (
-                    <>
-                      <Button variant="secondary" onClick={() => setEditing(c)}>
-                        <Pencil size={16} /> Szerkesztés
+                {!isReadOnlyViewer && (
+                  <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
+                    {isDeleted ? (
+                      <Button variant="secondary" onClick={() => restoreCustomer(c.id)}>
+                        <RotateCcw size={16} /> Visszaállítás
                       </Button>
-                      <Button variant="danger" onClick={() => setDeleting(c)}>
-                        <Trash2 size={16} />
-                      </Button>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        <Button variant="secondary" onClick={() => setEditing(c)}>
+                          <Pencil size={16} /> Szerkesztés
+                        </Button>
+                        <Button variant="danger" onClick={() => setDeleting(c)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
               </Card>
             )
           })}

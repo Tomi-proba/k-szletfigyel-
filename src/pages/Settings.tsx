@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { DEFAULT_SETTINGS } from '../types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button, Card, Field, Input, PageHeader } from '../components/ui'
 
 export function Settings() {
+  const { isReadOnlyViewer } = useAuth()
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const resetToDemoData = useStore((s) => s.resetToDemoData)
@@ -56,7 +58,16 @@ export function Settings() {
     <div>
       <PageHeader title="Beállítások" subtitle="Riasztási küszöbértékek testreszabása" />
 
+      {isReadOnlyViewer && (
+        <Card className="mb-5 border-[var(--color-primary)]/30 bg-[var(--color-info-bg)]">
+          <p className="text-sm text-[var(--color-primary)]">
+            Csak olvasó (tulajdonosi) nézetben vagy - a beállítások itt megtekinthetők, de nem módosíthatók.
+          </p>
+        </Card>
+      )}
+
       <form onSubmit={handleSubmit} className="max-w-xl">
+        <fieldset disabled={isReadOnlyViewer} className="contents">
         <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Beszerzési költség számítása</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
@@ -172,12 +183,16 @@ export function Settings() {
 
         {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 
-        <div className="flex items-center gap-3">
-          <Button type="submit">Beállítások mentése</Button>
-          {saved && <span className="text-sm text-[var(--color-success)]">Elmentve.</span>}
-        </div>
+        {!isReadOnlyViewer && (
+          <div className="flex items-center gap-3">
+            <Button type="submit">Beállítások mentése</Button>
+            {saved && <span className="text-sm text-[var(--color-success)]">Elmentve.</span>}
+          </div>
+        )}
+        </fieldset>
       </form>
 
+      {!isReadOnlyViewer && (
       <Card className="mt-8 max-w-xl border-[var(--color-danger)]/30">
         <h2 className="mb-1 text-base font-semibold text-[var(--color-text)]">Veszélyzóna</h2>
         {isRemoteMode ? (
@@ -199,6 +214,7 @@ export function Settings() {
           </>
         )}
       </Card>
+      )}
 
       {confirmDemo && (
         <ConfirmDialog

@@ -6,6 +6,7 @@
 import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, FileText, Send } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
@@ -38,6 +39,7 @@ interface HistoryRow {
 }
 
 export function DailyClosingPage() {
+  const { isReadOnlyViewer } = useAuth()
   const locations = useStore((s) => s.locations)
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
@@ -221,11 +223,13 @@ export function DailyClosingPage() {
             </>
           )}
           {error && <p className="mt-3 text-sm text-[var(--color-danger)]">{error}</p>}
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleSubmit} disabled={!preview || (preview.inCount === 0 && preview.outCount === 0)}>
-              <Send size={16} /> Napi zárás elküldése
-            </Button>
-          </div>
+          {!isReadOnlyViewer && (
+            <div className="mt-4 flex justify-end">
+              <Button onClick={handleSubmit} disabled={!preview || (preview.inCount === 0 && preview.outCount === 0)}>
+                <Send size={16} /> Napi zárás elküldése
+              </Button>
+            </div>
+          )}
         </Card>
       )}
       {successTick > 0 && !existingClosing && (

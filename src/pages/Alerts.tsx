@@ -2,6 +2,7 @@ import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { SaleStatus } from '../types'
 import { Button, Card, EmptyState, PageHeader, Select } from '../components/ui'
@@ -31,6 +32,7 @@ const PAYABLE_WINDOWS = [
 ]
 
 export function Alerts() {
+  const { isReadOnlyViewer } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const active = searchParams.get('szuro') as FilterKey | null
   const alerts = useAlerts()
@@ -217,9 +219,11 @@ export function Alerts() {
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
-                      <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
-                        <CheckCircle2 size={16} /> Kifizetve
-                      </Button>
+                      {!isReadOnlyViewer && (
+                        <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                          <CheckCircle2 size={16} /> Kifizetve
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -271,9 +275,11 @@ export function Alerts() {
                       <span className={`text-lg font-bold ${p.urgency === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--color-warning)]'}`}>
                         {formatCurrency(p.amount)}
                       </span>
-                      <Button variant="secondary" onClick={() => markPayablePaid(p)}>
-                        <CheckCircle2 size={16} /> Kifizetve
-                      </Button>
+                      {!isReadOnlyViewer && (
+                        <Button variant="secondary" onClick={() => markPayablePaid(p)}>
+                          <CheckCircle2 size={16} /> Kifizetve
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}

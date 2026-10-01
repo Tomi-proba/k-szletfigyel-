@@ -1,5 +1,6 @@
 import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Supplier } from '../types'
 import { Modal } from '../components/Modal'
@@ -62,6 +63,7 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
 }
 
 export function Suppliers() {
+  const { isReadOnlyViewer } = useAuth()
   const suppliers = useStore((s) => s.suppliers)
   const products = useStore((s) => s.products)
   const deleteSupplier = useStore((s) => s.deleteSupplier)
@@ -79,9 +81,11 @@ export function Suppliers() {
         title="Beszállítók"
         subtitle="Beszállítói adatok és szállítási idők"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={18} /> Új beszállító
-          </Button>
+          !isReadOnlyViewer && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={18} /> Új beszállító
+            </Button>
+          )
         }
       />
 
@@ -110,22 +114,24 @@ export function Suppliers() {
                 <div className="text-sm text-[var(--color-text-muted)]">{s.email || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">Szállítási idő: {s.leadTimeDays} nap</div>
                 <div className="text-xs text-[var(--color-text-muted)]">{productCount} termékhez rendelve</div>
-                <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
-                  {isDeleted ? (
-                    <Button variant="secondary" onClick={() => restoreSupplier(s.id)}>
-                      <RotateCcw size={16} /> Visszaállítás
-                    </Button>
-                  ) : (
-                    <>
-                      <Button variant="secondary" onClick={() => setEditing(s)}>
-                        <Pencil size={16} /> Szerkesztés
+                {!isReadOnlyViewer && (
+                  <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
+                    {isDeleted ? (
+                      <Button variant="secondary" onClick={() => restoreSupplier(s.id)}>
+                        <RotateCcw size={16} /> Visszaállítás
                       </Button>
-                      <Button variant="danger" onClick={() => setDeleting(s)}>
-                        <Trash2 size={16} />
-                      </Button>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        <Button variant="secondary" onClick={() => setEditing(s)}>
+                          <Pencil size={16} /> Szerkesztés
+                        </Button>
+                        <Button variant="danger" onClick={() => setDeleting(s)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
               </Card>
             )
           })}

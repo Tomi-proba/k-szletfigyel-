@@ -8,6 +8,7 @@
 // duplicated here.
 import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
@@ -41,6 +42,7 @@ interface ManualVatExportRow {
 }
 
 export function Vat() {
+  const { isReadOnlyViewer } = useAuth()
   const entries = useStore((s) => s.ledgerEntries)
   const products = useStore((s) => s.products)
   const suppliers = useStore((s) => s.suppliers)
@@ -116,9 +118,11 @@ export function Vat() {
         title="ÁFA"
         subtitle="ÁFA-egyenleg, automatikus (beszerzés/eladás) és kézi tételek egy helyen. A termékenkénti alapértelmezett ÁFA kulcs a termék adatlapján állítható."
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={18} /> Új ÁFA tétel
-          </Button>
+          !isReadOnlyViewer && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={18} /> Új ÁFA tétel
+            </Button>
+          )
         }
       />
 
@@ -326,7 +330,7 @@ export function Vat() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
-                        {isDeleted ? (
+                        {isReadOnlyViewer ? null : isDeleted ? (
                           <button
                             type="button"
                             onClick={() => restoreLedgerEntry(e.id)}

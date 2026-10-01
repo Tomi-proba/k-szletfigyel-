@@ -237,7 +237,7 @@ export function Layout() {
   // follow-up one.
   const [lastAutoExpandedFor, setLastAutoExpandedFor] = useState<string | null>(null)
   const alerts = useAlerts()
-  const { session, profile, isReadOnly, isWarehouseUser, effectiveRole, signOut } = useAuth()
+  const { session, profile, isReadOnly, isReadOnlyViewer, isWarehouseUser, effectiveRole, signOut } = useAuth()
   const pendingChanges = useStore((s) => s.pendingChanges)
   const showAccountGroup = isSupabaseConfigured && !!session
   // effectiveRole (nem profile?.role) kell ide, mert ez veszi figyelembe a
@@ -430,7 +430,7 @@ export function Layout() {
         </main>
       </div>
 
-      {!isDashboard && !isReadOnly && (
+      {!isDashboard && !isReadOnly && !isReadOnlyViewer && (
         <button
           type="button"
           onClick={() => setQuickMoveOpen(true)}

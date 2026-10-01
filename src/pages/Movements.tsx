@@ -69,7 +69,7 @@ export function Movements() {
   // egységköltség/ÁFA és a vevő/fizetési adatok - ezek irodai adatnak
   // számítanak (lásd DOCUMENTATION.md 14. fejezet), ezért raktáros
   // szerepkörben elrejtve maradnak a listából és az exportból is.
-  const { isWarehouseUser } = useAuth()
+  const { isWarehouseUser, isReadOnlyViewer } = useAuth()
 
   const [searchParams] = useSearchParams()
   const [from, setFrom] = useState(isoDaysAgo(30))
@@ -201,12 +201,12 @@ export function Movements() {
             <Button variant="secondary" onClick={() => exportToPdf(`mozgasnaplo_${from}_${to}.pdf`, 'Mozgásnapló', columns, rows)}>
               <FileText size={16} /> PDF
             </Button>
-            {!isWarehouseUser && (
+            {!isWarehouseUser && !isReadOnlyViewer && (
               <Button onClick={() => setCreatingOrder(true)}>
                 <PackagePlus size={16} /> Rendelés leadása
               </Button>
             )}
-            {isWarehouseUser && (
+            {isWarehouseUser && !isReadOnlyViewer && (
               <Button onClick={() => setCreatingSalePrep(true)}>
                 <ClipboardList size={16} /> Kiszállítás előkészítése
               </Button>
@@ -417,6 +417,13 @@ export function Movements() {
                         </div>
                       ) : isDeleted ? (
                         <span className="text-[var(--color-text-muted)]">—</span>
+                      ) : isReadOnlyViewer ? (
+                        <>
+                          <span>{SALE_STATUS_LABELS[m.saleStatus ?? 'pending']}</span>
+                          {m.saleStatusChangedAt && (
+                            <div className="mt-1 text-xs text-[var(--color-text-muted)]">{formatDateTime(m.saleStatusChangedAt)}</div>
+                          )}
+                        </>
                       ) : (
                         <>
                           <Select value={m.saleStatus ?? 'pending'} onChange={(e) => setSaleStatus(m.id, e.target.value as SaleStatus)}>
@@ -434,7 +441,7 @@ export function Movements() {
                     </td>
                     <td className="px-4 py-3 text-[var(--color-text-muted)]">{m.note}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {isDeleted ? (
+                      {isReadOnlyViewer ? null : isDeleted ? (
                         <button
                           type="button"
                           onClick={() => restoreMovement(m.id)}

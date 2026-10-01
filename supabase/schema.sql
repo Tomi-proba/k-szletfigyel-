@@ -78,9 +78,25 @@ create policy "Saját cég módosítása" on public.companies
     id in (select company_id from public.profiles where profiles.id = auth.uid())
   );
 
+-- SECURITY DEFINER, hogy a "platform admin vagyok-e" ellenőrzés megkerülje
+-- a hívó RLS-ét - enélkül egy, a profiles táblán ÖNMAGÁRA hivatkozó policy
+-- (lásd lent) "infinite recursion detected in policy for relation
+-- profiles" hibával (PostgREST felől 500-as HTTP válasz) állna le MINDEN
+-- profiles-lekérdezésnél, a bejelentkezés utáni saját profil betöltését is
+-- beleértve - ez élesben pontosan ezt a hibát okozta.
+create or replace function public.is_platform_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_platform_admin from public.profiles where id = auth.uid()), false);
+$$;
+
 create policy "Admin minden céget lát" on public.companies
   for select using (
-    exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.is_platform_admin)
+    public.is_platform_admin()
   );
 
 -- --- profiles RLS ------------------------------------------------------------
@@ -90,7 +106,7 @@ create policy "Saját profil megtekintése" on public.profiles
 
 create policy "Admin minden profilt lát" on public.profiles
   for select using (
-    exists (select 1 from public.profiles p2 where p2.id = auth.uid() and p2.is_platform_admin)
+    public.is_platform_admin()
   );
 
 -- --- Biztonsági trigger: önmagunkat sosem léptethetjük admin-ná -------------

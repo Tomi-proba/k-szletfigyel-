@@ -24,7 +24,15 @@
 // ugyanazt a logikát futtatja le (cég/szerepkör/telephely hozzárendelés),
 // mint a link-alapú csatlakozásnál - nem kellett duplikálni azt a kódot.
 //
-// Deployolás (Supabase Dashboard > Edge Functions > Create a new function,
+// CORS: a böngésző (Vercel-en futó app) és ez a funkció (Supabase) két
+// külön cím (origin), ezért a böngésző minden POST előtt egy "előzetes"
+// OPTIONS kérést küld, hogy megkérdezze, szabad-e a hívás - enélkül a
+// lentebbi corsHeaders-ek nélkül (és az OPTIONS-ágat kezelő blokk nélkül)
+// a böngésző CORS policy miatt blokkolja a tényleges kérést, mielőtt az
+// egyáltalán eljutna a funkcióhoz ("Failed to send a request to the Edge
+// Function" / "has been blocked by CORS policy" - ez derült ki élesben).
+//
+// Deployolás (Supabase Dashboard > Edge Functions > a funkció szerkesztése,
 // vagy a Supabase CLI-vel: `supabase functions deploy create-team-member`).
 // A SUPABASE_URL, SUPABASE_ANON_KEY és SUPABASE_SERVICE_ROLE_KEY automatikusan
 // elérhető minden Edge Function-ben - nincs külön titkot beállítani.
@@ -39,16 +47,33 @@ const ALL_ROLES = ['raktaros', 'iroda', 'fo_iroda', 'tulajdonos']
 // jogú (fő iroda, tulajdonos) fiók létrehozása kizárólag fő iroda joga.
 const IRODA_CREATABLE_ROLES = ['raktaros', 'iroda']
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+}
+
 Deno.serve(async (req: Request) => {
+  // A böngésző CORS-előzetes kérése - erre NEM szabad tartalommal
+  // válaszolni, csak a corsHeaders-szel jóváhagyni, utána jön a tényleges
+  // POST egy következő, külön kérésben.
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Csak POST metódus engedélyezett.' }), { status: 405 })
+    return json({ error: 'Csak POST metódus engedélyezett.' }, 405)
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return new Response(JSON.stringify({ error: 'A funkció nincs megfelelően konfigurálva.' }), { status: 500 })
+    return json({ error: 'A funkció nincs megfelelően konfigurálva.' }, 500)
   }
 
   const authHeader = req.headers.get('Authorization') ?? ''
@@ -65,19 +90,19 @@ Deno.serve(async (req: Request) => {
     error: callerError,
   } = await callerClient.auth.getUser()
   if (callerError || !callerUser) {
-    return new Response(JSON.stringify({ error: 'Nincs bejelentkezve.' }), { status: 401 })
+    return json({ error: 'Nincs bejelentkezve.' }, 401)
   }
 
   const { data: callerProfile } = await callerClient.from('profiles').select('role, company_id').eq('id', callerUser.id).maybeSingle()
   if (!callerProfile || (callerProfile.role !== 'iroda' && callerProfile.role !== 'fo_iroda')) {
-    return new Response(JSON.stringify({ error: 'Csak iroda vagy fő iroda jogosultsággal hozható létre új felhasználó.' }), { status: 403 })
+    return json({ error: 'Csak iroda vagy fő iroda jogosultsággal hozható létre új felhasználó.' }, 403)
   }
 
   let body: { email?: string; password?: string; role?: string; assignedLocationId?: string | null; assignedLocationName?: string | null }
   try {
     body = await req.json()
   } catch {
-    return new Response(JSON.stringify({ error: 'Érvénytelen kérés.' }), { status: 400 })
+    return json({ error: 'Érvénytelen kérés.' }, 400)
   }
 
   const email = body.email?.trim().toLowerCase()
@@ -85,16 +110,16 @@ Deno.serve(async (req: Request) => {
   const role = body.role
 
   if (!email || !password || !role || !ALL_ROLES.includes(role)) {
-    return new Response(JSON.stringify({ error: 'Hiányzó vagy érvénytelen mezők.' }), { status: 400 })
+    return json({ error: 'Hiányzó vagy érvénytelen mezők.' }, 400)
   }
   if (callerProfile.role === 'iroda' && !IRODA_CREATABLE_ROLES.includes(role)) {
-    return new Response(JSON.stringify({ error: 'Iroda csak raktáros vagy iroda szerepkört hozhat létre - fő iroda/tulajdonos fiókot csak a fő iroda.' }), { status: 403 })
+    return json({ error: 'Iroda csak raktáros vagy iroda szerepkört hozhat létre - fő iroda/tulajdonos fiókot csak a fő iroda.' }, 403)
   }
   if (password.length < 6) {
-    return new Response(JSON.stringify({ error: 'A jelszónak legalább 6 karakter hosszúnak kell lennie.' }), { status: 400 })
+    return json({ error: 'A jelszónak legalább 6 karakter hosszúnak kell lennie.' }, 400)
   }
   if (role === 'raktaros' && !body.assignedLocationId) {
-    return new Response(JSON.stringify({ error: 'Raktáros felhasználóhoz telephely szükséges.' }), { status: 400 })
+    return json({ error: 'Raktáros felhasználóhoz telephely szükséges.' }, 400)
   }
 
   // Innentől service role kulccsal - ez az EGYETLEN hely ebben a
@@ -114,7 +139,7 @@ Deno.serve(async (req: Request) => {
     .select('token')
     .single()
   if (inviteError || !invite) {
-    return new Response(JSON.stringify({ error: 'Nem sikerült előkészíteni a felhasználót.' }), { status: 500 })
+    return json({ error: 'Nem sikerült előkészíteni a felhasználót.' }, 500)
   }
 
   const { error: createError } = await adminClient.auth.admin.createUser({
@@ -127,8 +152,8 @@ Deno.serve(async (req: Request) => {
     const message = createError.message?.includes('already been registered')
       ? 'Ezzel az email címmel már van fiók.'
       : (createError.message ?? 'Nem sikerült a felhasználó létrehozása.')
-    return new Response(JSON.stringify({ error: message }), { status: 400 })
+    return json({ error: message }, 400)
   }
 
-  return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+  return json({ ok: true })
 })

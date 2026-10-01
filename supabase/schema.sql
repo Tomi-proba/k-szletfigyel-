@@ -516,7 +516,13 @@ create table if not exists public.audit_log (
   action text not null,
   description text not null,
   changes jsonb,
-  created_by uuid references public.profiles (id)
+  -- "on delete set null": ha a felhasználót törlik (pl. Auth > Users-ből),
+  -- az általa korábban rögzített audit-bejegyzések NE vesszenek el vele
+  -- együtt - csak a "ki csinálta" mező üresedik ki. Enélkül (az
+  -- alapértelmezett "no action" FK-viselkedéssel) a felhasználó törlése
+  -- "Database error deleting user" hibával elszállt volna, amint bármilyen
+  -- előzménye van - ez derült ki élesben.
+  created_by uuid references public.profiles (id) on delete set null
 );
 
 create index if not exists audit_log_company_id_idx on public.audit_log (company_id);
@@ -586,11 +592,14 @@ create table if not exists public.invites (
   role text not null check (role in ('raktaros', 'iroda')),
   assigned_location_id uuid references public.locations (id),
   assigned_location_name text,
-  created_by uuid references public.profiles (id),
+  -- "on delete set null": lásd az audit_log.created_by melletti
+  -- megjegyzést - a felhasználó törlése ne akadjon el amiatt, mert
+  -- korábban ő hozott létre meghívót, vagy ő fogadott el egyet.
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '7 days'),
   used_at timestamptz,
-  used_by uuid references public.profiles (id)
+  used_by uuid references public.profiles (id) on delete set null
 );
 
 create index if not exists invites_company_id_idx on public.invites (company_id);

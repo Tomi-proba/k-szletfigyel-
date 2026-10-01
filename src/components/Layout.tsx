@@ -88,7 +88,6 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Scale,
     items: [
       { to: '/penzugyi-naplo', label: 'Pénzügyi napló' },
-      { to: '/afa', label: 'ÁFA' },
       { to: '/riasztasok?szuro=fizetesi', label: 'Fizetési kötelezettségek' },
     ],
   },

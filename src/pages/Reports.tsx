@@ -269,17 +269,19 @@ function ShippingReportSection() {
             <span className="mb-1 block font-medium text-[var(--color-text)]">Eddig</span>
             <Input type="date" value={to} min={from} max={todayISO()} onChange={(e) => setTo(e.target.value)} />
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Beszállító</span>
-            <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-              <option value="">Összes beszállító</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+          {suppliers.length > 1 && (
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Beszállító</span>
+              <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+                <option value="">Összes beszállító</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
           <label className="text-sm">
             <span className="mb-1 block font-medium text-[var(--color-text)]">Időszaki bontás</span>
             <Select value={granularity} onChange={(e) => setGranularity(e.target.value as ShippingPeriodGranularity)}>

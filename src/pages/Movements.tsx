@@ -244,7 +244,7 @@ export function Movements() {
               <option value="out">Kimenő</option>
             </Select>
           </label>
-          {!isWarehouseUser && (
+          {!isWarehouseUser && customers.length > 1 && (
             <label className="text-sm">
               <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
               <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>

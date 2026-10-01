@@ -83,6 +83,12 @@ export function Team() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company?.id])
 
+  // Egyetlen telephelyes vállalkozásnál nincs mit "választani" - a raktáros
+  // automatikusan az egyetlen telephelyhez kerül, legördülő nélkül.
+  useEffect(() => {
+    if (role === 'raktaros' && locations.length === 1) setLocationId(locations[0].id)
+  }, [role, locations])
+
   if (!company) return null
 
   async function createTeamMember(e: React.FormEvent) {
@@ -145,14 +151,20 @@ export function Team() {
           </Field>
           {role === 'raktaros' && (
             <Field label="Telephely">
-              <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-                <option value="">Válassz…</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </Select>
+              {locations.length === 1 ? (
+                <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text)]">
+                  {locations[0].name}
+                </div>
+              ) : (
+                <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  <option value="">Válassz…</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
             </Field>
           )}
           <Button type="submit" disabled={busy}>

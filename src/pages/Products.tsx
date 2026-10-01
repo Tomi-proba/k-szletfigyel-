@@ -141,22 +141,26 @@ export function Products() {
       <Card className="mb-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input placeholder="Keresés név vagy cikkszám alapján…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="">Összes kategória</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-          <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-            <option value="">Összes beszállító</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
+          {categories.length > 1 && (
+            <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="">Összes kategória</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          )}
+          {suppliers.length > 1 && (
+            <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+              <option value="">Összes beszállító</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          )}
           {locations.length > 1 && (
             <Select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
               <option value="">Összes telephely</option>

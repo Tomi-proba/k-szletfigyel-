@@ -116,13 +116,19 @@ export function DailyClosingPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block font-medium text-[var(--color-text)]">Telephely</span>
-            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-              {activeLocations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </Select>
+            {activeLocations.length === 1 ? (
+              <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text)]">
+                {activeLocations[0].name}
+              </div>
+            ) : (
+              <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                {activeLocations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </Select>
+            )}
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium text-[var(--color-text)]">Dátum</span>

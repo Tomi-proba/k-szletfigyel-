@@ -201,17 +201,19 @@ export function DailyReports() {
             <span className="mb-1 block font-medium text-[var(--color-text)]">Eddig</span>
             <Input type="date" value={to} min={from} max={todayISO()} onChange={(e) => setTo(e.target.value)} />
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-[var(--color-text)]">Telephely</span>
-            <Select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-              <option value="">Összes telephely</option>
-              {activeLocations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+          {activeLocations.length > 1 && (
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Telephely</span>
+              <Select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                <option value="">Összes telephely</option>
+                {activeLocations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
           <label className="text-sm">
             <span className="mb-1 block font-medium text-[var(--color-text)]">Állapot</span>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as '' | DailyClosingStatus)}>

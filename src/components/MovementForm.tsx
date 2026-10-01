@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementType } from '../types'
@@ -30,6 +30,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   // irodai adatnak számít (lásd DOCUMENTATION.md 14. fejezet), ezért ezek a
   // mezők el sem érhetők raktáros szerepkörben, nem csak vizuálisan rejtve.
   const { isWarehouseUser } = useAuth()
+  const activeCustomers = useMemo(() => customers.filter((c) => !c.deletedAt), [customers])
 
   const [productId, setProductId] = useState<string | null>(defaultProductId)
   const [type, setType] = useState<MovementType>('out')
@@ -414,25 +415,32 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
               if (!e.target.checked) {
                 setCustomerId('')
                 setIsPaid(true)
+              } else if (activeCustomers.length === 1) {
+                setCustomerId(activeCustomers[0].id)
               }
             }}
           />
           {trackCustomer && (
             <div className="rounded-lg border border-[var(--color-border)] p-3">
               <label className="mb-3 block text-sm">
-                <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő kiválasztása</span>
-                <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                  <option value="">Válassz vevőt…</option>
-                  {customers.filter((c) => !c.deletedAt).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-                {customers.length === 0 && (
+                <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
+                {activeCustomers.length === 0 ? (
                   <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
                     Még nincs rögzített vevő - vedd fel a Vevők oldalon.
                   </span>
+                ) : activeCustomers.length === 1 ? (
+                  <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text)]">
+                    {activeCustomers[0].name}
+                  </div>
+                ) : (
+                  <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                    <option value="">Válassz vevőt…</option>
+                    {activeCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
                 )}
               </label>
               <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>

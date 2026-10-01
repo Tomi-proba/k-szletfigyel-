@@ -130,14 +130,20 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
           </datalist>
         </Field>
         <Field label="Telephely">
-          <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} required>
-            {locationOptions.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-                {l.deletedAt ? ' (törölt)' : ''}
-              </option>
-            ))}
-          </Select>
+          {locationOptions.length === 1 ? (
+            <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text)]">
+              {locationOptions[0].name}
+            </div>
+          ) : (
+            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} required>
+              {locationOptions.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                  {l.deletedAt ? ' (törölt)' : ''}
+                </option>
+              ))}
+            </Select>
+          )}
         </Field>
       </div>
 

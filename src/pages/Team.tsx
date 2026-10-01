@@ -1,16 +1,16 @@
 // Csapat (Team) oldal - iroda-jogosultsághoz kötött. Itt hoz létre az iroda
-// meghívót egy új raktáros (vagy másik iroda-tag) felhasználónak, és itt
-// látja, ki melyik telephelyhez van rendelve. A meghívó egy egyszer
-// felhasználható, 7 napig érvényes token - lásd supabase/schema.sql
-// invites tábla + handle_new_user() trigger, és pages/auth/Register.tsx a
-// csatlakozás oldalán.
+// AZONNAL (regisztrációs lépés nélkül) egy új raktáros vagy iroda
+// felhasználót: megadja az email címet és egy jelszót, a rendszer pedig a
+// "create-team-member" Edge Function-ön keresztül (lásd
+// supabase/functions/create-team-member/index.ts) rögtön létrehozza a
+// bejelentkezést - a meghívottnak nem kell linkre kattintania vagy saját
+// magának regisztrálnia, csak be kell jelentkeznie a kapott adatokkal.
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
-import { mapInviteRow, type Invite, type UserRole } from '../types/auth'
-import { Button, Card, EmptyState, Field, PageHeader, Select } from '../components/ui'
-import { formatDate } from '../lib/format'
+import type { UserRole } from '../types/auth'
+import { Button, Card, EmptyState, Field, Input, PageHeader, Select } from '../components/ui'
 import { Copy, UserPlus } from 'lucide-react'
 
 interface CompanyUserRow {
@@ -21,8 +21,18 @@ interface CompanyUserRow {
   isPlatformAdmin: boolean
 }
 
+/** Elég erős, könnyen diktálható ideiglenes jelszó - a meghívott utána a
+ * "Beállítások" oldalon vagy az "Elfelejtett jelszó" folyamattal bármikor
+ * lecserélheti sajátra. */
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+  let out = ''
+  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)]
+  return out
+}
+
 export function Team() {
-  const { profile, company } = useAuth()
+  const { company } = useAuth()
   // A `.filter()`-t NEM szabad közvetlenül a Zustand selectorban hívni -
   // az minden hívásnál új tömböt adna vissza, amit a React
   // useSyncExternalStore (amire a Zustand épül) instabil pillanatképnek
@@ -33,22 +43,19 @@ export function Team() {
   const locations = useMemo(() => allLocations.filter((l) => !l.deletedAt), [allLocations])
 
   const [users, setUsers] = useState<CompanyUserRow[] | null>(null)
-  const [invites, setInvites] = useState<Invite[] | null>(null)
+  const [email, setEmail] = useState('')
   const [role, setRole] = useState<UserRole>('raktaros')
   const [locationId, setLocationId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [newLink, setNewLink] = useState<string | null>(null)
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null)
 
   async function reload() {
     if (!supabase || !company) return
-    const [usersRes, invitesRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('company_id', company.id),
-      supabase.from('invites').select('*').eq('company_id', company.id).order('created_at', { ascending: false }),
-    ])
-    if (usersRes.data) {
+    const { data } = await supabase.from('profiles').select('*').eq('company_id', company.id)
+    if (data) {
       setUsers(
-        usersRes.data.map((row) => ({
+        data.map((row) => ({
           id: row.id as string,
           email: row.email as string,
           role: (row.role as UserRole) ?? 'iroda',
@@ -57,7 +64,6 @@ export function Team() {
         })),
       )
     }
-    if (invitesRes.data) setInvites(invitesRes.data.map(mapInviteRow))
   }
 
   useEffect(() => {
@@ -67,47 +73,55 @@ export function Team() {
 
   if (!company) return null
 
-  async function createInvite(e: React.FormEvent) {
+  async function createTeamMember(e: React.FormEvent) {
     e.preventDefault()
-    if (!supabase || !company) return
+    if (!supabase) return
     setError(null)
+    setCreated(null)
+    if (!email.trim()) {
+      setError('Add meg az email címet.')
+      return
+    }
     if (role === 'raktaros' && !locationId) {
-      setError('Válassz telephelyet a raktáros-meghívóhoz.')
+      setError('Válassz telephelyet a raktáros felhasználóhoz.')
       return
     }
     const location = locations.find((l) => l.id === locationId)
+    const password = generateTempPassword()
     setBusy(true)
-    const { data, error: insertError } = await supabase
-      .from('invites')
-      .insert({
-        company_id: company.id,
+    const { data, error: invokeError } = await supabase.functions.invoke('create-team-member', {
+      body: {
+        email: email.trim(),
+        password,
         role,
-        assigned_location_id: role === 'raktaros' ? locationId : null,
-        assigned_location_name: role === 'raktaros' ? (location?.name ?? null) : null,
-        created_by: profile?.id,
-      })
-      .select('*')
-      .single()
+        assignedLocationId: role === 'raktaros' ? locationId : null,
+        assignedLocationName: role === 'raktaros' ? (location?.name ?? null) : null,
+      },
+    })
     setBusy(false)
-    if (insertError || !data) {
-      setError(insertError?.message ?? 'Ismeretlen hiba.')
+    if (invokeError || data?.error) {
+      setError(data?.error ?? invokeError?.message ?? 'Ismeretlen hiba.')
       return
     }
-    const token = data.token as string
-    setNewLink(`${window.location.origin}${window.location.pathname}?meghivo=${token}`)
+    setCreated({ email: email.trim(), password })
+    setEmail('')
+    setLocationId('')
     reload()
   }
 
-  const pendingInvites = invites?.filter((i) => !i.usedAt && new Date(i.expiresAt).getTime() > Date.now()) ?? []
-  const otherInvites = invites?.filter((i) => i.usedAt || new Date(i.expiresAt).getTime() <= Date.now()) ?? []
-
   return (
     <div>
-      <PageHeader title="Csapat" subtitle="Felhasználók meghívása és telephelyhez rendelése" />
+      <PageHeader title="Csapat" subtitle="Új felhasználó létrehozása és telephelyhez rendelése" />
 
       <Card className="mb-5">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Új felhasználó meghívása</h2>
-        <form onSubmit={createInvite} className="flex flex-wrap items-end gap-3">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Új felhasználó létrehozása</h2>
+        <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+          A felhasználó azonnal létrejön, nem kell neki regisztrálnia - a létrehozás után megkapott jelszóval rögtön be tud jelentkezni.
+        </p>
+        <form onSubmit={createTeamMember} className="flex flex-wrap items-end gap-3">
+          <Field label="Email cím">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </Field>
           <Field label="Szerepkör">
             <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
               <option value="raktaros">Raktáros (egy telephelyhez kötve)</option>
@@ -127,29 +141,36 @@ export function Team() {
             </Field>
           )}
           <Button type="submit" disabled={busy}>
-            <UserPlus size={16} /> Meghívó létrehozása
+            <UserPlus size={16} /> {busy ? 'Létrehozás…' : 'Felhasználó létrehozása'}
           </Button>
         </form>
         {error && <p className="mt-3 text-sm text-[var(--color-danger)]">{error}</p>}
-        {newLink && (
+        {created && (
           <div className="mt-4 rounded-lg bg-[var(--color-info-bg)] p-3 text-sm text-[var(--color-primary)]">
-            <p className="mb-2">Küldd el ezt a linket a meghívottnak (7 napig érvényes, egyszer használható fel):</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 overflow-x-auto rounded bg-white/60 px-2 py-1 text-xs">{newLink}</code>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => navigator.clipboard?.writeText(newLink)}
-                aria-label="Link másolása"
-              >
-                <Copy size={14} />
-              </Button>
+            <p className="mb-2">
+              Létrejött a fiók — add át ezt a két adatot a felhasználónak (ezt a jelszót csak most látod, később nem kereshető vissza):
+            </p>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <code className="flex-1 overflow-x-auto rounded bg-white/60 px-2 py-1 text-xs">{created.email}</code>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 overflow-x-auto rounded bg-white/60 px-2 py-1 text-xs">{created.password}</code>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigator.clipboard?.writeText(`${created.email} / ${created.password}`)}
+                  aria-label="Belépési adatok másolása"
+                >
+                  <Copy size={14} />
+                </Button>
+              </div>
             </div>
           </div>
         )}
       </Card>
 
-      <Card className="mb-5">
+      <Card>
         <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Felhasználók</h2>
         {!users ? (
           <EmptyState>Betöltés…</EmptyState>
@@ -178,29 +199,6 @@ export function Team() {
           </div>
         )}
       </Card>
-
-      {pendingInvites.length > 0 && (
-        <Card>
-          <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Függőben lévő meghívók</h2>
-          <ul className="flex flex-col gap-2 text-sm text-[var(--color-text)]">
-            {pendingInvites.map((i) => (
-              <li key={i.id} className="flex items-center justify-between border-b border-[var(--color-border)] pb-2 last:border-b-0">
-                <span>
-                  {i.role === 'raktaros' ? `Raktáros - ${i.assignedLocationName ?? 'ismeretlen telephely'}` : 'Iroda'}
-                </span>
-                <span className="text-[var(--color-text-muted)]">lejár: {formatDate(i.expiresAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {otherInvites.length > 0 && (
-        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
-          {otherInvites.filter((i) => i.usedAt).length} felhasznált, {otherInvites.filter((i) => !i.usedAt).length} lejárt meghívó nem
-          jelenik meg fent.
-        </p>
-      )}
     </div>
   )
 }

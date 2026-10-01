@@ -23,7 +23,11 @@ export interface Company {
  * pre-existing single-role app's behaviour). 'raktaros' - restricted to a
  * single assigned location, see hooks/useAuth.tsx isWarehouseUser and the
  * RLS policies in supabase/schema.sql that enforce this at the database
- * level too, not just in the UI. */
+ * level too, not just in the UI.
+ *
+ * (A fő iroda / iroda-jóváhagyás / tulajdonos-csak-olvasó szerepkör-bővítés
+ * külön, nagyobb munkaként van tervben - lásd a beszélgetésben a 2026-10-01-i
+ * megbeszélést - ez a fájl egyelőre a meglévő 2 szerepkörnél maradt.) */
 export type UserRole = 'raktaros' | 'iroda'
 
 export interface Profile {

@@ -87,9 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return
     const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
     if (!profileRow) {
-      setProfile(null)
-      setCompany(null)
-      resetToLocalMode()
+      // Élő session, de nincs hozzá profil (pl. a felhasználót törölték az
+      // Auth > Users listából, de a böngésző még a régi, gyorsítótárazott
+      // bejelentkezést őrzi) - enélkül a kijelentkeztetés nélkül az
+      // AuthGate örökre a "fiókod előkészítése" képernyőn ragadna, hiszen
+      // `profile` sosem töltődne be. A kijelentkezés újra előhozza a
+      // bejelentkező/regisztrációs képernyőt.
+      await supabase.auth.signOut()
       return
     }
     const mappedProfile = mapProfileRow(profileRow)

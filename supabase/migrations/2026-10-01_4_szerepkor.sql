@@ -1,15 +1,41 @@
 -- ============================================================================
 -- Készletfigyelő - migráció a fő iroda / iroda / tulajdonos / raktáros
--- 4-szerepkörös rendszerre (2026-10-01) - EGY MÁR ÉLŐ, 2-szerepkörös
--- adatbázison futtatandó. Nem töröl üzleti adatot, csak jogosultsági
--- szabályokat és két oszlop check-constraint-jét cseréli le.
+-- 4-szerepkörös rendszerre (2026-10-01, v2 - javított sorrenddel) - EGY MÁR
+-- ÉLŐ, 2-szerepkörös adatbázison futtatandó. Nem töröl üzleti adatot.
 -- ============================================================================
 
--- --- 1) RÉGI (2026-10-01 ELŐTTI) POLICY-NEVEK TÖRLÉSE -----------------------
--- Ezek a korábbi, 2-szerepkörös sémából maradtak itt, más néven, mint az
--- új verzió policy-jai - enélkül mindkettő egyszerre élne, és az "iroda"
--- a régi szabály miatt továbbra is közvetlenül írhatna a locations/
--- products táblára, a jóváhagyási kötelezettség megkerülésével.
+-- --- 1) pending_changes tábla létrehozása (ELSŐKÉNT, hogy a lejjebbi
+-- policy-törlések már létező táblára hivatkozzanak) ------------------------
+create table if not exists public.pending_changes (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete cascade,
+  entity_type text not null check (entity_type in ('location', 'product')),
+  -- NULL létrehozás (create) esetén - akkor még nincs valódi entity_id.
+  entity_id uuid,
+  action text not null check (action in ('create', 'update', 'delete', 'restore')),
+  -- A tervezett új állapot (create/update esetén a mezők, delete/restore
+  -- esetén lehet null - elég az entity_id + action).
+  payload jsonb,
+  -- Ember-olvasható összefoglaló (pl. "Csavar 4x40mm" termék módosítása) -
+  -- a Jóváhagyások oldal ebből épít listát, nem kell újra lekérdeznie a
+  -- (esetleg épp törlésre váró) entitást.
+  summary text not null,
+  requested_by uuid references public.profiles (id) on delete set null,
+  requested_by_email text,
+  requested_at timestamptz not null default now(),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  reviewed_by uuid references public.profiles (id) on delete set null,
+  reviewed_by_email text,
+  reviewed_at timestamptz,
+  reject_reason text
+);
+
+create index if not exists pending_changes_company_id_idx on public.pending_changes (company_id);
+
+alter table public.pending_changes enable row level security;
+
+
+-- --- 2) RÉGI (2026-10-01 ELŐTTI) POLICY-NEVEK TÖRLÉSE -----------------------
 drop policy if exists "Iroda látja a saját cége profiljait" on public.profiles;
 drop policy if exists "Iroda minden telephelyet lát" on public.locations;
 drop policy if exists "Iroda telephelyet létrehozhat" on public.locations;
@@ -31,7 +57,7 @@ drop policy if exists "Iroda meghívót hozhat létre a saját cégéhez" on pub
 drop policy if exists "Iroda látja a saját cége meghívóit" on public.invites;
 
 
--- --- 2) ÚJ (ebben a migrációban létrehozandó) POLICY-NEVEK TÖRLÉSE --------
+-- --- 3) ÚJ (ebben a migrációban létrehozandó) POLICY-NEVEK TÖRLÉSE --------
 -- (idempotens - ha ezt a migrációt véletlenül kétszer futtatod, ne hibázzon)
 drop policy if exists "Saját cég megtekintése" on public.companies;
 drop policy if exists "Saját cég módosítása" on public.companies;
@@ -74,7 +100,7 @@ drop policy if exists "Iroda módosítási kérést adhat be" on public.pending_
 drop policy if exists "Fő iroda jóváhagyhatja vagy elutasíthatja" on public.pending_changes;
 
 
--- --- 3) Szerepkör check constraint bővítése 4 szerepkörre -------------------
+-- --- 4) Szerepkör check constraint bővítése 4 szerepkörre -------------------
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
   check (role in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos'));
@@ -82,38 +108,6 @@ alter table public.profiles add constraint profiles_role_check
 alter table public.invites drop constraint if exists invites_role_check;
 alter table public.invites add constraint invites_role_check
   check (role in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos'));
-
-
--- --- 4) pending_changes tábla létrehozása ----------------------------------
-create table if not exists public.pending_changes (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references public.companies (id) on delete cascade,
-  entity_type text not null check (entity_type in ('location', 'product')),
-  -- NULL létrehozás (create) esetén - akkor még nincs valódi entity_id.
-  entity_id uuid,
-  action text not null check (action in ('create', 'update', 'delete', 'restore')),
-  -- A tervezett új állapot (create/update esetén a mezők, delete/restore
-  -- esetén lehet null - elég az entity_id + action).
-  payload jsonb,
-  -- Ember-olvasható összefoglaló (pl. "Csavar 4x40mm" termék módosítása) -
-  -- a Jóváhagyások oldal ebből épít listát, nem kell újra lekérdeznie a
-  -- (esetleg épp törlésre váró) entitást.
-  summary text not null,
-  requested_by uuid references public.profiles (id) on delete set null,
-  requested_by_email text,
-  requested_at timestamptz not null default now(),
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  reviewed_by uuid references public.profiles (id) on delete set null,
-  reviewed_by_email text,
-  reviewed_at timestamptz,
-  reject_reason text
-);
-
-create index if not exists pending_changes_company_id_idx on public.pending_changes (company_id);
-
-alter table public.pending_changes enable row level security;
-
-create index if not exists pending_changes_company_id_idx on public.pending_changes (company_id);
 
 
 -- --- 5) SECURITY DEFINER segédfüggvények -----------------------------------

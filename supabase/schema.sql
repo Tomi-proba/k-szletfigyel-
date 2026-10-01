@@ -533,9 +533,31 @@ create policy "Bármelyik céges felhasználó naplózhat" on public.audit_log
 -- Iroda látja a saját cége összes felhasználóját (kell a Csapat oldalhoz,
 -- hogy lássa, mely raktáros melyik telephelyhez van rendelve) - a
 -- "Admin minden profilt lát" policy ettől független, az az üzemeltetőé.
+--
+-- EZT A POLICY-T NEM LEHET KÖZVETLEN "select ... from public.profiles"
+-- albekérdezéssel megírni, mert az a profiles tábla SAJÁT RLS-ét hívná meg
+-- újra önmagán belül, amit a Postgres "infinite recursion detected in
+-- policy for relation profiles" (PostgREST felől 500-as hiba) hibával
+-- utasít el - ez derült ki élesben: minden profiles-lekérdezés (még a
+-- bejelentkezés utáni saját profil betöltése is) elszállt emiatt. A
+-- megoldás egy SECURITY DEFINER függvény, ami megkerüli a hívó RLS-ét a
+-- belső ellenőrzés alatt, így nem rekurzál.
+create or replace function public.is_company_iroda(target_company_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'iroda' and company_id = target_company_id
+  );
+$$;
+
 create policy "Iroda látja a saját cége profiljait" on public.profiles
   for select using (
-    company_id in (select company_id from public.profiles p2 where p2.id = auth.uid() and p2.role = 'iroda')
+    public.is_company_iroda(company_id)
   );
 
 -- --- Meghívók: iroda hoz létre, hogy egy raktáros (vagy másik iroda-tag)

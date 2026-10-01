@@ -27,7 +27,11 @@ import { MovementForm } from './MovementForm'
 interface NavItem {
   to: string
   label: string
-  badge?: boolean
+  /** true = az általános (riasztás-)számlálót mutassa; szám = SAJÁT, ettől
+   * független badge-számot mutasson (pl. Jóváhagyások esetén csak a
+   * jóváhagyásra váró törzsadat-kérések száma, nem a teljes riasztás-
+   * összeg - lásd az erre vonatkozó javítást, ami élesben derült ki). */
+  badge?: boolean | number
 }
 
 interface NavGroup {
@@ -175,13 +179,24 @@ function activeGroupKey(groups: NavGroup[], pathname: string, search: string): s
  * RAKTAROS_NAV_GROUPS and never sees Előfizetés/Csapat (iroda-szintű jog,
  * lásd RoleGate a route-táblán) - "Admin" is independent of company role,
  * for the platform operator's own account. */
-function buildNavGroups(isWarehouseUser: boolean, showAccount: boolean, canManageTeam: boolean, isFoIroda: boolean, showAdmin: boolean): NavGroup[] {
+function buildNavGroups(
+  isWarehouseUser: boolean,
+  showAccount: boolean,
+  canManageTeam: boolean,
+  isFoIroda: boolean,
+  pendingChangeCount: number,
+  showAdmin: boolean,
+): NavGroup[] {
   let baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
   // "Jóváhagyások" kizárólag fő iroda nézetben jelenik meg - ő bírálja el
-  // az iroda törzsadat-módosítási kéréseit (lásd pages/Approvals.tsx).
+  // az iroda törzsadat-módosítási kéréseit (lásd pages/Approvals.tsx). A
+  // badge-nek SAJÁT számot (pendingChangeCount) kell mutatnia, NEM az
+  // általános alertCount-ot - korábban `badge: true`-t használt, ami a
+  // teljes (más jellegű) riasztás-összeget mutatta, félrevezetően - ez
+  // derült ki élesben: a lap üres volt, a badge mégis 2-t mutatott.
   if (isFoIroda && !isWarehouseUser) {
     baseGroups = baseGroups.map((g) =>
-      g.key === 'attekintes' ? { ...g, items: [...g.items, { to: '/jovahagyasok', label: 'Jóváhagyások', badge: true }] } : g,
+      g.key === 'attekintes' ? { ...g, items: [...g.items, { to: '/jovahagyasok', label: 'Jóváhagyások', badge: pendingChangeCount }] } : g,
     )
   }
   if (!showAccount) return baseGroups
@@ -230,7 +245,8 @@ export function Layout() {
   // ugyanaz a minta, mint a már meglévő isWarehouseUser.
   const isFoIroda = effectiveRole === 'fo_iroda'
   const canManageTeam = effectiveRole === 'iroda' || isFoIroda
-  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, canManageTeam, isFoIroda, !!profile?.isPlatformAdmin)
+  const pendingChangeCount = pendingChanges.filter((c) => c.status === 'pending').length
+  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, canManageTeam, isFoIroda, pendingChangeCount, !!profile?.isPlatformAdmin)
   const alertCount =
     alerts.needsReorder.length +
     alerts.slowMoving.length +
@@ -245,8 +261,10 @@ export function Layout() {
     alerts.pendingSaleApprovals.length +
     alerts.rejectedSales.length +
     // Fő iroda számára a rá váró törzsadat-jóváhagyási kérések is
-    // riasztásnak számítanak (lásd pages/Approvals.tsx).
-    (isFoIroda ? pendingChanges.filter((c) => c.status === 'pending').length : 0)
+    // riasztásnak számítanak (lásd pages/Approvals.tsx) - ez az ÁLTALÁNOS
+    // Riasztások-összegbe megy bele, a Jóváhagyások saját, külön badge-e
+    // (lásd buildNavGroups hívása fentebb) pedig csak ezt a számot mutatja.
+    (isFoIroda ? pendingChangeCount : 0)
   const location = useLocation()
   const isDashboard = location.pathname === '/'
   const currentGroupKey = activeGroupKey(navGroups, location.pathname, location.search)
@@ -312,11 +330,16 @@ export function Layout() {
                       }`}
                     >
                       {item.label}
-                      {item.badge && alertCount > 0 && (
-                        <span className="rounded-full bg-[var(--color-danger)] px-2 py-0.5 text-xs font-semibold text-white">
-                          {alertCount}
-                        </span>
-                      )}
+                      {(() => {
+                        const count = typeof item.badge === 'number' ? item.badge : item.badge ? alertCount : 0
+                        return (
+                          count > 0 && (
+                            <span className="rounded-full bg-[var(--color-danger)] px-2 py-0.5 text-xs font-semibold text-white">
+                              {count}
+                            </span>
+                          )
+                        )
+                      })()}
                     </Link>
                   )
                 })}

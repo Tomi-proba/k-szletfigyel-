@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import type { UserRole } from '../types/auth'
 import { Button, Card, EmptyState, Field, Input, PageHeader, Select } from '../components/ui'
-import { Copy, UserPlus } from 'lucide-react'
+import { Check, Copy, Pencil, UserPlus, X } from 'lucide-react'
 
 interface CompanyUserRow {
   id: string
@@ -42,7 +42,7 @@ function generateTempPassword(): string {
 }
 
 export function Team() {
-  const { company, effectiveRole } = useAuth()
+  const { company, effectiveRole, updateMemberName } = useAuth()
   // 'iroda' csak raktáros/iroda szintű felhasználót hozhat létre - magasabb
   // jogú (fő iroda, tulajdonos) fiók létrehozása kizárólag fő iroda joga.
   // Lásd ugyanez az ellenőrzés szerver oldalon is: create-team-member Edge
@@ -65,6 +65,27 @@ export function Team() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null)
+
+  // Mások nevét kizárólag fő iroda módosíthatja (lásd update_member_name
+  // schema.sql-ben - ez itt csak a felület, a valódi határ a DB-ben van).
+  const [editingNameFor, setEditingNameFor] = useState<string | null>(null)
+  const [editingNameValue, setEditingNameValue] = useState('')
+  const [nameEditError, setNameEditError] = useState<string | null>(null)
+
+  async function saveEditedName(userId: string) {
+    setNameEditError(null)
+    if (!editingNameValue.trim()) {
+      setNameEditError('A név nem lehet üres.')
+      return
+    }
+    const { error: saveError } = await updateMemberName(userId, editingNameValue)
+    if (saveError) {
+      setNameEditError(saveError)
+      return
+    }
+    setEditingNameFor(null)
+    reload()
+  }
 
   async function reload() {
     if (!supabase || !company) return
@@ -229,7 +250,53 @@ export function Team() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-[var(--color-border)] last:border-b-0">
-                    <td className="py-2">{u.name ?? <span className="text-[var(--color-text-muted)]">—</span>}</td>
+                    <td className="py-2">
+                      {editingNameFor === u.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input autoFocus value={editingNameValue} onChange={(e) => setEditingNameValue(e.target.value)} />
+                          <button
+                            type="button"
+                            onClick={() => saveEditedName(u.id)}
+                            aria-label="Mentés"
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingNameFor(null)
+                              setNameEditError(null)
+                            }}
+                            aria-label="Mégse"
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span>{u.name ?? <span className="text-[var(--color-text-muted)]">—</span>}</span>
+                          {effectiveRole === 'fo_iroda' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNameFor(u.id)
+                                setEditingNameValue(u.name ?? '')
+                                setNameEditError(null)
+                              }}
+                              aria-label="Név szerkesztése"
+                              className="rounded-lg p-1 text-[var(--color-text-muted)] hover:bg-black/5"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {editingNameFor === u.id && nameEditError && (
+                        <p className="mt-1 text-xs text-[var(--color-danger)]">{nameEditError}</p>
+                      )}
+                    </td>
                     <td className="py-2">
                       {u.email} {u.isPlatformAdmin && <span className="text-xs text-[var(--color-text-muted)]">(üzemeltető)</span>}
                     </td>

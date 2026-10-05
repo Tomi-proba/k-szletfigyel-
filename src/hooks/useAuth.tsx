@@ -75,6 +75,14 @@ interface AuthContextValue {
    * hogy az audit napló rögzítésénél (store/useStore.ts setAuditActor) is
    * azonnal az új név legyen érvényben, kijelentkezés/újratöltés nélkül. */
   updateMyName: (name: string) => Promise<AuthResult>
+  /** Fő iroda módosítja egy MÁSIK, saját cégéhez tartozó csapattag nevét
+   * (lásd pages/Team.tsx) - a public.update_member_name(...) függvényen
+   * keresztül, ami szerver oldalon is ellenőrzi, hogy a hívó fő iroda-e és
+   * a célfelhasználó a saját cégéhez tartozik-e (lásd schema.sql). Nem
+   * frissíti a helyi `profile` state-et (az a hívó saját profilja, nem a
+   * módosított felhasználóé) - a Team.tsx oldal saját `reload()`-ja
+   * tölti újra a csapatlistát a sikeres hívás után. */
+  updateMemberName: (memberId: string, name: string) => Promise<AuthResult>
   refreshCompany: () => Promise<void>
   /** Demo-only: simulates a successful subscription payment by writing
    * directly to the companies row - no real Stripe charge happens. See
@@ -223,6 +231,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null }
   }, [refreshCompany])
 
+  const updateMemberName = useCallback(async (memberId: string, name: string): Promise<AuthResult> => {
+    if (!supabase) return { error: 'A Supabase nincs beállítva.' }
+    if (!name.trim()) return { error: 'A név nem lehet üres.' }
+    const { error } = await supabase.rpc('update_member_name', { member_id: memberId, new_name: name.trim() })
+    return { error: error ? error.message : null }
+  }, [])
+
   const demoActivateSubscription = useCallback(async (): Promise<AuthResult> => {
     if (!supabase || !company) return { error: 'Nincs betöltött cég.' }
     const now = new Date()
@@ -274,6 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     requestPasswordReset,
     updatePassword,
     updateMyName,
+    updateMemberName,
     refreshCompany,
     demoActivateSubscription,
     demoCancelSubscription,

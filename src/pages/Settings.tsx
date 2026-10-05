@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button, Card, Field, Input, PageHeader } from '../components/ui'
 
 export function Settings() {
-  const { isReadOnlyViewer, profile, updateMyName } = useAuth()
+  const { isReadOnlyViewer, profile, effectiveRole, updateMyName, updatePassword } = useAuth()
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const resetToDemoData = useStore((s) => s.resetToDemoData)
@@ -39,6 +39,27 @@ export function Settings() {
     if (saveError) return setNameError(saveError)
     setNameSaved(true)
     setTimeout(() => setNameSaved(false), 2000)
+  }
+
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordAgain, setNewPasswordAgain] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordSaved, setPasswordSaved] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPasswordError(null)
+    if (newPassword.length < 6) return setPasswordError('A jelszónak legalább 6 karakter hosszúnak kell lennie.')
+    if (newPassword !== newPasswordAgain) return setPasswordError('A két jelszó nem egyezik.')
+    setPasswordSaving(true)
+    const { error: saveError } = await updatePassword(newPassword)
+    setPasswordSaving(false)
+    if (saveError) return setPasswordError(saveError)
+    setNewPassword('')
+    setNewPasswordAgain('')
+    setPasswordSaved(true)
+    setTimeout(() => setPasswordSaved(false), 2000)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -81,9 +102,32 @@ export function Settings() {
 
       {profile && (
         <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Jelszó módosítása</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ezt a jelszót fogod ezután használni a bejelentkezéshez.
+          </p>
+          <form onSubmit={handleChangePassword} className="flex flex-wrap items-end gap-3">
+            <Field label="Új jelszó">
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+            </Field>
+            <Field label="Új jelszó megerősítése">
+              <Input type="password" value={newPasswordAgain} onChange={(e) => setNewPasswordAgain(e.target.value)} required />
+            </Field>
+            <Button type="submit" disabled={passwordSaving}>
+              {passwordSaving ? 'Mentés…' : 'Jelszó módosítása'}
+            </Button>
+            {passwordSaved && <span className="text-sm text-[var(--color-success)]">Elmentve.</span>}
+          </form>
+          {passwordError && <p className="mt-2 text-sm text-[var(--color-danger)]">{passwordError}</p>}
+        </Card>
+      )}
+
+      {profile && effectiveRole === 'fo_iroda' && (
+        <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Saját nevem</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            Ez a név jelenik meg az audit naplóban, ha módosítasz valamit - "ki csinálta?".
+            Ez a név jelenik meg az audit naplóban, ha módosítasz valamit - "ki csinálta?". Más csapattag nevét a Csapat oldalon
+            módosíthatod.
           </p>
           <form onSubmit={handleSaveName} className="flex flex-wrap items-end gap-3">
             <Field label="Név">

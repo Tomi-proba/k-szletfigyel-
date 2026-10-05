@@ -791,17 +791,45 @@ begin
 end;
 $$;
 
--- --- Saját név utólagos beállítása/javítása --------------------------------
+-- --- Név módosítása - KIZÁRÓLAG fő iroda jogosultság ------------------------
 -- Szándékosan NINCS általános UPDATE policy a profiles táblán (lásd fentebb
--- a tábla melletti megjegyzést) - ez a security definer function az
--- EGYETLEN módja, hogy egy felhasználó a saját sorát módosítsa, és
--- kizárólag a name mezőt írja át, semmi mást (szerepkört/céget/admin
--- jogot így sem lehet megváltoztatni). Ezt hívja pages/Settings.tsx, hogy a
--- name mező bevezetése előtt létrejött fiókok (pl. az első regisztrált
--- fő iroda) utólag is megadhassák a nevüket.
+-- a tábla melletti megjegyzést) - ez a két security definer function az
+-- EGYETLEN mód, hogy valaki a name mezőt módosítsa, és mindkettő
+-- kikényszeríti, hogy a HÍVÓ fő iroda szerepkörű legyen - ez nem csak UI-
+-- kényelem (a gomb elrejtése pages/Settings.tsx-en/pages/Team.tsx-en), a
+-- valódi határ itt, a függvényben van: egy iroda/raktáros/tulajdonos
+-- szerepkörű felhasználó akkor sem tudná ezt meghívni, ha valahogy
+-- megkerülné a felületet.
 create or replace function public.update_my_name(new_name text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
+  if (select role from public.profiles where id = auth.uid()) is distinct from 'fo_iroda' then
+    raise exception 'Csak a fő iroda módosíthatja a nevét.';
+  end if;
   update public.profiles set name = nullif(trim(new_name), '') where id = auth.uid();
+end;
+$$;
+
+-- Fő iroda egy MÁSIK, saját cégéhez tartozó csapattag nevét módosítja (lásd
+-- pages/Team.tsx) - pl. ha valaki elgépelte a nevét létrehozáskor, vagy egy
+-- a name mező bevezetése előtt létrejött fiókot utólag kell elnevezni.
+create or replace function public.update_member_name(member_id uuid, new_name text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller_role text;
+  caller_company_id uuid;
+  target_company_id uuid;
+begin
+  select role, company_id into caller_role, caller_company_id from public.profiles where id = auth.uid();
+  if caller_role is distinct from 'fo_iroda' then
+    raise exception 'Csak a fő iroda módosíthatja mások nevét.';
+  end if;
+
+  select company_id into target_company_id from public.profiles where id = member_id;
+  if target_company_id is null or target_company_id is distinct from caller_company_id then
+    raise exception 'Ez a felhasználó nem a saját cégedhez tartozik.';
+  end if;
+
+  update public.profiles set name = nullif(trim(new_name), '') where id = member_id;
 end;
 $$;

@@ -260,6 +260,8 @@ function auditFromRow(row: Record<string, unknown>): AuditLogEntry {
     action: row.action as AuditLogEntry['action'],
     description: row.description as string,
     changes: (row.changes as AuditLogEntry['changes']) ?? undefined,
+    performedByName: (row.created_by_name as string | null) ?? undefined,
+    performedByEmail: (row.created_by_email as string | null) ?? undefined,
   }
 }
 function auditToRow(companyId: string, a: AuditLogEntry) {
@@ -273,6 +275,13 @@ function auditToRow(companyId: string, a: AuditLogEntry) {
     action: a.action,
     description: a.description,
     changes: a.changes ?? null,
+    // created_by (uuid) nincs itt megadva - a schema.sql-ben beállított
+    // `default auth.uid()` tölti ki a szerveren, a ténylegesen beküldő
+    // (RLS-ellenőrzött) felhasználóval. A név/email denormalizált
+    // pillanatkép viszont a kliensről jön, a setAuditActor-ral beállított
+    // értékből (lásd store/useStore.ts auditEntry).
+    created_by_name: a.performedByName ?? null,
+    created_by_email: a.performedByEmail ?? null,
   }
 }
 

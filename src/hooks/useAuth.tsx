@@ -63,11 +63,18 @@ interface AuthContextValue {
   /** companyName is only used for a brand-new company (no inviteToken).
    * When inviteToken is set, the account joins that invite's existing
    * company/role/location instead - see handle_new_user() in schema.sql. */
-  signUp: (email: string, password: string, companyName: string, inviteToken?: string) => Promise<AuthResult>
+  signUp: (email: string, password: string, name: string, companyName: string, inviteToken?: string) => Promise<AuthResult>
   signIn: (email: string, password: string) => Promise<AuthResult>
   signOut: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<AuthResult>
   updatePassword: (newPassword: string) => Promise<AuthResult>
+  /** A profiles.name mező utólagos beállítása/javítása - a
+   * public.update_my_name(...) security definer SQL function hívásán
+   * keresztül, mert a profiles táblán nincs általános UPDATE policy (lásd
+   * schema.sql). Sikeres hívás után frissíti a helyi `profile` state-et is,
+   * hogy az audit napló rögzítésénél (store/useStore.ts setAuditActor) is
+   * azonnal az új név legyen érvényben, kijelentkezés/újratöltés nélkül. */
+  updateMyName: (name: string) => Promise<AuthResult>
   refreshCompany: () => Promise<void>
   /** Demo-only: simulates a successful subscription payment by writing
    * directly to the companies row - no real Stripe charge happens. See
@@ -125,10 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // browser's local copy.
     try {
       const slices = await fetchBusinessData()
-      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, slices, mappedProfile.role)
+      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, mappedProfile.name, slices, mappedProfile.role)
     } catch (err) {
       console.error('[useAuth] failed to load business data from Supabase', err)
-      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, emptyBusinessSlices, mappedProfile.role)
+      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, mappedProfile.name, emptyBusinessSlices, mappedProfile.role)
     }
   }, [])
 
@@ -163,12 +170,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadProfileAndCompany])
 
-  const signUp = useCallback(async (email: string, password: string, companyName: string, inviteToken?: string): Promise<AuthResult> => {
+  const signUp = useCallback(async (email: string, password: string, name: string, companyName: string, inviteToken?: string): Promise<AuthResult> => {
     if (!supabase) return { error: 'A Supabase nincs beállítva.' }
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: inviteToken ? { invite_token: inviteToken } : { company_name: companyName.trim() } },
+      options: { data: inviteToken ? { invite_token: inviteToken, name: name.trim() } : { company_name: companyName.trim(), name: name.trim() } },
     })
     return { error: error ? friendlyAuthError(error.message) : null }
   }, [])
@@ -203,6 +210,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshCompany = useCallback(async () => {
     if (session) await loadProfileAndCompany(session.user.id)
   }, [session, loadProfileAndCompany])
+
+  const updateMyName = useCallback(async (name: string): Promise<AuthResult> => {
+    if (!supabase) return { error: 'A Supabase nincs beállítva.' }
+    if (!name.trim()) return { error: 'A név nem lehet üres.' }
+    const { error } = await supabase.rpc('update_my_name', { new_name: name.trim() })
+    if (error) return { error: error.message }
+    // A profiles-on nincs UPDATE policy (lásd schema.sql), ezért a helyi
+    // `profile` state-et a sima rpc-válaszból nem tudjuk frissíteni -
+    // ehelyett újratöltjük (ez a setAuditActor-t is frissen hívja).
+    await refreshCompany()
+    return { error: null }
+  }, [refreshCompany])
 
   const demoActivateSubscription = useCallback(async (): Promise<AuthResult> => {
     if (!supabase || !company) return { error: 'Nincs betöltött cég.' }
@@ -254,6 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     requestPasswordReset,
     updatePassword,
+    updateMyName,
     refreshCompany,
     demoActivateSubscription,
     demoCancelSubscription,

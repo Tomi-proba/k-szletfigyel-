@@ -40,6 +40,9 @@ export function HistoryPanel({ entityType, entityId }: { entityType: AuditEntity
             <span className="text-xs text-[var(--color-text-muted)]">{formatDateTime(e.timestamp)}</span>
           </div>
           <div className="mt-1 text-[var(--color-text-muted)]">{e.description}</div>
+          {(e.performedByName || e.performedByEmail) && (
+            <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">Ki: {e.performedByName ?? e.performedByEmail}</div>
+          )}
           {e.changes && e.changes.length > 0 && (
             <ul className="mt-2 space-y-1 border-t border-[var(--color-border)] pt-2 text-xs">
               {e.changes.map((c) => (

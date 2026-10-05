@@ -72,6 +72,13 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   company_id uuid not null references public.companies (id) on delete cascade,
   email text not null,
+  -- A felhasználó valódi neve - regisztrációkor/csapattag-létrehozáskor
+  -- kötelező megadni (lásd handle_new_user() lent), hogy az audit napló
+  -- ("Ki módosította?") ne csak email címet tudjon mutatni. Nullable marad
+  -- a séma szintjén, mert a mezőt bevezető migráció előtt létrejött
+  -- profiloknak nincs neve - ezeknél a felület az email címet mutatja
+  -- helyette, amíg a felhasználó meg nem adja (lásd pages/Settings.tsx).
+  name text,
   -- Ez teszi valakit üzemeltetői (platform admin) jogúvá - lásd lent, hogyan
   -- állítsd be az elsőt. Egy felhasználó SOHA nem tudja saját magát
   -- előléptetni (lásd prevent_self_admin_promotion trigger).
@@ -578,7 +585,18 @@ create table if not exists public.audit_log (
   -- "on delete set null": ha a felhasználót törlik (pl. Auth > Users-ből),
   -- az általa korábban rögzített audit-bejegyzések NE vesszenek el vele
   -- együtt - csak a "ki csinálta" mező üresedik ki.
-  created_by uuid references public.profiles (id) on delete set null
+  -- auth.uid() alapértelmezés: a kliensnek nem kell külön megadnia, ki
+  -- rögzítette - mindig a ténylegesen beküldő (RLS-ellenőrzött) felhasználó.
+  created_by uuid references public.profiles (id) on delete set null default auth.uid(),
+  -- Denormalizált név/email a bejegyzés RÖGZÍTÉSÉNEK pillanatában - ugyanaz
+  -- a minta, mint a pending_changes.requested_by_email: a felületnek nem
+  -- kell külön lekérdezést/JOIN-t futtatnia a "ki módosította?" megjelenítéséhez,
+  -- és a cég-profilok közti listázási jogosultságtól is független (olvasóként
+  -- nem kell profiles SELECT jog ehhez). Soha nem frissül utólag, akkor sem,
+  -- ha a felhasználó később átnevezi magát - a napló pontosan azt mutatja,
+  -- ki és milyen néven volt bejelentkezve a művelet pillanatában.
+  created_by_name text,
+  created_by_email text
 );
 
 create index if not exists audit_log_company_id_idx on public.audit_log (company_id);
@@ -623,6 +641,11 @@ create table if not exists public.invites (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies (id) on delete cascade,
   token text not null unique default encode(gen_random_bytes(16), 'hex'),
+  -- A meghívott neve - a create-team-member Edge Function kéri be, és a
+  -- handle_new_user() trigger ezt másolja át a profiles.name mezőbe, mert
+  -- az azonnal (regisztráció nélkül) létrejövő fiókhoz nincs olyan
+  -- lépés, ahol a meghívott saját maga megadhatná.
+  name text,
   role text not null check (role in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos')),
   assigned_location_id uuid references public.locations (id),
   assigned_location_name text,
@@ -748,8 +771,8 @@ begin
       raise exception 'Érvénytelen vagy lejárt meghívó.';
     end if;
 
-    insert into public.profiles (id, company_id, email, role, assigned_location_id, assigned_location_name)
-    values (new.id, invite_row.company_id, new.email, invite_row.role, invite_row.assigned_location_id, invite_row.assigned_location_name);
+    insert into public.profiles (id, company_id, email, name, role, assigned_location_id, assigned_location_name)
+    values (new.id, invite_row.company_id, new.email, invite_row.name, invite_row.role, invite_row.assigned_location_id, invite_row.assigned_location_name);
 
     update public.invites set used_at = now(), used_by = new.id where id = invite_row.id;
   else
@@ -760,10 +783,25 @@ begin
 
     insert into public.locations (company_id, name) values (new_company_id, 'Fő telephely');
 
-    insert into public.profiles (id, company_id, email, role)
-    values (new.id, new_company_id, new.email, 'fo_iroda');
+    insert into public.profiles (id, company_id, email, name, role)
+    values (new.id, new_company_id, new.email, new.raw_user_meta_data ->> 'name', 'fo_iroda');
   end if;
 
   return new;
+end;
+$$;
+
+-- --- Saját név utólagos beállítása/javítása --------------------------------
+-- Szándékosan NINCS általános UPDATE policy a profiles táblán (lásd fentebb
+-- a tábla melletti megjegyzést) - ez a security definer function az
+-- EGYETLEN módja, hogy egy felhasználó a saját sorát módosítsa, és
+-- kizárólag a name mezőt írja át, semmi mást (szerepkört/céget/admin
+-- jogot így sem lehet megváltoztatni). Ezt hívja pages/Settings.tsx, hogy a
+-- name mező bevezetése előtt létrejött fiókok (pl. az első regisztrált
+-- fő iroda) utólag is megadhassák a nevüket.
+create or replace function public.update_my_name(new_name text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update public.profiles set name = nullif(trim(new_name), '') where id = auth.uid();
 end;
 $$;

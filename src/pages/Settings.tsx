@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button, Card, Field, Input, PageHeader } from '../components/ui'
 
 export function Settings() {
-  const { isReadOnlyViewer } = useAuth()
+  const { isReadOnlyViewer, profile, updateMyName } = useAuth()
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const resetToDemoData = useStore((s) => s.resetToDemoData)
@@ -19,6 +19,27 @@ export function Settings() {
   const [confirmDemo, setConfirmDemo] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Mind a saját regisztráció, mind a Csapat oldalon történő létrehozás
+  // kötelezővé teszi a nevet - ez csak azoknak a (régebbi) fiókoknak
+  // kell, amik a mező bevezetése ELŐTT jöttek létre, és emiatt még nincs
+  // nevük (lásd profiles.name schema.sql-ben).
+  const [nameInput, setNameInput] = useState(profile?.name ?? '')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault()
+    setNameError(null)
+    if (!nameInput.trim()) return setNameError('A név nem lehet üres.')
+    setNameSaving(true)
+    const { error: saveError } = await updateMyName(nameInput)
+    setNameSaving(false)
+    if (saveError) return setNameError(saveError)
+    setNameSaved(true)
+    setTimeout(() => setNameSaved(false), 2000)
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -57,6 +78,25 @@ export function Settings() {
   return (
     <div>
       <PageHeader title="Beállítások" subtitle="Riasztási küszöbértékek testreszabása" />
+
+      {profile && (
+        <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Saját nevem</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ez a név jelenik meg az audit naplóban, ha módosítasz valamit - "ki csinálta?".
+          </p>
+          <form onSubmit={handleSaveName} className="flex flex-wrap items-end gap-3">
+            <Field label="Név">
+              <Input value={nameInput} onChange={(e) => setNameInput(e.target.value)} required />
+            </Field>
+            <Button type="submit" disabled={nameSaving}>
+              {nameSaving ? 'Mentés…' : 'Mentés'}
+            </Button>
+            {nameSaved && <span className="text-sm text-[var(--color-success)]">Elmentve.</span>}
+          </form>
+          {nameError && <p className="mt-2 text-sm text-[var(--color-danger)]">{nameError}</p>}
+        </Card>
+      )}
 
       {isReadOnlyViewer && (
         <Card className="mb-5 border-[var(--color-primary)]/30 bg-[var(--color-info-bg)]">

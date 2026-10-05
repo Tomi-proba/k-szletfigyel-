@@ -98,7 +98,14 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Csak iroda vagy fő iroda jogosultsággal hozható létre új felhasználó.' }, 403)
   }
 
-  let body: { email?: string; password?: string; role?: string; assignedLocationId?: string | null; assignedLocationName?: string | null }
+  let body: {
+    email?: string
+    password?: string
+    name?: string
+    role?: string
+    assignedLocationId?: string | null
+    assignedLocationName?: string | null
+  }
   try {
     body = await req.json()
   } catch {
@@ -107,9 +114,10 @@ Deno.serve(async (req: Request) => {
 
   const email = body.email?.trim().toLowerCase()
   const password = body.password
+  const name = body.name?.trim()
   const role = body.role
 
-  if (!email || !password || !role || !ALL_ROLES.includes(role)) {
+  if (!email || !password || !name || !role || !ALL_ROLES.includes(role)) {
     return json({ error: 'Hiányzó vagy érvénytelen mezők.' }, 400)
   }
   if (callerProfile.role === 'iroda' && !IRODA_CREATABLE_ROLES.includes(role)) {
@@ -131,6 +139,7 @@ Deno.serve(async (req: Request) => {
     .from('invites')
     .insert({
       company_id: callerProfile.company_id,
+      name,
       role,
       assigned_location_id: role === 'raktaros' ? body.assignedLocationId : null,
       assigned_location_name: role === 'raktaros' ? (body.assignedLocationName ?? null) : null,

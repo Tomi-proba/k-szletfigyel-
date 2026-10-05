@@ -31,6 +31,19 @@ import {
   type Supplier,
 } from '../types'
 
+/** Who's currently logged in, for stamping new audit log entries with "ki
+ * módosította?" - set by hydrateFromRemote on login/session-restore and
+ * cleared by resetToLocalMode on logout. Deliberately module-level (not
+ * store state) so `auditEntry` below can stay a plain, argument-light
+ * function called from inside ~30 different `set()` updaters without
+ * threading an actor param through every one of them - there's exactly one
+ * signed-in user at a time in a browser tab, so this is never ambiguous. */
+let currentActor: { name: string | null; email: string | null } = { name: null, email: null }
+
+export function setAuditActor(name: string | null, email: string | null) {
+  currentActor = { name, email }
+}
+
 /** Builds one audit log entry - every mutating action appends the result of
  * this to state.auditLog. Kept as a plain function (not a store action) so
  * it can be called freely inside other actions' `set()` updaters. */
@@ -42,7 +55,18 @@ function auditEntry(
   description: string,
   changes?: AuditFieldChange[],
 ): AuditLogEntry {
-  return { id: createId(), timestamp: new Date().toISOString(), entityType, entityId, entityLabel, action, description, changes }
+  return {
+    id: createId(),
+    timestamp: new Date().toISOString(),
+    entityType,
+    entityId,
+    entityLabel,
+    action,
+    description,
+    changes,
+    performedByName: currentActor.name ?? undefined,
+    performedByEmail: currentActor.email ?? undefined,
+  }
 }
 
 /** Marks a location's already-submitted daily closing (if one exists for
@@ -1721,7 +1745,15 @@ export const useStore = create<AppState>()(
  * company+profile become available - see hooks/useAuth.tsx. Uses
  * useStore.setState directly (bypassing the sync wrapper above) since this
  * is a download, not a local mutation that needs pushing back. */
-export function hydrateFromRemote(companyId: string, userId: string, userEmail: string, slices: BusinessSlices, role: UserRole) {
+export function hydrateFromRemote(
+  companyId: string,
+  userId: string,
+  userEmail: string,
+  userName: string | null,
+  slices: BusinessSlices,
+  role: UserRole,
+) {
+  setAuditActor(userName, userEmail)
   useStore.setState({
     dataMode: 'remote',
     remoteCompanyId: companyId,
@@ -1743,6 +1775,7 @@ export function hydrateFromRemote(companyId: string, userId: string, userEmail: 
  * see the partialize comment above for why that snapshot is never a stale
  * remote company's data. */
 export function resetToLocalMode() {
+  setAuditActor(null, null)
   useStore.setState({
     dataMode: 'local',
     remoteCompanyId: null,

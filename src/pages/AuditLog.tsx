@@ -10,6 +10,7 @@ import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 
 interface AuditRow {
   timestamp: string
+  who: string
   entityType: string
   entityLabel: string
   action: string
@@ -37,6 +38,7 @@ export function AuditLog() {
 
   const rows: AuditRow[] = filtered.map((e) => ({
     timestamp: formatDateTime(e.timestamp),
+    who: e.performedByName ?? e.performedByEmail ?? '—',
     entityType: ENTITY_TYPE_LABELS[e.entityType],
     entityLabel: e.entityLabel,
     action: ACTION_LABELS[e.action],
@@ -46,6 +48,7 @@ export function AuditLog() {
 
   const columns: ExportColumn<AuditRow>[] = [
     { header: 'Időbélyeg', accessor: (r) => r.timestamp, width: 20 },
+    { header: 'Ki', accessor: (r) => r.who, width: 18 },
     { header: 'Típus', accessor: (r) => r.entityType, width: 16 },
     { header: 'Tétel', accessor: (r) => r.entityLabel, width: 26 },
     { header: 'Művelet', accessor: (r) => r.action, width: 14 },
@@ -113,6 +116,7 @@ export function AuditLog() {
             <thead>
               <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
                 <th className="px-4 py-3 font-medium">Időbélyeg</th>
+                <th className="px-4 py-3 font-medium">Ki</th>
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 font-medium">Tétel</th>
                 <th className="px-4 py-3 font-medium">Művelet</th>
@@ -123,6 +127,9 @@ export function AuditLog() {
               {filtered.map((e) => (
                 <tr key={e.id} className="border-b border-[var(--color-border)] last:border-b-0">
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text-muted)]">{formatDateTime(e.timestamp)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text)]">
+                    {e.performedByName ?? e.performedByEmail ?? <span className="text-[var(--color-text-muted)]">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{ENTITY_TYPE_LABELS[e.entityType]}</td>
                   <td className="px-4 py-3 font-medium text-[var(--color-text)]">{e.entityLabel}</td>
                   <td className="px-4 py-3">

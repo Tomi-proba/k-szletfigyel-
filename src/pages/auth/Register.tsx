@@ -7,6 +7,7 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
   const { signUp } = useAuth()
   const isInvite = Boolean(inviteToken)
   const [companyName, setCompanyName] = useState('')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordAgain, setPasswordAgain] = useState('')
@@ -18,12 +19,13 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
     e.preventDefault()
     setError(null)
     if (!isInvite && !companyName.trim()) return setError('Add meg a vállalkozásod nevét.')
+    if (!name.trim()) return setError('Add meg a neved.')
     if (!email.trim()) return setError('Add meg az email címedet.')
     if (password.length < 6) return setError('A jelszónak legalább 6 karakter hosszúnak kell lennie.')
     if (password !== passwordAgain) return setError('A két jelszó nem egyezik.')
 
     setSubmitting(true)
-    const { error: signUpError } = await signUp(email.trim(), password, companyName, inviteToken)
+    const { error: signUpError } = await signUp(email.trim(), password, name, companyName, inviteToken)
     setSubmitting(false)
     if (signUpError) return setError(signUpError)
     setDone(true)
@@ -54,8 +56,11 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
             <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} autoFocus required />
           </Field>
         )}
+        <Field label="Neved">
+          <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus={isInvite} required />
+        </Field>
         <Field label="Email cím">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={isInvite} required />
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label="Jelszó">
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

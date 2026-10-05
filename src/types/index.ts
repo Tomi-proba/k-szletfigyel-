@@ -413,6 +413,14 @@ export interface AuditLogEntry {
   action: AuditAction
   description: string
   changes?: AuditFieldChange[]
+  /** Ki hajtotta végre - csak remote (Supabase-hez kötött) módban töltődik
+   * ki, a store/useStore.ts setAuditActor-ral beállított, aktuálisan
+   * bejelentkezett felhasználó neve/email címe alapján, a rögzítés
+   * PILLANATÁBAN (nem frissül utólag, ha a felhasználó később átnevezi
+   * magát). Helyi (nem céges) módban mindkettő undefined marad - nincs
+   * több-felhasználós fogalom, amit mutatni kellene. */
+  performedByName?: string
+  performedByEmail?: string
 }
 
 // --- Napi zárás (daily closing) --------------------------------------------

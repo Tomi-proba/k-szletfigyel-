@@ -16,6 +16,9 @@ import { Copy, UserPlus } from 'lucide-react'
 interface CompanyUserRow {
   id: string
   email: string
+  /** Null a name mező bevezetése előtt létrejött fiókoknál - a táblázat
+   * ilyenkor az email címet mutatja helyette. */
+  name: string | null
   role: UserRole
   assignedLocationName: string | null
   isPlatformAdmin: boolean
@@ -55,6 +58,7 @@ export function Team() {
   const locations = useMemo(() => allLocations.filter((l) => !l.deletedAt), [allLocations])
 
   const [users, setUsers] = useState<CompanyUserRow[] | null>(null)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<UserRole>('raktaros')
   const [locationId, setLocationId] = useState('')
@@ -70,6 +74,7 @@ export function Team() {
         data.map((row) => ({
           id: row.id as string,
           email: row.email as string,
+          name: (row.name as string | null) ?? null,
           role: (row.role as UserRole) ?? 'iroda',
           assignedLocationName: (row.assigned_location_name as string | null) ?? null,
           isPlatformAdmin: Boolean(row.is_platform_admin),
@@ -96,6 +101,10 @@ export function Team() {
     if (!supabase) return
     setError(null)
     setCreated(null)
+    if (!name.trim()) {
+      setError('Add meg a felhasználó nevét.')
+      return
+    }
     if (!email.trim()) {
       setError('Add meg az email címet.')
       return
@@ -111,6 +120,7 @@ export function Team() {
       body: {
         email: email.trim(),
         password,
+        name: name.trim(),
         role,
         assignedLocationId: role === 'raktaros' ? locationId : null,
         assignedLocationName: role === 'raktaros' ? (location?.name ?? null) : null,
@@ -122,6 +132,7 @@ export function Team() {
       return
     }
     setCreated({ email: email.trim(), password })
+    setName('')
     setEmail('')
     setLocationId('')
     reload()
@@ -137,6 +148,9 @@ export function Team() {
           A felhasználó azonnal létrejön, nem kell neki regisztrálnia - a létrehozás után megkapott jelszóval rögtön be tud jelentkezni.
         </p>
         <form onSubmit={createTeamMember} className="flex flex-wrap items-end gap-3">
+          <Field label="Név">
+            <Input value={name} onChange={(e) => setName(e.target.value)} required />
+          </Field>
           <Field label="Email cím">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </Field>
@@ -206,6 +220,7 @@ export function Team() {
             <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
+                  <th className="py-2 font-medium">Név</th>
                   <th className="py-2 font-medium">Email</th>
                   <th className="py-2 font-medium">Szerepkör</th>
                   <th className="py-2 font-medium">Telephely</th>
@@ -214,6 +229,7 @@ export function Team() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-[var(--color-border)] last:border-b-0">
+                    <td className="py-2">{u.name ?? <span className="text-[var(--color-text-muted)]">—</span>}</td>
                     <td className="py-2">
                       {u.email} {u.isPlatformAdmin && <span className="text-xs text-[var(--color-text-muted)]">(üzemeltető)</span>}
                     </td>

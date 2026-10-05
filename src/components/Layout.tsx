@@ -299,6 +299,35 @@ export function Layout() {
         const isOpen = expandedGroups.has(group.key)
         const isCurrentGroup = group.key === currentGroupKey
         const GroupIcon = group.icon
+
+        // Egyetlen almenüpontos csoportnál (pl. "Vevők", "Beszállítók") nincs
+        // mit "legördíteni" - a kinyitás-becsukás gomb és a nyíl ikon csak
+        // felesleges plusz kattintás lenne egyetlen, mindig ugyanoda vezető
+        // linkhez. Ilyenkor a csoport maga egyetlen, közvetlen linkké válik.
+        if (group.items.length === 1) {
+          const item = group.items[0]
+          const isActive = isItemActive(item, location.pathname, location.search)
+          const count = typeof item.badge === 'number' ? item.badge : item.badge ? alertCount : 0
+          return (
+            <Link
+              key={group.key}
+              to={item.to}
+              onClick={onNavigate}
+              className={`mb-1 flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
+                isActive ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text)] hover:bg-black/5'
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <GroupIcon size={18} />
+                {group.label}
+              </span>
+              {count > 0 && (
+                <span className="rounded-full bg-[var(--color-danger)] px-2 py-0.5 text-xs font-semibold text-white">{count}</span>
+              )}
+            </Link>
+          )
+        }
+
         return (
           <div key={group.key} className="mb-1">
             <button

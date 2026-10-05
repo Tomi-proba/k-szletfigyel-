@@ -44,6 +44,10 @@ export interface Profile {
   id: string
   companyId: string
   email: string
+  /** Null for accounts created before this field existed - the UI falls
+   * back to showing the email in those cases (see pages/Settings.tsx for
+   * the self-service "set my name" form that closes that gap). */
+  name: string | null
   isPlatformAdmin: boolean
   role: UserRole
   /** Only set when role is 'raktaros'. References a row in the (Supabase)
@@ -57,6 +61,8 @@ export interface Invite {
   id: string
   companyId: string
   token: string
+  /** A meghívott neve - lásd Profile.name. */
+  name: string
   role: UserRole
   assignedLocationId: string | null
   assignedLocationName: string | null
@@ -118,6 +124,7 @@ export function mapProfileRow(row: Record<string, unknown>): Profile {
     id: row.id as string,
     companyId: row.company_id as string,
     email: row.email as string,
+    name: (row.name as string | null) ?? null,
     isPlatformAdmin: Boolean(row.is_platform_admin),
     role: (row.role as UserRole) ?? 'iroda',
     assignedLocationId: (row.assigned_location_id as string | null) ?? null,
@@ -131,6 +138,7 @@ export function mapInviteRow(row: Record<string, unknown>): Invite {
     id: row.id as string,
     companyId: row.company_id as string,
     token: row.token as string,
+    name: row.name as string,
     role: row.role as UserRole,
     assignedLocationId: (row.assigned_location_id as string | null) ?? null,
     assignedLocationName: (row.assigned_location_name as string | null) ?? null,

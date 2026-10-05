@@ -9,7 +9,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
-import { buildDailyClosingSummary } from '../lib/dailyClosing'
+import { buildDailyClosingMovementLines, buildDailyClosingSummary } from '../lib/dailyClosing'
 import type { DailyClosing, DailyClosingStatus } from '../types'
 import { Modal } from '../components/Modal'
 import { Button, Card, EmptyState, PageHeader, Select, Input } from '../components/ui'
@@ -207,19 +207,21 @@ export function DailyClosingPage() {
                   <thead>
                     <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
                       <th className="py-2 pr-4 font-medium">Termék</th>
-                      <th className="py-2 pr-4 text-right font-medium">Bejövő</th>
-                      <th className="py-2 text-right font-medium">Kimenő</th>
+                      <th className="py-2 pr-4 font-medium">Típus</th>
+                      <th className="py-2 text-right font-medium">Mennyiség</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.productBreakdown.map((r) => (
-                      <tr key={r.productId} className="border-b border-[var(--color-border)] last:border-b-0">
+                    {buildDailyClosingMovementLines(movements, products, preview.movementIds).map((r) => (
+                      <tr key={r.movementId} className="border-b border-[var(--color-border)] last:border-b-0">
                         <td className="py-2 pr-4">{r.productName}</td>
-                        <td className="py-2 pr-4 text-right text-[var(--color-success)]">
-                          {r.inQuantity > 0 ? `${formatNumber(r.inQuantity)} ${r.unit}` : '—'}
+                        <td className="py-2 pr-4">
+                          <span className={r.type === 'in' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}>
+                            {r.type === 'in' ? 'Bejövő' : 'Kimenő'}
+                          </span>
                         </td>
-                        <td className="py-2 text-right text-[var(--color-danger)]">
-                          {r.outQuantity > 0 ? `${formatNumber(r.outQuantity)} ${r.unit}` : '—'}
+                        <td className={`py-2 text-right font-medium ${r.type === 'in' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}>
+                          {formatNumber(r.quantity)} {r.unit}
                         </td>
                       </tr>
                     ))}

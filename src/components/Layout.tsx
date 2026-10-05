@@ -184,9 +184,22 @@ function buildNavGroups(
   canManageTeam: boolean,
   isFoIroda: boolean,
   pendingChangeCount: number,
+  pendingClosingCount: number,
   showAdmin: boolean,
 ): NavGroup[] {
   let baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
+  // "Beérkezett napi jelentések" saját badge-e: hány napi zárás vár még
+  // megtekintésre/jóváhagyásra (status !== 'approved') - eddig ennek a
+  // menüpontnak egyáltalán nem volt badge-e (csak a "Riasztások"-nak és a
+  // "Jóváhagyások"-nak), ezért nem jelzett semmit egy frissen beérkezett,
+  // még meg nem tekintett zárásnál sem, holott a lista ott állt rajta.
+  if (!isWarehouseUser) {
+    baseGroups = baseGroups.map((g) =>
+      g.key === 'attekintes'
+        ? { ...g, items: g.items.map((item) => (item.to === '/napi-jelentesek' ? { ...item, badge: pendingClosingCount } : item)) }
+        : g,
+    )
+  }
   // "Jóváhagyások" kizárólag fő iroda nézetben jelenik meg - ő bírálja el
   // az iroda törzsadat-módosítási kéréseit (lásd pages/Approvals.tsx). A
   // badge-nek SAJÁT számot (pendingChangeCount) kell mutatnia, NEM az
@@ -238,6 +251,7 @@ export function Layout() {
   const alerts = useAlerts()
   const { session, profile, isReadOnly, isReadOnlyViewer, isWarehouseUser, effectiveRole, signOut } = useAuth()
   const pendingChanges = useStore((s) => s.pendingChanges)
+  const dailyClosings = useStore((s) => s.dailyClosings)
   const showAccountGroup = isSupabaseConfigured && !!session
   // effectiveRole (nem profile?.role) kell ide, mert ez veszi figyelembe a
   // `?demo_szerepkor=` ideiglenes szimulátort is (lásd useAuth.tsx) -
@@ -245,7 +259,16 @@ export function Layout() {
   const isFoIroda = effectiveRole === 'fo_iroda'
   const canManageTeam = effectiveRole === 'iroda' || isFoIroda
   const pendingChangeCount = pendingChanges.filter((c) => c.status === 'pending').length
-  const navGroups = buildNavGroups(isWarehouseUser, showAccountGroup, canManageTeam, isFoIroda, pendingChangeCount, !!profile?.isPlatformAdmin)
+  const pendingClosingCount = dailyClosings.filter((c) => c.status !== 'approved').length
+  const navGroups = buildNavGroups(
+    isWarehouseUser,
+    showAccountGroup,
+    canManageTeam,
+    isFoIroda,
+    pendingChangeCount,
+    pendingClosingCount,
+    !!profile?.isPlatformAdmin,
+  )
   const alertCount =
     alerts.needsReorder.length +
     alerts.slowMoving.length +

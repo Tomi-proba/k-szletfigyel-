@@ -1,7 +1,7 @@
 // Napi zárás (daily closing) business logic - building a location's daily
 // movement summary and detecting locations that missed a closing. Pure
 // functions over plain data, same pattern as the rest of lib/.
-import type { DailyClosing, DailyClosingProductRow, Location, Movement, Product } from '../types'
+import type { DailyClosing, DailyClosingProductRow, Location, Movement, MovementType, Product } from '../types'
 import { daysBetween, isoDaysAgo, todayISO } from './dates'
 
 /** A movement counts toward a closing only while it's neither soft-deleted
@@ -50,6 +50,43 @@ export function buildDailyClosingSummary(movements: Movement[], products: Produc
     productBreakdown: Array.from(byProduct.values()).sort((a, b) => a.productName.localeCompare(b.productName, 'hu')),
     movementIds: dayMovements.map((m) => m.id),
   }
+}
+
+export interface DailyClosingMovementLine {
+  movementId: string
+  productId: string
+  productName: string
+  unit: string
+  type: MovementType
+  quantity: number
+}
+
+/** The individual movements behind a closing's (or live preview's) totals,
+ * one row per actual bejövő/kimenő tétel - as opposed to productBreakdown,
+ * which sums same-product movements into one combined quantity. Looked up
+ * live against the current `movements`/`products` (not stored on the
+ * closing itself, which only keeps the ids - see DailyClosing.movementIds)
+ * so it reflects any later correction the same way modifiedAfterSubmission
+ * already signals one happened. A deleted/cancelled movement since the
+ * closing was submitted simply drops out of the list. */
+export function buildDailyClosingMovementLines(movements: Movement[], products: Product[], movementIds: string[]): DailyClosingMovementLine[] {
+  const productById = new Map(products.map((p) => [p.id, p]))
+  const movementById = new Map(movements.map((m) => [m.id, m]))
+  const lines: DailyClosingMovementLine[] = []
+  for (const id of movementIds) {
+    const m = movementById.get(id)
+    if (!m || m.deletedAt || m.cancelled) continue
+    const product = productById.get(m.productId)
+    lines.push({
+      movementId: m.id,
+      productId: m.productId,
+      productName: product?.name ?? 'Törölt termék',
+      unit: product?.unit ?? '',
+      type: m.type,
+      quantity: m.quantity,
+    })
+  }
+  return lines.sort((a, b) => a.productName.localeCompare(b.productName, 'hu') || (a.type === b.type ? 0 : a.type === 'in' ? -1 : 1))
 }
 
 /** How many calendar days of history to scan for missing closings - bounded

@@ -400,9 +400,16 @@ npm run dev       # http://localhost:5173
 ### 10.2 Ellenőrzés commit előtt
 ```bash
 npx tsc -b        # típusellenőrzés
+npm test          # automata tesztek (Vitest, tests/ mappa)
 npm run build     # típusellenőrzés + produkciós build
 npm run lint      # oxlint
 ```
+
+Az automata tesztek (`tests/`) a `lib/` tiszta függvényeit (költségszámítás, ÁFA, pénzügyi napló,
+fizetési kötelezettségek, kintlévőség, előfizetés-állapot, napi zárás) és a store fő
+mozgásrögzítő műveleteit (beérkezés, eladás FIFO/átlagárral, negatív készlet tiltása, stornó,
+kétlépcsős beszerzés) ellenőrzik helyi módban. A `.github/workflows/ci.yml` minden push-ra
+lefuttatja a teszteket, a buildet és a lintet.
 
 ### 10.3 Webes deployment
 A `claude/inventory-management-app-yjc3v5` branch-re történő push automatikusan új Vercel deploy-t indít (statikus SPA build, `npm run build` kimenete).

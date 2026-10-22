@@ -1,12 +1,13 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { createId } from './id'
 import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
 import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
-import { pushBusinessDiffs, type BusinessSlices } from '../lib/remoteSync'
+import { fuggoMentesekBeszamitasa, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
+import { mentesiSor } from '../lib/mentes'
 import { computeDueRecurringOccurrences } from '../lib/ledger'
 import type { PendingChange, PendingChangeAction, PendingChangeEntityType, UserRole } from '../types/auth'
 import {
@@ -361,7 +362,10 @@ export const useStore = create<AppState>()(
         const prev = get()
         rawSet(updater as never)
         if (prev.dataMode === 'remote' && prev.remoteCompanyId) {
-          pushBusinessDiffs(prev.remoteCompanyId, prev, get())
+          // Egy felhasználói művelet összes változása EGY mentési tételként megy a szerverre (vagy
+          // minden mentődik, vagy semmi) - lásd lib/mentesiSor.ts és lib/remoteSync.ts.
+          const valtozasok = valtozasokKiszamitasa(prev.remoteCompanyId, prev, get())
+          if (valtozasok.length > 0) mentesiSor.hozzaad(mentesiTetel(prev.remoteCompanyId, valtozasok))
         }
       }) as typeof rawSet
 
@@ -1717,6 +1721,18 @@ export const useStore = create<AppState>()(
     {
       name: 'keszletfigyelo-storage',
       version: 1,
+      // A böngészőben tárolt pillanatkép CSAK a helyi (bejelentkezés nélküli) mód adata. Szerveres
+      // munkamenet alatt (és a módváltás pillanatában) egyáltalán nem írjuk, így a korábbi helyi
+      // adatok érintetlenül megmaradnak, és veszteség nélkül átköltöztethetők (lásd
+      // lib/atkoltoztetes.ts). Korábban a szerveres mód üres listákkal felülírta őket.
+      storage: createJSONStorage(() => ({
+        getItem: (kulcs: string) => localStorage.getItem(kulcs),
+        setItem: (kulcs: string, ertek: string) => {
+          if (helyiMentesSzunetel || useStore.getState().dataMode === 'remote') return
+          localStorage.setItem(kulcs, ertek)
+        },
+        removeItem: (kulcs: string) => localStorage.removeItem(kulcs),
+      })),
       // Never persist dataMode/remoteCompanyId as 'remote' - which mode we're
       // in is derived live from the current Supabase session (see
       // hydrateFromRemote/resetToLocalMode), not a durable local fact; a
@@ -1732,9 +1748,6 @@ export const useStore = create<AppState>()(
         remoteRole: null,
         remoteUserId: null,
         remoteUserEmail: null,
-        ...(state.dataMode === 'remote'
-          ? { locations: [], products: [], lots: [], movements: [], dailyClosings: [], auditLog: [], pendingChanges: [] }
-          : {}),
       }),
     },
   ),
@@ -1767,15 +1780,24 @@ export function hydrateFromRemote(
     dailyClosings: slices.dailyClosings,
     auditLog: slices.auditLog,
     pendingChanges: slices.pendingChanges,
+    suppliers: slices.suppliers,
+    customers: slices.customers,
+    ledgerEntries: slices.ledgerEntries,
+    recurringLedgerEntries: slices.recurringLedgerEntries,
+    settings: slices.settings,
+    ledgerCategories: slices.ledgerCategories,
   })
+  // Egy korábbi munkamenetből megmaradt, még el nem küldött mentések a betöltött adatra épülnek
+  // (az elakadtak nem: azokat a felhasználó jóváhagyásával eldobjuk).
+  if (mentesiSor.aktualisAllapot.fajta !== 'elakadt') fuggoMentesekBeszamitasa(mentesiSor.fuggoTetelek)
 }
 
-/** Switches back to local/offline mode (sign-out, or Supabase not
- * configured) and restores whatever this browser's own local snapshot was -
- * see the partialize comment above for why that snapshot is never a stale
- * remote company's data. */
+/** Igaz, amíg a módváltás miatt a helyi pillanatképet nem szabad írni (lásd a persist storage-ot). */
+let helyiMentesSzunetel = false
+
 export function resetToLocalMode() {
   setAuditActor(null, null)
+  helyiMentesSzunetel = true
   useStore.setState({
     dataMode: 'local',
     remoteCompanyId: null,
@@ -1789,6 +1811,12 @@ export function resetToLocalMode() {
     dailyClosings: [],
     auditLog: [],
     pendingChanges: [],
+    suppliers: [],
+    customers: [],
+    ledgerEntries: [],
+    recurringLedgerEntries: [],
   })
-  useStore.persist.rehydrate()
+  helyiMentesSzunetel = false
+  // A böngésző saját (helyi módú) pillanatképe, amit a szerveres munkamenet nem írt felül.
+  void useStore.persist.rehydrate()
 }

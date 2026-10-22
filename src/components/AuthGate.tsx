@@ -46,7 +46,7 @@ function ConfiguredAuthGate({
   passwordRecoveryHandled: boolean
   setPasswordRecoveryHandled: (v: boolean) => void
 }) {
-  const { loading, session, profile, company } = useAuth()
+  const { loading, session, profile, company, dataLoadError, reloadData, signOut } = useAuth()
 
   if (hasPasswordRecoveryCode && !passwordRecoveryHandled) {
     return <ResetPassword onDone={() => setPasswordRecoveryHandled(true)} />
@@ -65,6 +65,25 @@ function ConfiguredAuthGate({
     if (view === 'register') return <Register onSwitchToLogin={() => setView('login')} />
     if (view === 'forgot-password') return <ForgotPassword onSwitchToLogin={() => setView('login')} />
     return <Login onSwitchToRegister={() => setView('register')} onSwitchToForgotPassword={() => setView('forgot-password')} />
+  }
+
+  if (dataLoadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div role="alert" className="max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-sm text-[var(--color-text)] shadow-sm">
+          <h1 className="mb-2 text-lg font-semibold">Az adatok most nem tölthetők be</h1>
+          <p className="mb-4 text-[var(--color-text-muted)]">{dataLoadError}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void reloadData()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 font-medium text-white">
+              Újrapróbálás
+            </button>
+            <button type="button" onClick={() => void signOut()} className="rounded-lg bg-black/5 px-4 py-2.5 font-medium">
+              Kijelentkezés
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!profile || !company) {

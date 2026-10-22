@@ -8,8 +8,10 @@ import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
 import { mapCompanyRow, mapProfileRow, type Company, type Profile, type UserRole } from '../types/auth'
-import { emptyBusinessSlices, fetchBusinessData } from '../lib/remoteSync'
-import { hydrateFromRemote, resetToLocalMode } from '../store/useStore'
+import { fetchBusinessData } from '../lib/remoteSync'
+import { mentesiSor } from '../lib/mentes'
+import { allapotUzenet } from '../lib/mentesiSor'
+import { hydrateFromRemote, resetToLocalMode, useStore } from '../store/useStore'
 
 /** TEMP DEMO HOOK - a Supabase nélküli, ideiglenes szerepkör-szimulációhoz
  * (két böngészőfül, ugyanaz a localStorage, más-más "?demo_szerepkor="
@@ -84,6 +86,11 @@ interface AuthContextValue {
    * tölti újra a csapatlistát a sikeres hívás után. */
   updateMemberName: (memberId: string, name: string) => Promise<AuthResult>
   refreshCompany: () => Promise<void>
+  /** Ha a szerveradatok betöltése nem sikerült (pl. nincs internet), itt az érthető ok; ilyenkor a
+   * program NEM indul üres adattal, hanem hibaképernyőt mutat (lásd AuthGate). */
+  dataLoadError: string | null
+  /** Az adatok újratöltése a szerverről (betöltési hiba után, vagy egy elakadt mentés lezárása után). */
+  reloadData: () => Promise<void>
   /** Demo-only: simulates a successful subscription payment by writing
    * directly to the companies row - no real Stripe charge happens. See
    * pages/Subscription.tsx and supabase/functions/create-checkout-session
@@ -113,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null)
 
   const loadProfileAndCompany = useCallback(async (userId: string) => {
     if (!supabase) return
@@ -138,12 +146,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // the raktáros/iroda role split (DOCUMENTATION.md 14. fejezet) actually
     // share data across separate devices instead of each seeing its own
     // browser's local copy.
+    setDataLoadError(null)
+    // Egy korábbi munkamenetből (pl. internetkimaradás alatt) megmaradt mentések előbb mennek el,
+    // hogy a betöltött adat már tartalmazza őket.
+    mentesiSor.betolt(mappedProfile.companyId)
+    const sorAllapot = await mentesiSor.kiurulesig()
+    if (sorAllapot.fajta === 'ujraprobalas') {
+      setDataLoadError(allapotUzenet(sorAllapot))
+      return
+    }
+
     try {
-      const slices = await fetchBusinessData()
+      const slices = await fetchBusinessData(mappedProfile.companyId, { naplot: mappedProfile.role !== 'raktaros' })
       hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, mappedProfile.name, slices, mappedProfile.role)
     } catch (err) {
       console.error('[useAuth] failed to load business data from Supabase', err)
-      hydrateFromRemote(mappedProfile.companyId, mappedProfile.id, mappedProfile.email, mappedProfile.name, emptyBusinessSlices, mappedProfile.role)
+      setDataLoadError(
+        'Nem sikerült betölteni az adatokat a szerverről. Ellenőrizd az internetkapcsolatot, majd próbáld újra. Az adataid a szerveren biztonságban vannak.',
+      )
+      return
+    }
+    // Az esedékessé vált ismétlődő napló-tételeket az irodai felhasználó gépe rögzíti (a raktárosnak
+    // nincs joga a naplóhoz). Ha két gép egyszerre tenné, a második mentése ütközésként elakad, és
+    // nem jön létre kétszer ugyanaz a tétel.
+    if (mappedProfile.role === 'fo_iroda' || mappedProfile.role === 'iroda') {
+      useStore.getState().generateDueRecurringLedgerEntries()
     }
   }, [])
 
@@ -161,13 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession)
+      // Az óránkénti tokenmegújításkor nem töltjük újra az adatokat: az egy folyamatban lévő mentés
+      // közben a felületet régebbi adatra cserélhetné.
+      if (event === 'TOKEN_REFRESHED') return
       if (newSession) {
         await loadProfileAndCompany(newSession.user.id)
       } else {
         setProfile(null)
         setCompany(null)
+        setDataLoadError(null)
+        mentesiSor.leallit()
         resetToLocalMode()
       }
     })
@@ -265,6 +297,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }, [company, refreshCompany])
 
+  const reloadData = useCallback(async () => {
+    if (session) await loadProfileAndCompany(session.user.id)
+  }, [session, loadProfileAndCompany])
+
   const isReadOnly = useMemo(() => computeIsReadOnly(company), [company])
   const effectiveRole: UserRole | null = profile?.role ?? readDemoRole()
   const isWarehouseUser = effectiveRole === 'raktaros'
@@ -291,6 +327,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateMyName,
     updateMemberName,
     refreshCompany,
+    dataLoadError,
+    reloadData,
     demoActivateSubscription,
     demoCancelSubscription,
   }

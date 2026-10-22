@@ -389,6 +389,8 @@ export type AuditEntityType =
   | 'ledgerEntry'
   | 'recurringLedgerEntry'
   | 'dailyClosing'
+  /** A böngészőben tárolt adatok egyszeri átköltöztetése a szerverre (lásd lib/atkoltoztetes.ts). */
+  | 'atkoltoztetes'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'cancel' | 'correction'
 

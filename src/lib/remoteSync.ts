@@ -21,8 +21,24 @@
 // violation, or a dropped connection) it is logged to the console but NOT
 // rolled back locally - see DOCUMENTATION.md 14. fejezet for this tradeoff.
 import { supabase } from './supabase'
-import type { AuditLogEntry, DailyClosing, Location, Movement, Product, PurchaseLot } from '../types'
+import { createId } from '../store/id'
+import {
+  DEFAULT_LEDGER_CATEGORIES,
+  DEFAULT_SETTINGS,
+  type AuditLogEntry,
+  type Customer,
+  type DailyClosing,
+  type LedgerEntry,
+  type Location,
+  type Movement,
+  type Product,
+  type PurchaseLot,
+  type RecurringLedgerEntry,
+  type Settings,
+  type Supplier,
+} from '../types'
 import { mapPendingChangeRow, type PendingChange } from '../types/auth'
+import { hibaBesorolas, type KuldesEredmeny, type MentesiTetel, type Valtozas } from './mentesiSor'
 
 export interface BusinessSlices {
   locations: Location[]
@@ -32,6 +48,13 @@ export interface BusinessSlices {
   dailyClosings: DailyClosing[]
   auditLog: AuditLogEntry[]
   pendingChanges: PendingChange[]
+  // 2026-10-23-tól ezek is a szerveren vannak (korábban csak a böngészőben):
+  suppliers: Supplier[]
+  customers: Customer[]
+  ledgerEntries: LedgerEntry[]
+  recurringLedgerEntries: RecurringLedgerEntry[]
+  settings: Settings
+  ledgerCategories: string[]
 }
 
 export const emptyBusinessSlices: BusinessSlices = {
@@ -42,6 +65,12 @@ export const emptyBusinessSlices: BusinessSlices = {
   dailyClosings: [],
   auditLog: [],
   pendingChanges: [],
+  suppliers: [],
+  customers: [],
+  ledgerEntries: [],
+  recurringLedgerEntries: [],
+  settings: DEFAULT_SETTINGS,
+  ledgerCategories: [...DEFAULT_LEDGER_CATEGORIES],
 }
 
 function client() {
@@ -305,87 +334,294 @@ function pendingChangeToRow(companyId: string, c: PendingChange) {
   }
 }
 
-// --- fetch (RLS on the server does all the company/location filtering) -----
+// --- 2026-10-23: a korábban csak böngészőben tárolt adatok -----------------------------
 
-export async function fetchBusinessData(): Promise<BusinessSlices> {
-  const db = client()
-  const [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges] = await Promise.all([
-    db.from('locations').select('*'),
-    db.from('products').select('*'),
-    db.from('purchase_lots').select('*'),
-    db.from('movements').select('*'),
-    db.from('daily_closings').select('*'),
-    db.from('audit_log').select('*').order('event_timestamp', { ascending: true }),
-    db.from('pending_changes').select('*').order('requested_at', { ascending: false }),
-  ])
-  for (const result of [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges]) {
-    if (result.error) throw result.error
-  }
+const opt = <T>(v: unknown): T | undefined => (v === null || v === undefined ? undefined : (v as T))
+const optNum = (v: unknown): number | undefined => (v === null || v === undefined ? undefined : Number(v))
+
+function supplierFromRow(row: Record<string, unknown>): Supplier {
   return {
-    locations: (locations.data ?? []).map(locationFromRow),
-    products: (products.data ?? []).map(productFromRow),
-    lots: (lots.data ?? []).map(lotFromRow),
-    movements: (movements.data ?? []).map(movementFromRow),
-    dailyClosings: (dailyClosings.data ?? []).map(closingFromRow),
-    auditLog: (auditLog.data ?? []).map(auditFromRow),
-    pendingChanges: (pendingChanges.data ?? []).map(mapPendingChangeRow),
+    id: row.id as string,
+    name: row.name as string,
+    phone: opt(row.phone),
+    email: opt(row.email),
+    leadTimeDays: Number(row.lead_time_days),
+    deletedAt: opt(row.deleted_at),
+  }
+}
+function supplierToRow(companyId: string, s: Supplier) {
+  return {
+    id: s.id,
+    company_id: companyId,
+    name: s.name,
+    phone: s.phone ?? null,
+    email: s.email ?? null,
+    lead_time_days: s.leadTimeDays,
+    deleted_at: s.deletedAt ?? null,
   }
 }
 
-// --- push (fire-and-forget upserts, called from useStore's sync wrapper) ---
+function customerFromRow(row: Record<string, unknown>): Customer {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    phone: opt(row.phone),
+    email: opt(row.email),
+    notes: opt(row.notes),
+    deletedAt: opt(row.deleted_at),
+  }
+}
+function customerToRow(companyId: string, c: Customer) {
+  return {
+    id: c.id,
+    company_id: companyId,
+    name: c.name,
+    phone: c.phone ?? null,
+    email: c.email ?? null,
+    notes: c.notes ?? null,
+    deleted_at: c.deletedAt ?? null,
+  }
+}
 
-function pushChangedRows<T extends { id: string }>(companyId: string, next: T[], prev: T[], upsert: (companyId: string, item: T) => Promise<void>) {
-  if (next === prev) return
-  const prevById = new Map(prev.map((item) => [item.id, item]))
-  for (const item of next) {
-    if (prevById.get(item.id) !== item) {
-      upsert(companyId, item).catch((err) => console.error('[remoteSync] write failed', err))
+function ledgerFromRow(row: Record<string, unknown>): LedgerEntry {
+  return {
+    id: row.id as string,
+    date: row.date as string,
+    type: row.type as LedgerEntry['type'],
+    category: row.category as string,
+    description: row.description as string,
+    amount: Number(row.amount),
+    currency: row.currency as LedgerEntry['currency'],
+    exchangeRate: Number(row.exchange_rate),
+    note: opt(row.note),
+    vatRatePercent: optNum(row.vat_rate_percent),
+    vatDirection: opt(row.vat_direction),
+    dueDate: opt(row.due_date),
+    isPaid: opt(row.is_paid),
+    paidDate: opt(row.paid_date),
+    correctsEntryId: opt(row.corrects_entry_id),
+    recurringEntryId: opt(row.recurring_entry_id),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    deletedAt: opt(row.deleted_at),
+  }
+}
+function ledgerToRow(companyId: string, e: LedgerEntry) {
+  return {
+    id: e.id,
+    company_id: companyId,
+    date: e.date,
+    type: e.type,
+    category: e.category,
+    description: e.description,
+    amount: e.amount,
+    currency: e.currency,
+    exchange_rate: e.exchangeRate,
+    note: e.note ?? null,
+    vat_rate_percent: e.vatRatePercent ?? null,
+    vat_direction: e.vatDirection ?? null,
+    due_date: e.dueDate ?? null,
+    is_paid: e.isPaid ?? null,
+    paid_date: e.paidDate ?? null,
+    corrects_entry_id: e.correctsEntryId ?? null,
+    recurring_entry_id: e.recurringEntryId ?? null,
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+    deleted_at: e.deletedAt ?? null,
+  }
+}
+
+function recurringFromRow(row: Record<string, unknown>): RecurringLedgerEntry {
+  return {
+    id: row.id as string,
+    type: row.type as RecurringLedgerEntry['type'],
+    category: row.category as string,
+    description: row.description as string,
+    amount: Number(row.amount),
+    currency: row.currency as RecurringLedgerEntry['currency'],
+    exchangeRate: Number(row.exchange_rate),
+    note: opt(row.note),
+    dayOfMonth: Number(row.day_of_month),
+    startDate: row.start_date as string,
+    endDate: opt(row.end_date),
+    active: Boolean(row.active),
+    lastGeneratedMonth: opt(row.last_generated_month),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    deletedAt: opt(row.deleted_at),
+  }
+}
+function recurringToRow(companyId: string, r: RecurringLedgerEntry) {
+  return {
+    id: r.id,
+    company_id: companyId,
+    type: r.type,
+    category: r.category,
+    description: r.description,
+    amount: r.amount,
+    currency: r.currency,
+    exchange_rate: r.exchangeRate,
+    note: r.note ?? null,
+    day_of_month: r.dayOfMonth,
+    start_date: r.startDate,
+    end_date: r.endDate ?? null,
+    active: r.active,
+    last_generated_month: r.lastGeneratedMonth ?? null,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
+    deleted_at: r.deletedAt ?? null,
+  }
+}
+
+function settingsToRow(companyId: string, settings: Settings, ledgerCategories: string[]) {
+  return { id: companyId, company_id: companyId, settings, ledger_categories: ledgerCategories, updated_at: new Date().toISOString() }
+}
+
+// --- letöltés (a szűrést a szerveren az RLS végzi) ----------------------------------
+
+export async function fetchBusinessData(companyId: string, opts: { naplot: boolean }): Promise<BusinessSlices> {
+  const db = client()
+  // A raktárosnak a pénzügyi naplóhoz nincs joga (üres listát kapna); a lekérdezést nem is küldjük el.
+  const ures = Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
+  const [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges, suppliers, customers, ledger, recurring, settings] =
+    await Promise.all([
+      db.from('locations').select('*'),
+      db.from('products').select('*'),
+      db.from('purchase_lots').select('*'),
+      db.from('movements').select('*'),
+      db.from('daily_closings').select('*'),
+      db.from('audit_log').select('*').order('event_timestamp', { ascending: true }),
+      db.from('pending_changes').select('*').order('requested_at', { ascending: false }),
+      db.from('suppliers').select('*'),
+      db.from('customers').select('*'),
+      opts.naplot ? db.from('ledger_entries').select('*') : ures,
+      opts.naplot ? db.from('recurring_ledger_entries').select('*') : ures,
+      db.from('company_settings').select('*').eq('id', companyId).maybeSingle(),
+    ])
+  for (const result of [locations, products, lots, movements, dailyClosings, auditLog, pendingChanges, suppliers, customers, ledger, recurring, settings]) {
+    if (result.error) throw result.error
+  }
+  const verziok = ismertVerziok
+  verziok.clear()
+  const jegyez = (tabla: string, rows: Record<string, unknown>[] | null) => {
+    for (const row of rows ?? []) if (row.version !== undefined) verziok.set(`${tabla}:${row.id as string}`, Number(row.version))
+    return rows ?? []
+  }
+  const beallitasSor = settings.data as Record<string, unknown> | null
+  if (beallitasSor) jegyez('company_settings', [beallitasSor])
+  return {
+    locations: jegyez('locations', locations.data).map(locationFromRow),
+    products: jegyez('products', products.data).map(productFromRow),
+    lots: jegyez('purchase_lots', lots.data).map(lotFromRow),
+    movements: jegyez('movements', movements.data).map(movementFromRow),
+    dailyClosings: jegyez('daily_closings', dailyClosings.data).map(closingFromRow),
+    auditLog: (auditLog.data ?? []).map(auditFromRow),
+    pendingChanges: jegyez('pending_changes', pendingChanges.data).map(mapPendingChangeRow),
+    suppliers: jegyez('suppliers', suppliers.data).map(supplierFromRow),
+    customers: jegyez('customers', customers.data).map(customerFromRow),
+    ledgerEntries: jegyez('ledger_entries', ledger.data).map(ledgerFromRow),
+    recurringLedgerEntries: jegyez('recurring_ledger_entries', recurring.data).map(recurringFromRow),
+    settings: beallitasSor ? { ...DEFAULT_SETTINGS, ...(beallitasSor.settings as Partial<Settings>) } : DEFAULT_SETTINGS,
+    ledgerCategories: beallitasSor ? (beallitasSor.ledger_categories as string[]) : [...DEFAULT_LEDGER_CATEGORIES],
+  }
+}
+
+// --- feltöltés: egy felhasználói művelet = egy mentési köteg ------------------------------
+
+/** A szerveren lévő sorok verziója, úgy, ahogy a sorban álló mentések után LESZ: minden sikeres
+ * mentés pontosan eggyel növeli (új sornál 1). A mentés ezt küldi el, a szerver pedig elutasítja,
+ * ha közben egy másik eszköz módosította a sort (ütközés). */
+const ismertVerziok = new Map<string, number>()
+
+/** Igaz, ha a cégnek már van beállítás-sora a szerveren (vagy épp most mentünk egyet). */
+export function vanSzerverBeallitas(companyId: string): boolean {
+  return ismertVerziok.has(`company_settings:${companyId}`)
+}
+
+/** A betöltés után még függő (pl. egy korábbi munkamenetből megmaradt) mentések verzióit is
+ * beszámítja. */
+export function fuggoMentesekBeszamitasa(tetelek: readonly MentesiTetel[]) {
+  for (const tetel of tetelek) {
+    for (const v of tetel.valtozasok) {
+      if (v.tabla === 'audit_log') continue
+      const kulcs = `${v.tabla}:${v.sor.id as string}`
+      ismertVerziok.set(kulcs, ((v.sor.version as number | null) ?? 0) + 1)
     }
   }
 }
 
-async function upsertLocation(companyId: string, l: Location) {
-  const { error } = await client().from('locations').upsert(locationToRow(companyId, l))
-  if (error) throw error
-}
-async function upsertProduct(companyId: string, p: Product) {
-  const { error } = await client().from('products').upsert(productToRow(companyId, p))
-  if (error) throw error
-}
-async function upsertLot(companyId: string, l: PurchaseLot) {
-  const { error } = await client().from('purchase_lots').upsert(lotToRow(companyId, l))
-  if (error) throw error
-}
-async function upsertMovement(companyId: string, m: Movement) {
-  const { error } = await client().from('movements').upsert(movementToRow(companyId, m))
-  if (error) throw error
-}
-async function upsertClosing(companyId: string, c: DailyClosing) {
-  const { error } = await client().from('daily_closings').upsert(closingToRow(companyId, c))
-  if (error) throw error
-}
-async function insertAudit(companyId: string, a: AuditLogEntry) {
-  // Audit rows are append-only - never updated after creation - but upsert
-  // is harmless (and simpler than tracking "is this new") since an audit
-  // entry's id, once created locally, is never mutated in place.
-  const { error } = await client().from('audit_log').upsert(auditToRow(companyId, a))
-  if (error) throw error
-}
-async function upsertPendingChange(companyId: string, c: PendingChange) {
-  const { error } = await client().from('pending_changes').upsert(pendingChangeToRow(companyId, c))
-  if (error) throw error
+function verzioKioszt(valtozasok: Valtozas[]): Valtozas[] {
+  return valtozasok.map((v) => {
+    if (v.tabla === 'audit_log') return v
+    const kulcs = `${v.tabla}:${v.sor.id as string}`
+    const version = ismertVerziok.get(kulcs) ?? null
+    ismertVerziok.set(kulcs, (version ?? 0) + 1)
+    return { tabla: v.tabla, sor: { ...v.sor, version } }
+  })
 }
 
-/** Called by useStore after every state update while in remote mode - diffs
- * each of the 7 synced slices against their pre-update value BY REFERENCE
- * and pushes whatever changed. See the file-level comment for why reference
- * equality is a safe and sufficient diffing strategy here. */
-export function pushBusinessDiffs(companyId: string, prev: BusinessSlices, next: BusinessSlices) {
-  pushChangedRows(companyId, next.locations, prev.locations, upsertLocation)
-  pushChangedRows(companyId, next.products, prev.products, upsertProduct)
-  pushChangedRows(companyId, next.lots, prev.lots, upsertLot)
-  pushChangedRows(companyId, next.movements, prev.movements, upsertMovement)
-  pushChangedRows(companyId, next.dailyClosings, prev.dailyClosings, upsertClosing)
-  pushChangedRows(companyId, next.auditLog, prev.auditLog, insertAudit)
-  pushChangedRows(companyId, next.pendingChanges, prev.pendingChanges, upsertPendingChange)
+function valtozottSorok<T extends { id: string }>(next: T[], prev: T[], tabla: string, toRow: (item: T) => Record<string, unknown>): Valtozas[] {
+  if (next === prev) return []
+  const prevById = new Map(prev.map((item) => [item.id, item]))
+  return next.filter((item) => prevById.get(item.id) !== item).map((item) => ({ tabla, sor: toRow(item) }))
+}
+
+/** Egy állapotváltás (egy felhasználói művelet) összes szerverre menő változása, a szükséges
+ * sorrendben (előbb a hivatkozott sorok, pl. termék a mozgás előtt). A változást referencia szerint
+ * ismeri fel: a store minden módosítás csak az érintett elemeket cseréli le. */
+export function valtozasokKiszamitasa(companyId: string, prev: BusinessSlices, next: BusinessSlices): Valtozas[] {
+  const valtozasok = [
+    ...valtozottSorok(next.locations, prev.locations, 'locations', (l) => locationToRow(companyId, l)),
+    ...valtozottSorok(next.suppliers, prev.suppliers, 'suppliers', (s) => supplierToRow(companyId, s)),
+    ...valtozottSorok(next.customers, prev.customers, 'customers', (c) => customerToRow(companyId, c)),
+    ...valtozottSorok(next.products, prev.products, 'products', (p) => productToRow(companyId, p)),
+    ...valtozottSorok(next.movements, prev.movements, 'movements', (m) => movementToRow(companyId, m)),
+    ...valtozottSorok(next.lots, prev.lots, 'purchase_lots', (l) => lotToRow(companyId, l)),
+    ...valtozottSorok(next.dailyClosings, prev.dailyClosings, 'daily_closings', (c) => closingToRow(companyId, c)),
+    ...valtozottSorok(next.recurringLedgerEntries, prev.recurringLedgerEntries, 'recurring_ledger_entries', (r) => recurringToRow(companyId, r)),
+    ...valtozottSorok(next.ledgerEntries, prev.ledgerEntries, 'ledger_entries', (e) => ledgerToRow(companyId, e)),
+    ...valtozottSorok(next.pendingChanges, prev.pendingChanges, 'pending_changes', (c) => pendingChangeToRow(companyId, c)),
+    ...valtozottSorok(next.auditLog, prev.auditLog, 'audit_log', (a) => auditToRow(companyId, a)),
+  ]
+  if (next.settings !== prev.settings || next.ledgerCategories !== prev.ledgerCategories) {
+    valtozasok.push({ tabla: 'company_settings', sor: settingsToRow(companyId, next.settings, next.ledgerCategories) })
+  }
+  return valtozasok
+}
+
+const TABLA_LEIRAS: Record<string, string> = {
+  locations: 'telephely módosítása',
+  suppliers: 'beszállító módosítása',
+  customers: 'vevő módosítása',
+  products: 'termék módosítása',
+  movements: 'mozgás módosítása',
+  purchase_lots: 'beszerzési tétel módosítása',
+  daily_closings: 'napi zárás módosítása',
+  recurring_ledger_entries: 'ismétlődő tétel módosítása',
+  ledger_entries: 'pénzügyi napló módosítása',
+  pending_changes: 'jóváhagyási kérés',
+  company_settings: 'beállítások módosítása',
+}
+
+/** Mentési tétel egy művelet változásaiból; a leírást a művelet audit-bejegyzéseiből veszi. */
+export function mentesiTetel(companyId: string, valtozasok: Valtozas[]): MentesiTetel {
+  const auditLeirasok = valtozasok.filter((v) => v.tabla === 'audit_log').map((v) => String(v.sor.description))
+  const leirasok = auditLeirasok.length
+    ? auditLeirasok
+    : [...new Set(valtozasok.map((v) => TABLA_LEIRAS[v.tabla] ?? v.tabla))].map((l) => l.charAt(0).toUpperCase() + l.slice(1))
+  return { id: createId(), companyId, letrehozva: new Date().toISOString(), leirasok, valtozasok: verzioKioszt(valtozasok) }
+}
+
+/** A mentési köteg elküldése a szervernek (public.keszlet_mentes). */
+export async function mentesiTetelKuldese(tetel: MentesiTetel): Promise<KuldesEredmeny> {
+  try {
+    const { data, error, status } = await client().rpc('keszlet_mentes', { p_koteg_id: tetel.id, p_valtozasok: tetel.valtozasok })
+    if (error) {
+      const technikai = [error.code, error.message].filter(Boolean).join(': ')
+      return { ok: false, fajta: hibaBesorolas({ code: error.code, message: error.message, status }), technikai }
+    }
+    return { ok: true, verziok: (data ?? []) as { tabla: string; id: string; version: number }[] }
+  } catch (hiba) {
+    return { ok: false, fajta: 'halozat', technikai: String(hiba) }
+  }
 }

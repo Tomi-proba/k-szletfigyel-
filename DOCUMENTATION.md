@@ -536,6 +536,8 @@ Ha a több-cégnyi üzleti adat is szerver-oldali, RLS-szel garantált elkülön
 
 > Ez a fejezet a 12. fejezetre épül, és lezárja annak 12.7-es pontjában jelzett hiányt: a **raktáros/iroda szerepkör-szétválasztás** miatt a `locations`/`products`/`movements`/`purchase_lots`/`daily_closings`/`audit_log` adat immár **valóban megosztott, Supabase-en, RLS-sel védett** adat — nem csak a cég/előfizetés rétegé.
 
+> **2026-10-23-tól felülírva:** a 14.2–14.4 és a 14.7 „local-first, best-effort” szinkronra és az eszközönként tárolt adatra vonatkozó részeit a **20. fejezet** váltja fel: bejelentkezett (szerveres) módban **minden** üzleti adat a szerveren van, a mentés műveletenként atomi, és a hibák a felhasználónak is látszanak.
+
 ### 14.1 Miért kellett ehhez üzleti adatot migrálni
 
 A raktáros/iroda felhasználók a valóságban külön eszközön dolgoznak (külön telephely). Amíg a termékek/mozgások/telephelyek/napi zárás csak `localStorage`-ban élt (12.7), egy "a raktáros csak a saját telephelyét lássa" korlátozás csak kozmetikai lett volna: a raktáros és az iroda gépe két teljesen külön adatot látott volna. Ezért ez a funkció explicit kiterjesztette a Supabase-re migrált táblák körét.
@@ -714,4 +716,61 @@ A Pénzügyi napló oldalon (`pages/Ledger.tsx`) egy külön "Ismétlődő téte
 
 A sablon szerkesztése/szüneteltetése/törlése a MÁR legenerált tételeket nem érinti - azok önálló életet élnek. A törlés csak a jövőbeli generálást állítja le (soft-delete, visszaállítható). Mindhárom (`tulajdonos` olvasó-only szerepkör kizárása, a sablon CRUD-ja, a generálás) ugyanazt a mintát követi, mint a már meglévő napló tétel CRUD (6., 18. fejezet) - lásd `store/useStore.ts` `addRecurringLedgerEntry`/`updateRecurringLedgerEntry`/`deleteRecurringLedgerEntry`/`restoreRecurringLedgerEntry`.
 
-**Megjegyzés**: ez a funkció egyelőre csak helyi (eszközönkénti) adat, ugyanúgy mint a `ledgerEntries` általában (lásd 14.2) - nincs Supabase-be szinkronizálva, tehát egy adott böngésző/eszköz saját ismétlődő tételei nem látszanak egy másik eszközön.
+**Megjegyzés** (2026-10-23-tól): bejelentkezett módban az ismétlődő tételek és a napló is a szerveren vannak (20. fejezet); a generálást a fő iroda/iroda gépe végzi a szerveradatok betöltése után. Ha két gép egyszerre generálna, a második mentése ütközésként elakad, így ugyanaz a havi tétel nem jön létre kétszer.
+
+---
+
+## 20. Minden adat a szerveren, megbízható mentés, átköltöztetés (2026-10-23)
+
+> Ez a fejezet a 12., 14. és 15. fejezetet egészíti ki, és a 14.2–14.4, 14.7 korábbi „local-first, best-effort” leírását felváltja. **A helyi (bejelentkezés nélküli) mód és a Windows/Electron változat változatlan.**
+
+### 20.1 Mi változott
+
+| Előtte | Most |
+|---|---|
+| Beszállítók, vevők, pénzügyi napló, ismétlődő tételek, beállítások csak a böngészőben | **szerveren** (`suppliers`, `customers`, `ledger_entries`, `recurring_ledger_entries`, `company_settings`), RLS-sel |
+| Soronkénti, egymástól független mentés; egy művelet részben is sikerülhetett | **egy művelet = egy mentési köteg = egy tranzakció** (`public.keszlet_mentes`): vagy minden mentődik, vagy semmi |
+| Mentési hiba csak a fejlesztői konzolban | a felületen **érthető üzenet** (`components/MentesJelzo.tsx`), automatikus újrapróbálás |
+| Másik eszköz módosítását csendben felülírhatta egy régebbi adat | **verziószám** minden soron; ütközésnél a mentés elutasítva, a felhasználó látja, mi nem mentődött |
+| Internetkimaradáskor a változás elveszhetett | a nem mentett változások a böngészőben **sorban várnak** (bezárt fül után is), és a kapcsolat helyreállásakor mentődnek |
+| Betöltési hibánál üres adatokkal indult | hibaképernyő újrapróbálással (`AuthGate.tsx`) |
+| A bejelentkezés felülírta a böngésző helyi adatait | szerveres módban a helyi pillanatkép **nem íródik**; átköltöztethető |
+| A raktáros a saját telephelye termékét sem tudta menteni (az `upsert` beszúrási jogot is kért) | javítva: a mentés módosít, ha a sor létezik, különben beszúr |
+
+### 20.2 Hogyan működik a mentés
+
+1. A store minden állapotváltásnál (szerveres módban) kiszámolja a változott sorokat (`valtozasokKiszamitasa`, referencia szerint, mint eddig), és **egy mentési tételt** tesz a sorba (`lib/mentesiSor.ts`).
+2. A tétel azonosítója a mentési köteg azonosítója. A szerver (`mentesi_kotegek` tábla) megjegyzi a feldolgozott kötegeket: **ugyanaz a köteg kétszer elküldve egyszer hat** (pl. ha a válasz elveszett).
+3. Minden sor a szerveren ismert **verziót** küldi; ha közben más módosította, a szerver `KF409` hibát ad, és a köteg egésze elutasításra kerül.
+4. A sor egyszerre egy tételt küld, sorrendben. Hálózati/szerverhiba: újrapróbálás 1, 2, 4 … legfeljebb 60 másodpercenként (és azonnal, ha visszajön az internet). Ütközés/jogosultság/adathiba: a sor megáll, a felhasználó látja, mely műveletei nem mentődtek, és az „Adatok frissítése” gombbal tölti újra a szerver állapotát.
+5. Bejelentkezéskor előbb a megmaradt (pl. offline rögzített) tételek mennek el, csak utána töltődnek be a szerveradatok.
+6. Nem mentett változásnál a böngésző rákérdez a lap bezárására, a kijelentkezés pedig figyelmeztet.
+
+### 20.3 Átköltöztetés (`lib/atkoltoztetes.ts`, `components/Atkoltoztetes.tsx`)
+
+A fő iroda bejelentkezéskor ajánlatot kap, ha a böngészőben olyan adat van, ami a szerveren nincs:
+
+- **Előnézet**: csoportonként, mennyi kerül át; a felhasználó választ. Ha a böngészőben csak a beépített **bemutató adat** van, külön figyelmeztetés, és alapból semmi nincs kiválasztva.
+- **Biztonsági mentés**: indítás előtt másolat a böngészőben (`keszletfigyelo-storage-biztonsagi-masolat`), és letölthető JSON-fájl. A böngésző eredeti adatát nem töröljük.
+- **Mód**: ha a szerveren nincs más (nem ebből a böngészőből származó) készletadat, minden átkerül; ha van, csak a korábban böngészős irodai adat (beszállítók, vevők, napló, beállítások), a készletadatot nem keverjük hozzá.
+- **Feltöltés**: legfeljebb 300 rekordos kötegekben, a hivatkozási sorrendben, a mentési soron át (megszakadás után folytatható, semmi nem kerül fel kétszer).
+- **Ellenőrzés**: utána a szerverről újratöltött adatban minden feltöltött rekordnak meg kell lennie; csak ekkor jelöljük késznek.
+
+### 20.4 Élesítés
+
+1. A Supabase SQL Editorban: `supabase/migrations/2026-10-23_szerveroldali_adatok.sql` (friss projektben a `schema.sql` már tartalmazza). **Ezt a felület új verziójának kitelepítése ELŐTT kell lefuttatni.**
+2. Utána a felület kitelepítése.
+
+### 20.5 Tesztek
+
+- `tests/mentesiSor.test.ts`: sorrend, hálózatkiesés és újrapróbálás, böngésző-újraindítás utáni folytatás, ütközés, cégenkénti elkülönítés, hibaüzenetek.
+- `tests/storeSzerver.test.ts`: egy művelet = egy tétel, verziók láncolása, a korábban böngészős adatok is a szerverre mennek, a helyi pillanatkép érintetlen.
+- `tests/atkoltoztetes.test.ts`: terv, bemutató adat felismerése, kötegek, ellenőrzés.
+- `tests/db/*` (valódi PostgreSQL-en, a `supabase/schema.sql`-ből a `supabase/test/supabase-utanzat.sql`-lel): atomi mentés, egyszeri hatás, ütközés, jogosultságok szerepkörönként, teljes átköltöztetés a bemutató adatkészlettel, megszakadt átköltöztetés folytatása. Futtatás: `KESZLET_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/keszlet_test npm test` (a CI így futtatja).
+
+### 20.6 Ismert korlátok
+
+- Másik eszköz módosítása **nem jelenik meg élőben**, csak újratöltéskor (az ütközésvédelem viszont megakadályozza a csendes felülírást).
+- Ugyanabban a böngészőben két nyitott fül ugyanazt a mentési sort használja; a kötegek egyszer hatnak, de a két fül képernyője eltérhet újratöltésig.
+- A 14.7-ben leírt oszlopszintű jogosultsági korlátok (pl. a raktáros technikailag a saját telephelye termékének bármely mezőjét módosíthatja) változatlanok.
+

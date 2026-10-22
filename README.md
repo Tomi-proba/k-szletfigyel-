@@ -19,9 +19,14 @@ npm run build     # production build a dist/ mappába
 npm run lint      # oxlint
 ```
 
-Az alkalmazás egy kliensoldali (SPA) React app, backend nélkül. Az adatok a
-böngésző `localStorage`-ában perzisztálódnak, tehát munkamenet lezárása után
-is megmaradnak (amíg ugyanazt a böngészőt/gépet használod).
+Az alkalmazás egy kliensoldali (SPA) React app. Bejelentkezett (Supabase-es)
+módban **minden üzleti adat a szerveren** van, a mentés műveletenként atomi,
+és a mentési hibák a felületen is látszanak (lásd DOCUMENTATION.md 20.
+fejezet). Bejelentkezés nélkül (helyi mód, és a Windows asztali változat) az
+adatok a böngésző `localStorage`-ában maradnak, mint eddig.
+
+Tesztek: `npm test` (az adatbázis-tesztekhez:
+`KESZLET_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/keszlet_test npm test`).
 
 ## Architektúra röviden
 

@@ -23,6 +23,9 @@ import { useStore } from '../store/useStore'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { Modal } from './Modal'
 import { MovementForm } from './MovementForm'
+import { MentesJelzo } from './MentesJelzo'
+import { AtkoltoztetesAjanlo } from './Atkoltoztetes'
+import { mentesiSor } from '../lib/mentes'
 
 interface NavItem {
   to: string
@@ -257,6 +260,19 @@ export function Layout() {
   // `?demo_szerepkor=` ideiglenes szimulátort is (lásd useAuth.tsx) -
   // ugyanaz a minta, mint a már meglévő isWarehouseUser.
   const isFoIroda = effectiveRole === 'fo_iroda'
+  // Nem mentett változásnál rákérdezünk: a változás ezen az eszközön megmarad, és a következő
+  // bejelentkezéskor mentődik, de egy másik gépen addig nem látszik.
+  const kijelentkezes = () => {
+    const fuggo = mentesiSor.fuggoTetelek.length
+    if (
+      fuggo > 0 &&
+      !window.confirm(
+        `${fuggo} változás még nincs elmentve a szerverre. Ha most kijelentkezel, ezen az eszközön megmaradnak, és a következő bejelentkezéskor mentjük őket. Biztosan kijelentkezel?`,
+      )
+    )
+      return
+    void signOut()
+  }
   const canManageTeam = effectiveRole === 'iroda' || isFoIroda
   const pendingChangeCount = pendingChanges.filter((c) => c.status === 'pending').length
   const pendingClosingCount = dailyClosings.filter((c) => c.status !== 'approved').length
@@ -426,7 +442,7 @@ export function Layout() {
           {session && (
             <button
               type="button"
-              onClick={() => signOut()}
+              onClick={kijelentkezes}
               className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-[var(--color-text-muted)] hover:bg-black/5"
             >
               <LogOut size={18} /> Kijelentkezés
@@ -448,7 +464,7 @@ export function Layout() {
               {session && (
                 <button
                   type="button"
-                  onClick={() => signOut()}
+                  onClick={kijelentkezes}
                   className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-[var(--color-text-muted)] hover:bg-black/5"
                 >
                   <LogOut size={18} /> Kijelentkezés
@@ -477,6 +493,8 @@ export function Layout() {
               </span>
             </div>
           )}
+          <MentesJelzo />
+          <AtkoltoztetesAjanlo />
           <Outlet />
         </main>
       </div>

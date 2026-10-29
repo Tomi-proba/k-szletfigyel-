@@ -102,17 +102,28 @@ describe('visszatöltés', () => {
   })
 })
 
-describe('a mentési sor fájlmásolata', () => {
-  it('írás a böngészőtárolóba és fájlba is; ha a böngészőtárolóból eltűnt, a fájlból tölti vissza', () => {
+describe('a mentési sor tartós másolata', () => {
+  it('írás lemezre (szinkron) és a böngészőtárolóba; ha a böngészőtárolóból eltűnt, a lemezről tölti vissza; a hibát jelzi', () => {
     const alap = new MemTarolo()
     let fajl: string | null = null
-    const t = asztaliTarolo(alap, { mentesiSorFajlba: (s) => (fajl = s), mentesiSorFajlbol: () => fajl }, 'sor')
+    let hiba: string | null = 'nincs'
+    let meghibasodott = false
+    const t = asztaliTarolo(
+      alap,
+      { tartosIras: (_k, s) => (meghibasodott ? { ok: false, hiba: 'A lemez megtelt.' } : ((fajl = s), { ok: true })), tartosOlvasas: () => fajl },
+      'sor',
+      (h) => (hiba = h),
+    )
     t.setItem('sor', '{"tetelek":[1]}')
     t.setItem('mas', 'x')
     expect(fajl).toBe('{"tetelek":[1]}')
+    expect(hiba).toBeNull()
     alap.m.delete('sor')
     expect(t.getItem('sor')).toBe('{"tetelek":[1]}')
     expect(t.getItem('mas')).toBe('x')
+    meghibasodott = true
+    t.setItem('sor', '{"tetelek":[1,2]}')
+    expect(hiba).toBe('A lemez megtelt.')
     // Böngészőben (asztali felület nélkül) változatlan.
     expect(asztaliTarolo(alap, null, 'sor')).toBe(alap)
   })

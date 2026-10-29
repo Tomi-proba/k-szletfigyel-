@@ -20,15 +20,39 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 
 const userDir = () => app.getPath('userData')
 const beallitasFajl = () => path.join(userDir(), 'keszletfigyelo-beallitas.json')
-const sorFajl = () => path.join(userDir(), 'mentesi-sor.json')
+const tartosFajl = (kulcs) => path.join(userDir(), 'tartos', `${String(kulcs).replace(/[^A-Za-z0-9._-]/g, '_')}.json`)
+// Az előző (I3.1) változat a mentési sort ide írta; olvasáskor még figyelembe vesszük.
+const regiSorFajl = () => path.join(userDir(), 'mentesi-sor.json')
 const elintezveFajl = () => path.join(userDir(), 'regi-adatok-elintezve')
 
-/** Írás ideiglenes fájlba, majd átnevezés: félbeszakadt írás nem marad a helyén. */
+/**
+ * Tartós írás: ideiglenes fájlba, lemezre kényszerítve (fsync), majd átnevezés és a mappa fsync-je.
+ * Visszatéréskor az adat áramszünetet is túlél; félbeszakadt írás nem marad a régi fájl helyén.
+ */
 function atomiIras(fajl, tartalom) {
-  fs.mkdirSync(path.dirname(fajl), { recursive: true })
+  const dir = path.dirname(fajl)
+  fs.mkdirSync(dir, { recursive: true })
   const tmp = `${fajl}.${process.pid}.tmp`
-  fs.writeFileSync(tmp, tartalom, { encoding: 'utf8', mode: 0o600 })
+  const fd = fs.openSync(tmp, 'w', 0o600)
+  try {
+    fs.writeSync(fd, tartalom, 0, 'utf8')
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
   fs.renameSync(tmp, fajl)
+  // A mappa fsync-je, hogy az átnevezés is lemezen legyen (Windowson mappát nem lehet így megnyitni:
+  // ott a rename maga is lemezre kerül a fájlrendszer naplójával).
+  try {
+    const dfd = fs.openSync(dir, 'r')
+    try {
+      fs.fsyncSync(dfd)
+    } finally {
+      fs.closeSync(dfd)
+    }
+  } catch {
+    // nem támogatott (Windows)
+  }
 }
 
 function beallitasOlvasas() {
@@ -56,19 +80,24 @@ ipcMain.handle('keszlet:regi-adatok-elintezve', () => atomiIras(elintezveFajl(),
 ipcMain.on('keszlet:regi-adatok-elintezve-van', (e) => {
   e.returnValue = fs.existsSync(elintezveFajl())
 })
-ipcMain.on('keszlet:mentesi-sor-irasa', (_e, tartalom) => {
+ipcMain.on('keszlet:tartos-iras', (e, kulcs, tartalom) => {
   try {
-    atomiIras(sorFajl(), String(tartalom))
+    atomiIras(tartosFajl(kulcs), String(tartalom))
+    e.returnValue = { ok: true }
   } catch (hiba) {
-    console.error('[asztali] a mentési sor fájlba írása nem sikerült', hiba)
+    e.returnValue = { ok: false, hiba: hiba && hiba.message ? hiba.message : String(hiba) }
   }
 })
-ipcMain.on('keszlet:mentesi-sor-olvasasa', (e) => {
-  try {
-    e.returnValue = fs.readFileSync(sorFajl(), 'utf8')
-  } catch {
-    e.returnValue = null
+ipcMain.on('keszlet:tartos-olvasas', (e, kulcs) => {
+  for (const fajl of [tartosFajl(kulcs), ...(kulcs === 'keszletfigyelo-mentesi-sor' ? [regiSorFajl()] : [])]) {
+    try {
+      e.returnValue = fs.readFileSync(fajl, 'utf8')
+      return
+    } catch {
+      // nincs ilyen fájl
+    }
   }
+  e.returnValue = null
 })
 ipcMain.on('keszlet:nem-mentett', (_e, darab) => {
   nemMentett = Number(darab) || 0

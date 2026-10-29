@@ -24,6 +24,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import { Modal } from './Modal'
 import { MovementForm } from './MovementForm'
 import { MentesJelzo } from './MentesJelzo'
+import { LemezJelzo } from './LemezJelzo'
 import { AtkoltoztetesAjanlo } from './Atkoltoztetes'
 import { mentesiSor } from '../lib/mentes'
 
@@ -494,6 +495,7 @@ export function Layout() {
             </div>
           )}
           <MentesJelzo />
+          <LemezJelzo />
           <AtkoltoztetesAjanlo />
           <Outlet />
         </main>

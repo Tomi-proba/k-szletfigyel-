@@ -818,7 +818,45 @@ módban fut, mint eddig. A felhasználó mappája Windowson: `%APPDATA%\keszletf
 - A felület és a főfolyamat között csak a `electron/preload.js`-ben felsorolt szűk felület van
   (contextBridge); a felület más Node- vagy Electron-funkciót nem ér el.
 
-### 21.6 Ismert korlát
-Hirtelen leállásnál (áramszünet, a folyamat kilövése) a böngészőmotor a legutolsó, egy másodpercen belüli
-változást még nem feltétlenül írta lemezre. Szerveres módban ezt a fájlba másolt mentési sor fedezi. Helyi
-módban az utolsó művelet elveszhet; rendes bezárásnál (ablak bezárása, Windows leállítása) nem.
+### 21.6 Hirtelen leállás
+Lásd a 22. fejezetet: a helyi mentés már a művelet sikerének kijelzése előtt lemezre kerül.
+
+---
+
+## 22. Tartós helyi mentés: egy művelet se vesszen el hirtelen leállásnál (2026-10-29)
+
+**A kérés:** helyi módban se veszhessen el az utolsó művelet áramszünetnél vagy a program kilövésénél;
+minden mentett művelet kerüljön lemezre, mielőtt a felület sikert mutat. Ha ez nem oldható meg teljesen, a
+felület mutassa, ha egy művelet még nincs biztonságosan lemezen.
+
+### 22.1 Asztali program: teljes megoldás
+- A helyi adat (`keszletfigyelo-storage`) és a mentési sor minden íráskor **szinkron** hívással a
+  főfolyamathoz megy (`keszlet:tartos-iras`). A főfolyamat ideiglenes fájlba írja, **lemezre kényszeríti
+  (fsync)**, átnevezi, és a mappát is fsync-eli; csak ezután tér vissza.
+- Mivel a hívás szinkron, a felület az eredményt (pl. „Elmentve”) csak ezután rajzolja ki: amit a felület
+  sikeresnek mutat, az már a lemezen van.
+- A fájlok helye a felhasználó mappájában van: `tartos/keszletfigyelo-storage.json` és
+  `tartos/keszletfigyelo-mentesi-sor.json`. Indításkor a lemezen lévő az elsődleges; a böngészőtároló csak
+  tartalék.
+- **Ellenőrizve valódi Electronban:** a beállítás mentése után azonnal kilőtt programnál (SIGKILL, ez felel
+  meg az áramszünetnek) az új érték a következő indításkor megvan.
+- Költség: kb. 4 ms egy 1 MB-os adatnál (SSD-n, Linuxon); lassabb lemezen is a tized másodperc alatt
+  marad.
+- Ha a lemezre írás nem sikerül (pl. megtelt a lemez), jól látható piros figyelmeztetés jelenik meg
+  („A legutóbbi művelet nincs biztonságosan a lemezen”), újrapróbálás gombbal (`components/LemezJelzo.tsx`).
+
+### 22.2 Böngésző: a legjobb elérhető megoldás, jelzéssel
+- A böngésző nem enged szinkron, lemezre kényszerített írást. Ezért itt **nem garantálható**, hogy egy
+  művelet a siker kijelzése előtt lemezen legyen.
+- A legjobb elérhető megoldás: minden írás az IndexedDB-be is megy, **„szigorú tartóssággal”**
+  (`durability: 'strict'`). Ez a tranzakció akkor zárul, amikor a böngésző az adatot lemezre írta.
+- Amíg ez nem történt meg, a felület jobb alsó sarkában „Mentés lemezre… (még ne zárja be)” jelzés látszik.
+  Ez jellemzően a másodperc töredéke. Hiba esetén ugyanaz a piros figyelmeztetés jelenik meg, mint az
+  asztali programban.
+- Indításkor a két példány (böngészőtároló és IndexedDB) közül a nagyobb sorszámú, tehát a frissebb töltődik
+  be. Így egy leállás miatt lemaradt böngészőtároló sem írja felül az IndexedDB-ben már meglévő újabb adatot.
+
+### 22.3 Tesztek
+- `tests/tartosTarolo.test.ts`: szinkron írás a hívás visszatérése előtt; a lemezen lévő az elsődleges;
+  hiba jelzése és újrapróbálás; a böngészős jelzés a tartós írás befejezéséig; indításkor a frissebb példány.
+- `tests/asztali.test.ts`: a mentési sor tartós másolata, hibajelzéssel.

@@ -18,8 +18,9 @@ export interface AsztaliFelulet {
   biztonsagiMentes(nev: string, tartalom: string): Promise<string>
   regiAdatokElintezve(): Promise<void>
   regiAdatokElintezveVan: boolean
-  mentesiSorFajlba(tartalom: string): void
-  mentesiSorFajlbol(): string | null
+  /** Szinkron, lemezre kényszerített írás (fsync); csak utána tér vissza. */
+  tartosIras(kulcs: string, tartalom: string): { ok: boolean; hiba?: string }
+  tartosOlvasas(kulcs: string): string | null
   nemMentett(darab: number): void
 }
 
@@ -32,21 +33,23 @@ interface Tarolo {
 }
 
 /**
- * A mentési sor tárolója az asztali programban: a böngészőtároló mellett fájlba is másol (a felhasználó
- * mappájába), és ha a böngészőtárolóban nincs meg a sor (pl. törölték), a fájlból tölti vissza. Így a
- * még nem mentett változás akkor sem vész el, ha a böngészőtároló elveszne.
+ * A mentési sor tárolója az asztali programban: a böngészőtároló mellett fájlba is írja, lemezre
+ * kényszerítve, mielőtt a művelet sikeresnek látszana; ha a böngészőtárolóban nincs meg a sor, a fájlból
+ * tölti vissza (lib/tartosTarolo.ts).
  */
-export function asztaliTarolo(alap: Tarolo, felulet: Pick<AsztaliFelulet, 'mentesiSorFajlba' | 'mentesiSorFajlbol'> | null, sorKulcs: string): Tarolo {
+export function asztaliTarolo(alap: Tarolo, felulet: Pick<AsztaliFelulet, 'tartosIras' | 'tartosOlvasas'> | null, sorKulcs: string, hibaJelzes?: (hiba: string | null) => void): Tarolo {
   if (!felulet) return alap
   return {
     getItem(kulcs) {
-      const helyi = alap.getItem(kulcs)
-      if (helyi !== null || kulcs !== sorKulcs) return helyi
-      return felulet.mentesiSorFajlbol()
+      if (kulcs !== sorKulcs) return alap.getItem(kulcs)
+      return felulet.tartosOlvasas(kulcs) ?? alap.getItem(kulcs)
     },
     setItem(kulcs, ertek) {
+      if (kulcs === sorKulcs) {
+        const r = felulet.tartosIras(kulcs, ertek)
+        hibaJelzes?.(r.ok ? null : (r.hiba ?? 'ismeretlen hiba'))
+      }
       alap.setItem(kulcs, ertek)
-      if (kulcs === sorKulcs) felulet.mentesiSorFajlba(ertek)
     },
   }
 }

@@ -14,9 +14,13 @@ contextBridge.exposeInMainWorld('keszletAsztali', {
   /** A „ne kérdezze többet” jelzés a régi adatokra. */
   regiAdatokElintezve: () => ipcRenderer.invoke('keszlet:regi-adatok-elintezve'),
   regiAdatokElintezveVan: ipcRenderer.sendSync('keszlet:regi-adatok-elintezve-van'),
-  /** A nem mentett változások sorának másolata fájlba, és visszaolvasása. */
-  mentesiSorFajlba: (tartalom) => ipcRenderer.send('keszlet:mentesi-sor-irasa', tartalom),
-  mentesiSorFajlbol: () => ipcRenderer.sendSync('keszlet:mentesi-sor-olvasasa'),
+  /**
+   * Tartós írás: a főfolyamat fájlba írja és lemezre kényszeríti (fsync), és csak utána tér vissza.
+   * Szinkron hívás, ezért a felület csak akkor folytatódik (és mutat sikert), amikor az adat már a
+   * lemezen van. Visszatérés: { ok: true } vagy { ok: false, hiba }.
+   */
+  tartosIras: (kulcs, tartalom) => ipcRenderer.sendSync('keszlet:tartos-iras', kulcs, tartalom),
+  tartosOlvasas: (kulcs) => ipcRenderer.sendSync('keszlet:tartos-olvasas', kulcs),
   /** Hány nem mentett változás vár (a bezáráskori kérdéshez). */
   nemMentett: (darab) => ipcRenderer.send('keszlet:nem-mentett', darab),
 })

@@ -8,6 +8,7 @@ import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import { fuggoMentesekBeszamitasa, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
 import { mentesiSor } from '../lib/mentes'
+import { helyiTartosTarolo } from '../lib/tartosTarolo'
 import { computeDueRecurringOccurrences } from '../lib/ledger'
 import type { PendingChange, PendingChangeAction, PendingChangeEntityType, UserRole } from '../types/auth'
 import {
@@ -1725,14 +1726,20 @@ export const useStore = create<AppState>()(
       // munkamenet alatt (és a módváltás pillanatában) egyáltalán nem írjuk, így a korábbi helyi
       // adatok érintetlenül megmaradnak, és veszteség nélkül átköltöztethetők (lásd
       // lib/atkoltoztetes.ts). Korábban a szerveres mód üres listákkal felülírta őket.
-      storage: createJSONStorage(() => ({
-        getItem: (kulcs: string) => localStorage.getItem(kulcs),
-        setItem: (kulcs: string, ertek: string) => {
-          if (helyiMentesSzunetel || useStore.getState().dataMode === 'remote') return
-          localStorage.setItem(kulcs, ertek)
-        },
-        removeItem: (kulcs: string) => localStorage.removeItem(kulcs),
-      })),
+      // A helyi mód mentése tartós: az asztali programban minden művelet lemezre kényszerítve íródik,
+      // mielőtt a felület sikert mutatna; a böngészőben IndexedDB-be is, szigorú tartóssággal, és a
+      // felület jelzi, amíg nincs lemezen (lib/tartosTarolo.ts, DOCUMENTATION.md 22.).
+      storage: createJSONStorage(() => {
+        const tarolo = helyiTartosTarolo()
+        return {
+          getItem: (kulcs: string) => tarolo.getItem(kulcs),
+          setItem: (kulcs: string, ertek: string) => {
+            if (helyiMentesSzunetel || useStore.getState().dataMode === 'remote') return
+            tarolo.setItem(kulcs, ertek)
+          },
+          removeItem: (kulcs: string) => tarolo.removeItem(kulcs),
+        }
+      }),
       // Never persist dataMode/remoteCompanyId as 'remote' - which mode we're
       // in is derived live from the current Supabase session (see
       // hydrateFromRemote/resetToLocalMode), not a durable local fact; a

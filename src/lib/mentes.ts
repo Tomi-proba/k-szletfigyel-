@@ -1,6 +1,7 @@
 // Az alkalmazás egyetlen mentési sora (lásd lib/mentesiSor.ts) és annak állapota a felületnek.
 import { create } from 'zustand'
 import { asztali, asztaliTarolo } from './asztali'
+import { useLemezAllapot } from './tartosTarolo'
 import { MentesiSor, TAROLO_KULCS, type SorAllapot } from './mentesiSor'
 import { mentesiTetelKuldese } from './remoteSync'
 
@@ -23,7 +24,9 @@ const bongeszoTarolo = {
 }
 
 // Az asztali programban a sor fájlba is másolódik (lib/asztali.ts).
-export const mentesiSor = new MentesiSor(mentesiTetelKuldese, asztaliTarolo(bongeszoTarolo, asztali, TAROLO_KULCS), {
+export const mentesiSor = new MentesiSor(mentesiTetelKuldese, asztaliTarolo(bongeszoTarolo, asztali, TAROLO_KULCS, (hiba) =>
+  useLemezAllapot.setState({ allapot: hiba ? { fajta: 'hiba', uzenet: hiba } : { fajta: 'rendben' }, ujraprobal: null }),
+), {
   setTimeout: (fn, ms) => window.setTimeout(fn, ms),
   clearTimeout: (id) => window.clearTimeout(id as number),
   now: () => Date.now(),

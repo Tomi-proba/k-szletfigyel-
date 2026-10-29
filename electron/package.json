@@ -12,7 +12,13 @@
   "build": {
     "appId": "hu.keszletfigyelo.app",
     "productName": "Keszletfigyelo",
-    "files": ["main.js", "dist/**/*"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "leveldb.js",
+      "regiAdatok.js",
+      "dist/**/*"
+    ],
     "directories": {
       "output": "dist-electron"
     },

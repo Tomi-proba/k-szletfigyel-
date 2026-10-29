@@ -1,6 +1,7 @@
 // Az alkalmazás egyetlen mentési sora (lásd lib/mentesiSor.ts) és annak állapota a felületnek.
 import { create } from 'zustand'
-import { MentesiSor, type SorAllapot } from './mentesiSor'
+import { asztali, asztaliTarolo } from './asztali'
+import { MentesiSor, TAROLO_KULCS, type SorAllapot } from './mentesiSor'
 import { mentesiTetelKuldese } from './remoteSync'
 
 const bongeszoTarolo = {
@@ -21,14 +22,19 @@ const bongeszoTarolo = {
   },
 }
 
-export const mentesiSor = new MentesiSor(mentesiTetelKuldese, bongeszoTarolo, {
+// Az asztali programban a sor fájlba is másolódik (lib/asztali.ts).
+export const mentesiSor = new MentesiSor(mentesiTetelKuldese, asztaliTarolo(bongeszoTarolo, asztali, TAROLO_KULCS), {
   setTimeout: (fn, ms) => window.setTimeout(fn, ms),
   clearTimeout: (id) => window.clearTimeout(id as number),
   now: () => Date.now(),
 })
 
 export const useMentesAllapot = create<{ allapot: SorAllapot }>(() => ({ allapot: mentesiSor.aktualisAllapot }))
-mentesiSor.figyel((allapot) => useMentesAllapot.setState({ allapot }))
+mentesiSor.figyel((allapot) => {
+  useMentesAllapot.setState({ allapot })
+  // Az asztali program bezáráskor ebből tudja, hány művelet nem jutott még el a szerverre.
+  asztali?.nemMentett(mentesiSor.fuggoTetelek.length)
+})
 
 if (typeof window !== 'undefined') {
   // Ha visszajön az internet, nem várjuk ki a következő újrapróbálást.

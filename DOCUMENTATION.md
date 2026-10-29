@@ -415,7 +415,7 @@ lefuttatja a teszteket, a buildet és a lintet.
 A `claude/inventory-management-app-yjc3v5` branch-re történő push automatikusan új Vercel deploy-t indít (statikus SPA build, `npm run build` kimenete).
 
 ### 10.4 Windows asztali alkalmazás
-A `.github/workflows/build-windows.yml` GitHub Actions workflow (Windows runner-en) minden, a fenti branch-re történő, `src/**`/`electron/**`/`package.json`/`vite.config.ts` érintő push-ra lefut: lebuildeli a webes alkalmazást, becsomagolja az `electron/` mappában lévő Electron shell-be (`electron/main.js`), és `electron-builder`-rel `.exe` telepítőt készít, amit GitHub Actions artifact-ként tölt fel.
+A `.github/workflows/build-windows.yml` GitHub Actions workflow (Windows runner-en) lebuildeli a webes alkalmazást, becsomagolja az `electron/` mappában lévő Electron shell-be (`electron/main.js`), és `electron-builder`-rel `.exe` telepítőt készít, amit GitHub Actions artifact-ként tölt fel. A működését a 21. fejezet írja le.
 
 > **Megjegyzés a fejlesztési folyamatról**: a felhasználó explicit kérésére a Windows build futtatása/figyelése átmenetileg szüneteltetve volt a fejlesztés alatt (hogy ne fusson feleslegesen minden apró változtatásnál), amíg az alkalmazás el nem készül.
 
@@ -774,3 +774,51 @@ A fő iroda bejelentkezéskor ajánlatot kap, ha a böngészőben olyan adat van
 - Ugyanabban a böngészőben két nyitott fül ugyanazt a mentési sort használja; a kötegek egyszer hatnak, de a két fül képernyője eltérhet újratöltésig.
 - A 14.7-ben leírt oszlopszintű jogosultsági korlátok (pl. a raktáros technikailag a saját telephelye termékének bármely mezőjét módosíthatja) változatlanok.
 
+
+---
+
+## 21. Asztali (Windowsos) program: állandó cím, régi adatok, nem mentett változások (2026-10-29)
+
+### 21.1 A javított hiba
+A korábbi `electron/main.js` minden indításkor **véletlen porton** (`listen(0)`) futó helyi webszerverről
+szolgálta ki a felületet. A böngészőmotor a helyi tárolót (`localStorage`) címenként, a porttal együtt
+kezeli, ezért **egy újraindítás után a program nem látta a korábban rögzített adatokat**. Ez valódi
+Electronban is igazolva van: a régi program második indításakor az első indítás adata nem látszik. Az adatok
+nem törlődtek, a lemezen megmaradtak a régi címek alatt.
+
+### 21.2 Állandó cím
+A felület most a saját, rögzített `app://keszletfigyelo` címről jön (`protocol.registerSchemesAsPrivileged`
++ `protocol.handle`, a `dist/` mappából). Így a helyi tároló minden indításkor ugyanaz.
+
+### 21.3 A régi adatok visszakeresése (`electron/leveldb.js`, `electron/regiAdatok.js`, `src/lib/regiAdatok.ts`, `components/AsztaliAdatMento.tsx`)
+- **Csak olvasás:** a program a Chromium tárolóját (LevelDB: írási napló és Snappy-val tömörített táblák)
+  közvetlenül a lemezről olvassa, és megkeresi a régi, `http://127.0.0.1:<port>` címek alatti Készlet-adatokat
+  és nem mentett mentési sorokat. A tesztadat egy valódi Chromium által írt tároló
+  (`tests/fixtures/chromium-localstorage`, előállítása: `tests/fixtures/chromium-localstorage-keszites.cjs`).
+- **Felajánlás:** első induláskor, ha valódi (nem bemutató) adatot vagy nem mentett változást talál, előnézettel
+  felajánlja a visszatöltést. A legutóbb módosítottat ajánlja, de bármelyik választható. „Most nem” / „Ne
+  kérdezze többet”; a *Beállítások → Korábbi adatok keresése* később is elérhető.
+- **Biztonság:** visszatöltés előtt biztonsági mentés készül fájlba (a felhasználó mappájában:
+  `biztonsagi-mentesek/…-visszatoltes-elott.json`, a mostani és a régi adattal). A régi tároló érintetlen
+  marad. A régi és a mostani nem mentett mentési sor összefésülődik (ugyanaz a tétel egyszer; a szerver úgyis
+  egyszer hajtja végre).
+
+### 21.4 Beállítófájl
+A szerver (Supabase) címe és nyilvános kulcsa a felhasználó mappájában lévő `keszletfigyelo-beallitas.json`
+fájlból jön (`{ "supabaseUrl": "…", "supabaseAnonKey": "…" }`), nem a telepítőbe fordítva. Ha nincs ilyen
+fájl, a webes build környezetváltozói érvényesek (`src/lib/supabase.ts`); ha azok sincsenek, a program helyi
+módban fut, mint eddig. A felhasználó mappája Windowson: `%APPDATA%\keszletfigyelo-desktop`.
+
+### 21.5 Nem mentett változások
+- A mentési sor (szerveres mód) a böngészőtároló mellett **fájlba is másolódik** (`mentesi-sor.json`,
+  átnevezéssel atomi írás). Ha a böngészőtárolóból eltűnne, induláskor a fájlból töltődik vissza
+  (`src/lib/asztali.ts` `asztaliTarolo`).
+- Bezáráskor, ha van nem mentett változás, a program rákérdez (`will-prevent-unload`). Electronban a webes
+  `beforeunload` magától nem kérdezne, csak csendben megakadályozná a bezárást.
+- A felület és a főfolyamat között csak a `electron/preload.js`-ben felsorolt szűk felület van
+  (contextBridge); a felület más Node- vagy Electron-funkciót nem ér el.
+
+### 21.6 Ismert korlát
+Hirtelen leállásnál (áramszünet, a folyamat kilövése) a böngészőmotor a legutolsó, egy másodpercen belüli
+változást még nem feltétlenül írta lemezre. Szerveres módban ezt a fájlba másolt mentési sor fedezi. Helyi
+módban az utolsó művelet elveszhet; rendes bezárásnál (ablak bezárása, Windows leállítása) nem.

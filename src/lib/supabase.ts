@@ -8,9 +8,13 @@
 // components/AuthGate.tsx. This means merging/deploying this layer never
 // breaks the existing app for anyone who hasn't set up Supabase yet.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { asztali } from './asztali'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+// Az asztali programban a szerver címe a felhasználó mappájában lévő beállítófájlból jön
+// (keszletfigyelo-beallitas.json), nem a telepítőbe fordítva: így a szolgáltató cseréje nem igényel új
+// telepítőt. A webes változatban a build-környezetváltozók adják, mint eddig.
+const supabaseUrl = (asztali?.beallitas.supabaseUrl || import.meta.env.VITE_SUPABASE_URL) as string | undefined
+const supabaseAnonKey = (asztali?.beallitas.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 

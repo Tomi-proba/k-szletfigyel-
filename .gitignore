@@ -27,3 +27,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# A Chromium-tároló tesztadata (LevelDB írási napló)
+!tests/fixtures/**/*.log

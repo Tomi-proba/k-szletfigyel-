@@ -4,6 +4,8 @@ import { useStore } from '../store/useStore'
 import { DEFAULT_SETTINGS } from '../types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button, Card, Field, Input, PageHeader } from '../components/ui'
+import { AsztaliAdatMento } from '../components/AsztaliAdatMento'
+import { asztali } from '../lib/asztali'
 
 export function Settings() {
   const { isReadOnlyViewer, profile, effectiveRole, updateMyName, updatePassword } = useAuth()
@@ -18,6 +20,7 @@ export function Settings() {
   const [saved, setSaved] = useState(false)
   const [confirmDemo, setConfirmDemo] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [regiKereses, setRegiKereses] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Mind a saját regisztráció, mind a Csapat oldalon történő létrehozás
@@ -99,6 +102,20 @@ export function Settings() {
   return (
     <div>
       <PageHeader title="Beállítások" subtitle="Riasztási küszöbértékek testreszabása" />
+
+      {asztali && (
+        <Card className="mb-5">
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Korábbi adatok (asztali program)</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            A program korábbi változata minden indításkor más helyről futott, ezért a régebben rögzített adatokat nem mindig látta. Itt megkeresheti és
+            visszatöltheti őket (előtte biztonsági mentés készül, és semmi nem törlődik).
+          </p>
+          <Button variant="secondary" onClick={() => setRegiKereses(true)}>
+            Korábbi adatok keresése
+          </Button>
+          {regiKereses && <AsztaliAdatMento kenyszeritett onClose={() => setRegiKereses(false)} />}
+        </Card>
+      )}
 
       {profile && (
         <Card className="mb-5">

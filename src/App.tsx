@@ -23,6 +23,7 @@ import { Subscription } from './pages/Subscription'
 import { Admin } from './pages/Admin'
 import { Team } from './pages/Team'
 import { Approvals } from './pages/Approvals'
+import { AsztaliAdatMento } from './components/AsztaliAdatMento'
 
 function App() {
   const hydrated = useHydrated()
@@ -70,6 +71,7 @@ function App() {
 
   return (
     <AuthGate>
+      <AsztaliAdatMento />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />

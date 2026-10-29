@@ -35,3 +35,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run lint
+      # Az integrációs szolgáltatás (F15.2) saját csomag.
+      - run: npm ci --no-audit --no-fund
+        working-directory: integracio
+      - run: npm test
+        working-directory: integracio

@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -9,4 +9,6 @@ export default defineConfig({
   // a web server root.
   base: './',
   plugins: [react(), tailwindcss()],
+  // Az integrációs szolgáltatás (integracio/) és az asztali program (electron/) saját csomag, saját tesztekkel.
+  test: { exclude: [...configDefaults.exclude, 'integracio/**', 'electron/**'] },
 })

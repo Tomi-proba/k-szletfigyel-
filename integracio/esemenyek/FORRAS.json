@@ -1,0 +1,14 @@
+{
+  "forras": "Tomi-proba/AWEBOLDAL packages/esemenyek",
+  "commit": "f8faaa4f882407321ac417a5f92d13dbb2c5409d",
+  "masolva": "2026-10-29T18:34:34.219Z",
+  "files": {
+    "src/alairas.ts": "cd848bc3985a3fa0acc5cce791f806352d66e6714bd2e012bf998c8f813448bd",
+    "src/esemeny.ts": "b3fb1df3d251f1c3f2382f11c4120ca9cf5acac9be12d971d28feab7e0dd903d",
+    "src/index.ts": "ffaeffbf611eed88128db738e2245cac1ca600208b69cde410a929ef7f9c7b37",
+    "src/kliens.ts": "8f720178185e7115f74431c93a93dc768dff8fa956475e1ac74d9417c3b73f7b",
+    "src/lenyomat.ts": "e9e322a5b96f2cc629014a868b1cbeb9011974273f1b6aabf2be126844604537",
+    "src/postgres.ts": "5558a1b9916adfd4624a96046f1ad6458fa3c1b8dae2b8fbec6a259217eb2b62",
+    "formatum-lenyomat.json": "16c29981f63adf95077488d664a1c1290865861eef1f138f4360297c21458f27"
+  }
+}

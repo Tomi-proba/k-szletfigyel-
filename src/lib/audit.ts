@@ -24,6 +24,7 @@ export const ENTITY_TYPE_LABELS: Record<AuditEntityType, string> = {
   recurringLedgerEntry: 'Ismétlődő tétel',
   dailyClosing: 'Napi zárás',
   atkoltoztetes: 'Átköltöztetés',
+  integracio: 'Integráció',
 }
 
 // Only fields listed here are tracked - id/createdAt/updatedAt/deletedAt and
@@ -115,6 +116,7 @@ const FIELD_LABELS: Record<AuditEntityType, Record<string, string>> = {
     status: 'Állapot',
   },
   atkoltoztetes: {},
+  integracio: {},
 }
 
 const SALE_STATUS_LABELS: Record<string, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }

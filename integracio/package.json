@@ -5,6 +5,7 @@
   "type": "module",
   "description": "A Készletfigyelő integrációs szolgáltatása (TERV.md F15.2): kimenő események átadása a központnak, beérkezők fogadása, kapcsolódási kód beváltása. A Készlet nélküle is teljes értékűen működik.",
   "scripts": {
+    "start": "node --experimental-transform-types src/main.ts",
     "test": "tsc --noEmit -p . && vitest run"
   },
   "dependencies": {
@@ -16,5 +17,8 @@
     "@types/pg": "^8.23.1",
     "typescript": "~6.0.2",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

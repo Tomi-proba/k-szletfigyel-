@@ -860,3 +860,65 @@ felület mutassa, ha egy művelet még nincs biztonságosan lemezen.
 - `tests/tartosTarolo.test.ts`: szinkron írás a hívás visszatérése előtt; a lemezen lévő az elsődleges;
   hiba jelzése és újrapróbálás; a böngészős jelzés a tartós írás befejezéséig; indításkor a frissebb példány.
 - `tests/asztali.test.ts`: a mentési sor tartós másolata, hibajelzéssel.
+
+## 23. Kapcsolat a többi programmal: adatbázis és integrációs szolgáltatás (2026-10-29, I3 3. lépés)
+
+**Röviden:** ha a cég össze van kapcsolva a többi programmal (Könyvelő, eÁFA), a Készlet minden lényeges
+művelete (beszerzés, eladás, visszavonás, leltáreltérés, visszáru, napi zárás, termék és adószámos partner)
+eseményként eljut a központhoz. **Összekapcsolatlan cégnél semmi nem változik**, és a Készlet akkor is teljes
+értékűen működik, ha a központ, a Könyvelő vagy az integrációs szolgáltatás épp nem érhető el.
+
+### 23.1 Hogyan keletkezik az esemény
+- Az adatbázisban (`supabase/migrations/2026-10-29_integracio.sql`) egy trigger a mentés **saját
+  tranzakciójában**, annak végén egy pillanatképet ír az `integracio.valtozasok` táblába: mi történt, és a
+  mozgás, a beszerzési tétel, a termék, a telephely, a partner akkori adatai.
+  - Visszagörgetett mentésből semmi nem marad; sikeres mentésből a változás biztosan megvan.
+  - A mentés nem vár semmire: a trigger csak egy sort ír.
+- Mi számít változásnak:
+  - **véglegesítés:** közvetlen rögzítés, jóváhagyás (a ténylegesen beérkezett mennyiséggel), visszaállítás;
+  - **visszavonás:** az eladás visszavonása, egy véglegesített mozgás törlése, „korrekciós tétellel” törlése.
+    Az eladás visszavonásakor keletkező visszavételezés nem külön beszerzés.
+  - A jóváhagyásra váró vagy elutasított mozgás **nem** hat (a készletre sem hatott).
+  - Ha egy már elküldött napi zárás napjára utólag mozgás kerül, a zárás nem íródik felül, csak egy
+    „módosult” esemény megy.
+  - A korrekciós tétel törlését a program nem követi magától (nem találgat): Teendő lesz.
+  - Termék: csak a név, a cikkszám, a mértékegység, az áfakulcs és a törlés; a készlet változása nem.
+- A mozgások új mezői (a felület az 5. lépésben kapja meg): `ok` (normál / leltári hiány / leltári többlet /
+  selejt), `return_of_movement_id` (visszáru), `invoice_number`, `shipping_on_invoice` (igen / nem / nem tudom),
+  `integracio_esemeny_id`.
+
+### 23.2 Az integrációs szolgáltatás (`integracio/`)
+Egy kis Node-program a Készlet adatbázisa mellett (lásd `integracio/README.md`):
+- **Összeállító:** a változásokból eseményt készít a Készlet **saját számolófüggvényeivel**
+  (`src/lib/costing.ts`).
+  - Kerekítés soronként egész fillérre; az áfa a fillérre kerekített nettóból; a bruttó a nettó és az áfa
+    összege.
+  - Ha egy adat hiányzik (pl. egy régi eladásnak nincs rögzített ára), az esemény **nem megy ki**: a hiba
+    látszik, Teendő lesz, és az ugyanarra a tételre vonatkozó későbbi változások is várnak (a sorrend miatt).
+    Kihagyni csak a fő iroda tudja, indoklással; ez a naplóba kerül (`integracio_kihagyas`).
+- **Átadó:** a kész eseményeket átadja a központnak; csak a visszaigazolás után számítanak elküldöttnek. Ha a
+  központ 30 percig nem veszi át őket, Teendő lesz; amint elérhető, minden esemény pontosan egyszer megy.
+- **Fogadó:** aláírt végpontok a központnak.
+  - Összekapcsolás kóddal.
+  - Bontás.
+  - Beérkező esemény, pontosan egyszer. A beérkező események kezelése a 4. lépésben készül; addig ezeket a
+    központ félreteszi és később újraküldi. Az ismeretlen eseményt végleges hibaként utasítja el, így az a
+    központban „Átadási hiba” Teendő lesz, és újraküldhető.
+
+### 23.3 Összekapcsolás (D13)
+- A fő iroda kapcsolódási kódot készít (`integracio_kod_keszites`, a felület az 5. lépésben). A kód egyszer
+  használható és 24 óráig érvényes. Az adatbázisba csak a lenyomata kerül, és az új kód az előzőt
+  érvényteleníti.
+- A cég adószáma csak kiegészítő ellenőrzés: **pusztán adószámmal soha nem lehet összekapcsolni.**
+- Az összekapcsoláskor a termékjegyzék és az adószámos partnerek egyszer kimennek (a Könyvelő
+  termékkérdéséhez és partneregyeztetéséhez).
+
+### 23.4 Biztonság
+- Az `integracio` séma a böngészőből (anon, authenticated) **nem érhető el**.
+- A felület csak három függvényt hívhat:
+  - `integracio_kod_keszites` (fő iroda);
+  - `integracio_allapot` (iroda-szintű szerepkörök: összekapcsolás, hány esemény vár és mióta, utolsó hiba,
+    Teendők);
+  - `integracio_kihagyas` (fő iroda).
+- A szolgáltatás közvetlen adatbázis-kapcsolattal dolgozik.
+- A központ kérései HMAC-aláírással, időbélyeggel és egyszer használható azonosítóval védettek.

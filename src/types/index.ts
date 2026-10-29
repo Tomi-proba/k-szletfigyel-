@@ -391,6 +391,8 @@ export type AuditEntityType =
   | 'dailyClosing'
   /** A böngészőben tárolt adatok egyszeri átköltöztetése a szerverre (lásd lib/atkoltoztetes.ts). */
   | 'atkoltoztetes'
+  /** A többi modullal való kapcsolat (kapcsolódási kód, kihagyott változás - lásd integracio/README.md). */
+  | 'integracio'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'cancel' | 'correction'
 

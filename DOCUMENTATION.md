@@ -1037,3 +1037,20 @@ gomb is.
 - Az új képernyők (jóváhagyási lista, Integráció beállítás, visszáru) már ezekből épülnek, így változtatás
   nélkül beköltözhetnek a közös felületbe. A régi képernyők a beköltözéskor állnak át (TERV.md C.3).
 - A sötét mód a közös felülettel jön; addig a Készlet világos marad (`data-theme="light"`).
+
+## 26. Közös próba a többi programmal (2026-10-31, I3 7. lépés)
+
+A Készlet bekötését a valódi integrációs központtal és a valódi Könyvelővel együtt, helyben próbáltuk ki
+(AWEBOLDAL `npm run integracio:proba -w @aweboldal/kozpont`, lásd az ottani README-t). Ehhez a Készlet
+adatbázisa (`supabase/schema.sql`, helyben a Supabase-utánzattal) és az integrációs szolgáltatás
+(`integracio/`, `npm start`) fut.
+
+A próba lépései:
+1. összekapcsolás kóddal (a fő iroda készíti);
+2. a beszerzés eljut a Könyvelőbe;
+3. a termék eljut a Könyvelő termékjegyzékébe;
+4. a Könyvelő számlájából „Beérkezésre vár” mozgás lesz;
+5. ha a raktáros kevesebbet hagy jóvá, a Könyvelőben eltérés-Teendő lesz;
+6. a visszhang ki van szűrve, és minden esemény pontosan egyszer hat.
+
+Kétszer egymás után, minden lépés zöld volt.

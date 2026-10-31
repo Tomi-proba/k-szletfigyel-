@@ -1,4 +1,5 @@
 import { signedHeaders, verifySignature, type SignatureCheck } from "./alairas.ts";
+import type { BaselineAccept, ReconcileReport } from "./egyeztetes.ts";
 import { inboundResultSchema, type EventEnvelope, type InboundDelivery, type InboundResult, type Module } from "./esemeny.ts";
 
 /**
@@ -8,7 +9,8 @@ import { inboundResultSchema, type EventEnvelope, type InboundDelivery, type Inb
  * - `POST /api/integracio/v1/bejovo` – egy esemény átadása (`InboundDelivery`), válasz: `InboundResult`;
  * - `POST /api/integracio/v1/kapcsolodas` – kapcsolódási kód beváltása (`{ code, taxNumber }`), válasz:
  *   `{ companyRef, companyName, taxNumber }`; ismeretlen, lejárt vagy más céghez tartozó kódra 422;
- * - `DELETE /api/integracio/v1/kapcsolodas/:companyRef` – az összekapcsolás bontása.
+ * - `DELETE /api/integracio/v1/kapcsolodas/:companyRef` – az összekapcsolás bontása;
+ * - a Könyvelőnek és a Készletnek az egyeztetés két végpontja is (`egyeztetes.ts`).
  */
 
 export const INBOUND_PATH = "/api/integracio/v1/bejovo";
@@ -31,6 +33,10 @@ export type HubClient = {
   resolveTodo(companyRef: string, key: string): Promise<void>;
   /** „Honnan jött?”: a rekordhoz tartozó kapcsolatok mindkét irányban. */
   links(companyRef: string, recordType: string, recordId: string): Promise<Array<{ direction: "from" | "to"; module: Module; recordType: string; recordId: string; url: string | null; label: string | null }>>;
+  /** Egyeztetés most (F16): a központ lefuttatja, és visszaadja a modulnak szóló eredményt. */
+  reconcileNow(companyRef: string): Promise<ReconcileReport>;
+  /** A nyitó különbség elfogadása (csak a Könyvelő); válaszként a frissített eredmény. */
+  acceptBaseline(input: BaselineAccept): Promise<ReconcileReport>;
 };
 
 export function createHubClient(config: { url: string; module: Module; secret: string; timeoutMs?: number }): HubClient {
@@ -61,6 +67,8 @@ export function createHubClient(config: { url: string; module: Module; secret: s
     },
     links: (companyRef, recordType, recordId) =>
       call("GET", `api/v1/modul/kapcsolatok?companyRef=${encodeURIComponent(companyRef)}&recordType=${encodeURIComponent(recordType)}&recordId=${encodeURIComponent(recordId)}`),
+    reconcileNow: (companyRef) => call("POST", "api/v1/modul/egyeztetes", { companyRef }),
+    acceptBaseline: (input) => call("POST", "api/v1/modul/egyeztetes/nyito", input),
   };
 }
 

@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import type pg from "pg";
 import { applyOnce } from "../esemenyek/src/postgres.ts";
-import { INBOUND_PATH, LINK_PATH, registryOf, validateEvent, verifyHubRequest, type InboundResult } from "../esemenyek/src/index.ts";
+import { INBOUND_PATH, LINK_PATH, RECONCILE_PATH, RECONCILE_RESULT_PATH, registryOf, validateEvent, verifyHubRequest, type InboundResult } from "../esemenyek/src/index.ts";
 import { tranzakcio } from "./db.ts";
+import { egyeztetesValasz, eredmenyFogadas } from "./egyeztetes.ts";
 import { FogadoHiba, KEZELOK, kezelo, type Kezelok } from "./kezelok.ts";
 import { adoszam } from "./osszeallito.ts";
 
@@ -13,6 +14,8 @@ import { adoszam } from "./osszeallito.ts";
  *   iroda által készített, egyszer használható, lejáró kóddal; az adószám csak kiegészítő ellenőrzés.
  * - `DELETE /api/integracio/v1/kapcsolodas/:companyRef`: az összekapcsolás bontása.
  * - `POST /api/integracio/v1/bejovo`: egy esemény átadása, pontosan egyszer (applyOnce).
+ * - `POST /api/integracio/v1/egyeztetes`: a Készlet számai az egyeztetéshez (TERV.md F16), és
+ *   `…/egyeztetes/eredmeny`: a központ eredménye (Teendő a nem rendben lévő ellenőrzésből).
  * - `GET /egeszseg`: aláírás nélkül, csak azt mondja meg, fut-e és eléri-e az adatbázist.
  *
  * Minden aláírt kérés HMAC-cal, időbélyeggel és egyszer használható nonce-szal védett.
@@ -81,6 +84,8 @@ export function fogado(o: FogadoBeallitas): RequestListener {
         return valasz(res, 204, null);
       }
       if (req.method === "POST" && url === INBOUND_PATH) return valasz(res, 200, await bejovo(o.pool, json(raw), kezel));
+      if (req.method === "POST" && url === RECONCILE_PATH) return valasz(res, 200, await egyeztetesValasz(o.pool, json(raw)));
+      if (req.method === "POST" && url === RECONCILE_RESULT_PATH) return valasz(res, 200, await eredmenyFogadas(o.pool, json(raw)));
       throw new FogadoHiba(404, "NOT_FOUND", "Nincs ilyen végpont.");
     })().catch((e: unknown) => {
       if (e instanceof FogadoHiba) return valasz(res, e.status, { code: e.code, message: e.message });

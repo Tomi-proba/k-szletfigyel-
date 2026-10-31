@@ -1057,3 +1057,34 @@ A próba lépései:
 6. a visszhang ki van szűrve, és minden esemény pontosan egyszer hat.
 
 Kétszer egymás után, minden lépés zöld volt.
+
+## 27. Egyeztetés a Könyvelővel (2026-10-31, I4 3. lépés)
+
+Az integrációs központ éjszakánként (alapból 02:30-kor) és kérésre összeveti a Készlet és a Könyvelő
+számait (TERV.md F16). A Készlet ehhez az integrációs szolgáltatásban válaszol, aláírt kérésre
+(`integracio/src/egyeztetes.ts`):
+
+- **készletérték a cég módszerével** (Beállítások → költségszámítás): átlagárnál készlet × átlagár; FIFO-nál
+  a beszerzési tételek maradéka a saját egységköltségén (`lotUnitCost`, ugyanaz, mint a felületen), a
+  tételkövetés előtti többlet a termék beszerzési árán. Módszerváltáskor a központ külön Teendőt nyit;
+- **az időszak ELÁBÉ-ja**, pontosan úgy, ahogy az események viszik: eladás (és a Könyvelőből jött,
+  jóváhagyott kiadás) bekerülési értéke, mínusz a vevői visszavétel és a Könyvelő sztornója miatti
+  visszavétel. A visszavont eladás, a leltáreltérés és a szállítói visszaküldés nem ELÁBÉ;
+- **a Könyvelőből jött, jóváhagyásra váró mozgások**: hány darab és mióta vár. A készletértékre csak a
+  beérkezés (+) és a szállítói visszaküldés (−) hat: ezeket a Könyvelő a számlával már könyvelte;
+- **a Könyvelő által hivatkozott rekordok**: él-e még (nincs törölve, visszavonva vagy elutasítva), és ki
+  van-e fizetve (csak ha a fizetést a Könyvelő követi);
+- **elveszett események és a kimenő sor**: amit a központ szerint átadott, de itt nincs nyoma; ami
+  összeállításra vagy átadásra vár, és ami adathiány miatt nem állítható össze.
+
+Személyes adat nem megy át, csak összegek, darabszámok és azonosítók.
+
+Az **eredményt** a központ visszaküldi; a szolgáltatás eltárolja (`integracio.egyeztetes`), és a nem
+rendben lévő ellenőrzésből Teendő lesz a *Beállítások → Kapcsolat a többi programmal* oldalon. Ugyanitt
+az *Egyeztetés a Könyvelővel* doboz ellenőrzésenként mutatja az állapotot (Rendben, Átadás folyamatban,
+Régóta függő tétel, Eltérés, Nem futott) és a magyarázatot. A következő rendben lévő ellenőrzés a Teendőt
+magától lezárja. A program magától soha nem javít semmit; a nyitó (kiinduló) különbséget a Könyvelőben
+fogadják el.
+
+Meglévő projektben a `supabase/migrations/2026-10-31_egyeztetes.sql` fájlt kell lefuttatni (friss
+projektben a `schema.sql` végén szerepel).

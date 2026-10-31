@@ -3,8 +3,8 @@
 // elakadt változást indoklással kihagyhat. Helyi módban (bejelentkezés nélkül) nem kapcsolható össze.
 import { useCallback, useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { integracioAllapot, kapcsolodasiKodKeszitese, valtozasKihagyasa, type IntegracioAllapot, type IntegracioTeendo } from '../lib/integracio'
-import { formatDateTime } from '../lib/format'
+import { integracioAllapot, kapcsolodasiKodKeszitese, valtozasKihagyasa, type EgyeztetesEredmeny, type IntegracioAllapot, type IntegracioTeendo } from '../lib/integracio'
+import { formatDate, formatDateTime } from '../lib/format'
 
 export function IntegracioBeallitas({ foIroda }: { foIroda: boolean }) {
   const remote = useStore((s) => s.dataMode === 'remote')
@@ -146,6 +146,8 @@ export function IntegracioBeallitas({ foIroda }: { foIroda: boolean }) {
         </div>
       )}
 
+      {allapot?.osszekapcsolva && <EgyeztetesKartya egyeztetes={allapot.egyeztetes ?? null} />}
+
       {allapot && allapot.teendok.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="font-semibold">Teendők</h3>
@@ -157,6 +159,60 @@ export function IntegracioBeallitas({ foIroda }: { foIroda: boolean }) {
         </div>
       )}
     </section>
+  )
+}
+
+const ALLAPOT: Record<EgyeztetesEredmeny['status'], { szoveg: string; osztaly: string }> = {
+  RENDBEN: { szoveg: 'Rendben', osztaly: 'badge-success' },
+  FUGGO: { szoveg: 'Átadás folyamatban', osztaly: 'badge-info' },
+  REGOTA_FUGG: { szoveg: 'Régóta függő tétel', osztaly: 'badge-warning' },
+  ELTERES: { szoveg: 'Eltérés', osztaly: 'badge-danger' },
+  NYITO_ELFOGADASRA_VAR: { szoveg: 'Nyitó különbség (a Könyvelőben fogadják el)', osztaly: 'badge-warning' },
+  NEM_FUTOTT: { szoveg: 'Nem futott', osztaly: 'badge-warning' },
+}
+
+/**
+ * Az egyeztetés legutóbbi eredménye (TERV.md F16): a központ éjszakánként összeveti a Készlet és a Könyvelő
+ * számait. A nem rendben lévőkből Teendő is lesz (lent). A program magától soha nem javít semmit.
+ */
+function EgyeztetesKartya({ egyeztetes }: { egyeztetes: NonNullable<IntegracioAllapot['egyeztetes']> | null }) {
+  return (
+    <div className="card card-muted flex flex-col gap-2">
+      <h3 className="font-semibold">Egyeztetés a Könyvelővel</h3>
+      <p className="muted text-sm">
+        Éjszakánként a központ összeveti a két program számait: a készlet értékét a könyvelt készlettel, az eladások bekerülési értékét, a tételek összegét, a
+        kifizetettséget és az átadásokat. Ha eltérést talál, megmutatja az okát; magától semmit nem javít.
+      </p>
+      {!egyeztetes ? (
+        <p className="muted text-sm">Még nem volt egyeztetés.</p>
+      ) : (
+        <>
+          <p className="muted text-sm">
+            Legutóbbi: {formatDateTime(egyeztetes.at)} · időszak: {formatDate(egyeztetes.from)} – {formatDate(egyeztetes.to)}
+          </p>
+          <ul className="flex flex-col gap-2">
+            {egyeztetes.eredmenyek.map((e) => (
+              <li key={e.check}>
+                <details open={e.status !== 'RENDBEN'} className="rounded-lg border border-[var(--szin-keret)] px-3 py-2">
+                  <summary className="flex cursor-pointer flex-wrap items-baseline gap-2">
+                    <span className={`badge ${ALLAPOT[e.status].osztaly}`}>{ALLAPOT[e.status].szoveg}</span>
+                    <span className="font-medium">{e.title}</span>
+                  </summary>
+                  {e.detail && <p className="mt-2 text-sm whitespace-pre-line">{e.detail}</p>}
+                  {e.items.length > 0 && (
+                    <ul className="mt-1 list-disc pl-5 text-sm">
+                      {e.items.map((i, n) => (
+                        <li key={n}>{i.label}</li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   )
 }
 

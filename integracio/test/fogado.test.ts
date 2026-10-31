@@ -174,6 +174,12 @@ class AlKozpont implements HubClient {
   async links() {
     return [];
   }
+  async reconcileNow(): Promise<never> {
+    throw new Error("a Készlet nem kér egyeztetést (a központ futtatja)");
+  }
+  async acceptBaseline(): Promise<never> {
+    throw new Error("a nyitó különbséget a Könyvelőben fogadják el");
+  }
 }
 
 leiras("átadás és önállóság", () => {

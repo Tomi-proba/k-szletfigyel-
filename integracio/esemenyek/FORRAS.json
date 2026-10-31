@@ -1,12 +1,13 @@
 {
   "forras": "Tomi-proba/AWEBOLDAL packages/esemenyek",
-  "commit": "86663a87c05547c9cfd5c5e2def80494b62982a3",
-  "masolva": "2026-10-31T10:20:42.153Z",
+  "commit": "b0feb0a469b4f8994432f29b34d83fbe11217433",
+  "masolva": "2026-10-31T19:33:02.558Z",
   "files": {
     "src/alairas.ts": "cd848bc3985a3fa0acc5cce791f806352d66e6714bd2e012bf998c8f813448bd",
+    "src/egyeztetes.ts": "e55baae241c80b00aaad20bcadd95b2593302ad6b338c0510b60a0b5ace55894",
     "src/esemeny.ts": "f7ad14bedb7c85a7acf1678d071e5de2841a5d5247597ae6aa0f894032d8815b",
-    "src/index.ts": "ffaeffbf611eed88128db738e2245cac1ca600208b69cde410a929ef7f9c7b37",
-    "src/kliens.ts": "8f720178185e7115f74431c93a93dc768dff8fa956475e1ac74d9417c3b73f7b",
+    "src/index.ts": "08b8cc705321d9f74fb07f916c36e1017ca1bdef51797d53e0bc6eba51cd51e9",
+    "src/kliens.ts": "9b280a3a13e89688f8540001709173a678cdc74b66e42fa88aeb0ea05a1c4a24",
     "src/lenyomat.ts": "e9e322a5b96f2cc629014a868b1cbeb9011974273f1b6aabf2be126844604537",
     "src/postgres.ts": "5558a1b9916adfd4624a96046f1ad6458fa3c1b8dae2b8fbec6a259217eb2b62",
     "formatum-lenyomat.json": "f91a10ce179d137ccfee09268b01b7ae8155db2c2c398bd5b9544d6ac519bbed"

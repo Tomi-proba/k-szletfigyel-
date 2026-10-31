@@ -16,6 +16,15 @@ export type IntegracioTeendo = {
   letrehozva: string
 }
 
+/** Az egyeztetés egy ellenőrzésének eredménye (a központtól, változatlanul; TERV.md F16). */
+export type EgyeztetesEredmeny = {
+  check: 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6'
+  status: 'RENDBEN' | 'FUGGO' | 'REGOTA_FUGG' | 'ELTERES' | 'NYITO_ELFOGADASRA_VAR' | 'NEM_FUTOTT'
+  title: string
+  detail: string | null
+  items: Array<{ label: string }>
+}
+
 export type IntegracioAllapot = {
   osszekapcsolva: boolean
   beallitas: { adoszam: string; osszekapcsolva: string | null; bontva: string | null } | null
@@ -24,6 +33,8 @@ export type IntegracioAllapot = {
   atadasra_var: number
   legregebbi_varakozo: string | null
   utolso_hiba: string | null
+  /** A központ legutóbbi egyeztetése (éjszakánként és kérésre); null, ha még nem volt. */
+  egyeztetes?: { runId: string; at: string; asOf: string; from: string; to: string; eredmenyek: EgyeztetesEredmeny[] } | null
   teendok: IntegracioTeendo[]
 }
 

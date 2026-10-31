@@ -105,6 +105,15 @@ leiras("beszerzés", () => {
     expect(e!.causedBy).toBeUndefined();
   });
 
+  it("a számla kelte és teljesítési dátuma: ha a Készletben megadták, az eseménybe kerül; ha nem, üres marad (nem találgatunk)", async () => {
+    const m = mozgas(ceg, termekId, { unit_price: 10, invoice_date: "2026-11-01", fulfillment_date: "2026-10-30" });
+    const n = mozgas(ceg, termekId, { unit_price: 10 });
+    await ment(pool, ceg.felhasznalo, [m, tetel(ceg, termekId, String(m.sor.id), { unit_price: 10 }), n, tetel(ceg, termekId, String(n.sor.id), { unit_price: 10 })]);
+    await osszeallitas(pool);
+    expect((await esemenyek(String(m.sor.id)))[0]!.payload).toMatchObject({ receivedDate: "2026-11-02", invoiceDate: "2026-11-01", fulfillmentDate: "2026-10-30" });
+    expect((await esemenyek(String(n.sor.id)))[0]!.payload).toMatchObject({ invoiceDate: null, fulfillmentDate: null });
+  });
+
   it("a raktárosnak jóváhagyásra váró rendelésből csak a jóváhagyáskor lesz esemény, a ténylegesen beérkezett mennyiséggel", async () => {
     const m = mozgas(ceg, termekId, { quantity: 10, ordered_quantity: 10, unit_price: 1000, approval_status: "pending" });
     await ment(pool, ceg.felhasznalo, [m]);

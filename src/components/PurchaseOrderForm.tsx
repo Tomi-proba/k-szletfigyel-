@@ -34,6 +34,8 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
   const [note, setNote] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [szamlanVan, setSzamlanVan] = useState<'igen' | 'nem' | 'nemtudom'>('nemtudom')
+  const [invoiceDate, setInvoiceDate] = useState('')
+  const [fulfillmentDate, setFulfillmentDate] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
 
@@ -75,6 +77,8 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       vatRatePercent: vatRateNumber,
       invoiceNumber,
       shippingOnInvoice: (shippingCostNumber ?? 0) > 0 && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined,
+      invoiceDate: invoiceDate || undefined,
+      fulfillmentDate: fulfillmentDate || undefined,
     })
     if (!result.ok) return setError('A rendelés nem rögzíthető.')
 
@@ -146,6 +150,21 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       <Field label="Szállítói számla száma (opcionális, ha már megvan)">
         <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
       </Field>
+      <div className="mb-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Számla kelte (opcionális)</span>
+              <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Teljesítés dátuma (opcionális)</span>
+              <Input type="date" value={fulfillmentDate} onChange={(e) => setFulfillmentDate(e.target.value)} />
+            </label>
+          </div>
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            A számláról. Ha megadja, a Könyvelő piszkozatára is átkerül; ha nem, ott a jóváhagyó írja be.
+          </span>
+      </div>
 
       {(shippingCostNumber ?? 0) > 0 && (
         <div className="kozos mb-3">

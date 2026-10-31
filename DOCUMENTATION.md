@@ -1012,6 +1012,9 @@ gomb is.
   többlet (bejövő). A leltári mozgás nem eladás és nem beszerzés: nincs vevője, eladási ára, áfája.
 - **Számlaszám:** a rögzítéskor, a rendeléskor és a jóváhagyáskor is megadható. Kimenőnél a vevőszámla
   számával a Könyvelő párosít.
+- **A szállítói számla kelte és teljesítési dátuma** (2026-10-31): a beérkezéskor, a rendeléskor és az
+  irodai jóváhagyáskor is megadható, nem kötelező. Ha megadták, a Könyvelő szállítói számla-piszkozatára is
+  átkerül; ha nem, ott a jóváhagyó írja be a számláról (a program nem találgat).
 - **„A szállítási díj a szállító számláján van?”** Igen / Nem (külön számla) / Nem tudom; csak ha van
   szállítási díj. Megadható a rendeléskor, a rögzítéskor és az irodai jóváhagyáskor.
 - **Lezárt időszak:** ha a dátum a Könyvelőben lezárt időszakba esik, figyelmeztetés jelenik meg; a

@@ -27,6 +27,8 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
     movement.shippingOnInvoice === undefined ? 'nemtudom' : movement.shippingOnInvoice ? 'igen' : 'nem',
   )
   const vanSzallitas = (movement.shippingCost ?? 0) > 0
+  const [invoiceDate, setInvoiceDate] = useState(movement.invoiceDate ?? '')
+  const [fulfillmentDate, setFulfillmentDate] = useState(movement.fulfillmentDate ?? '')
   const [error, setError] = useState<string | null>(null)
 
   const actualQtyNumber = Number(actualQuantity.replace(',', '.'))
@@ -41,7 +43,14 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
       movement.id,
       actualQtyNumber,
       note.trim() || undefined,
-      isWarehouseUser ? undefined : { invoiceNumber, shippingOnInvoice: vanSzallitas && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined },
+      isWarehouseUser
+        ? undefined
+        : {
+            invoiceNumber,
+            shippingOnInvoice: vanSzallitas && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined,
+            invoiceDate: invoiceDate || undefined,
+            fulfillmentDate: fulfillmentDate || undefined,
+          },
     )
     if (!result.ok) return setError('A jóváhagyás nem sikerült.')
     onClose()
@@ -81,6 +90,24 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
         <Field label="Szállítói számla száma (opcionális)">
           <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
         </Field>
+      )}
+
+      {!isWarehouseUser && (
+        <div className="mb-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Számla kelte (opcionális)</span>
+              <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Teljesítés dátuma (opcionális)</span>
+              <Input type="date" value={fulfillmentDate} onChange={(e) => setFulfillmentDate(e.target.value)} />
+            </label>
+          </div>
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            A számláról. Ha megadja, a Könyvelő piszkozatára is átkerül; ha nem, ott a jóváhagyó írja be.
+          </span>
+        </div>
       )}
 
       {!isWarehouseUser && vanSzallitas && (

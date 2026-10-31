@@ -238,6 +238,9 @@ export interface Movement extends SoftDeletable {
   returnOfMovementId?: string
   /** A számla száma (beszerzésnél a szállítóé, eladásnál a vevőszámláé), ha ismert. */
   invoiceNumber?: string
+  /** 'in': a szállítói számla kelte és teljesítési dátuma, ha ismert (nem kötelező; a Könyvelőbe is átkerül). */
+  invoiceDate?: string
+  fulfillmentDate?: string
   /** 'in': a szállítási díj a szállító számláján van-e (igen / nem / undefined = nem tudni). */
   shippingOnInvoice?: boolean
   /** Ha a mozgás a Könyvelő egy bizonylatából lett (jóváhagyandóként): a beérkezett esemény, a bizonylat

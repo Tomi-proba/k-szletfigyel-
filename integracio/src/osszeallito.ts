@@ -164,8 +164,9 @@ function beszerzes(k: Kep) {
   return {
     purchaseId: String(m.id),
     receivedDate: String(m.date),
-    invoiceDate: null,
-    fulfillmentDate: null,
+    // A számla dátumai, ha a Készletben megadták; különben a Könyvelőben a jóváhagyó írja be (nem találgatunk).
+    invoiceDate: szoveg(m.invoice_date)?.slice(0, 10) ?? null,
+    fulfillmentDate: szoveg(m.fulfillment_date)?.slice(0, 10) ?? null,
     invoiceNumber: szoveg(m.invoice_number),
     supplier: partnerRef(k.szallito),
     originalCurrency: devizanem !== "HUF" ? { code: devizanem, rate: lot.exchangeRate } : null,

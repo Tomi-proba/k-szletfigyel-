@@ -207,6 +207,8 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     ok: (row.ok as Movement['ok'] | null) ?? undefined,
     returnOfMovementId: (row.return_of_movement_id as string | null) ?? undefined,
     invoiceNumber: (row.invoice_number as string | null) ?? undefined,
+    invoiceDate: (row.invoice_date as string | null) ?? undefined,
+    fulfillmentDate: (row.fulfillment_date as string | null) ?? undefined,
     shippingOnInvoice: row.shipping_on_invoice === null || row.shipping_on_invoice === undefined ? undefined : Boolean(row.shipping_on_invoice),
     integracioEsemenyId: (row.integracio_esemeny_id as string | null) ?? undefined,
     integracioDokumentumId: (row.integracio_dokumentum_id as string | null) ?? undefined,
@@ -251,6 +253,8 @@ function movementToRow(companyId: string, m: Movement) {
     ok: m.ok ?? null,
     return_of_movement_id: m.returnOfMovementId ?? null,
     invoice_number: m.invoiceNumber ?? null,
+    invoice_date: m.invoiceDate ?? null,
+    fulfillment_date: m.fulfillmentDate ?? null,
     shipping_on_invoice: m.shippingOnInvoice ?? null,
   }
 }

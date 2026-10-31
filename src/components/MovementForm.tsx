@@ -71,6 +71,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [ok, setOk] = useState<MovementReason>('normal')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [szamlanVan, setSzamlanVan] = useState<SzamlanVan>('nemtudom')
+  const [invoiceDate, setInvoiceDate] = useState('')
+  const [fulfillmentDate, setFulfillmentDate] = useState('')
   const lezartak = useLezartIdoszakok()
   const lezart = lezartIdoszakban(date, lezartak)
   const leltar = ok !== 'normal'
@@ -180,6 +182,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         ok: leltar ? ok : undefined,
         invoiceNumber: leltar ? undefined : invoiceNumber,
         shippingOnInvoice: type === 'in' && !leltar && (shippingCostNumber ?? 0) > 0 ? (szamlanVan === 'nemtudom' ? undefined : szamlanVan === 'igen') : undefined,
+        invoiceDate: type === 'in' && !leltar ? invoiceDate || undefined : undefined,
+        fulfillmentDate: type === 'in' && !leltar ? fulfillmentDate || undefined : undefined,
       },
       { allowNegativeStock },
     )
@@ -198,6 +202,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setOk('normal')
       setInvoiceNumber('')
       setSzamlanVan('nemtudom')
+      setInvoiceDate('')
+      setFulfillmentDate('')
       setSuccessTick((t) => t + 1)
       onDone?.()
       return
@@ -356,9 +362,25 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       )}
 
       {type === 'in' && !isWarehouseUser && !leltar && (
-        <Field label="Szállítói számla száma (opcionális)">
-          <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
-        </Field>
+        <FieldGroup label="Szállítói számla">
+          <label className="mb-3 block text-sm">
+            <span className="mb-1 block font-medium text-[var(--color-text)]">Számlaszám (opcionális)</span>
+            <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Számla kelte (opcionális)</span>
+              <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Teljesítés dátuma (opcionális)</span>
+              <Input type="date" value={fulfillmentDate} onChange={(e) => setFulfillmentDate(e.target.value)} />
+            </label>
+          </div>
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            A számláról. Ha megadja, a Könyvelő piszkozatára is átkerül; ha nem, ott a jóváhagyó írja be.
+          </span>
+        </FieldGroup>
       )}
 
       {type === 'in' && !isWarehouseUser && !leltar && (shippingCostNumber ?? 0) > 0 && (

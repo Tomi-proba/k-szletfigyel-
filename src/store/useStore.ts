@@ -140,6 +140,9 @@ export interface RecordMovementInput {
   invoiceNumber?: string
   /** 'in', szállítási díjnál: rajta van-e a szállító számláján (igen / nem / undefined = nem tudom). */
   shippingOnInvoice?: boolean
+  /** 'in': a szállítói számla kelte és teljesítési dátuma (nem kötelező; a Könyvelő piszkozatára is átkerül). */
+  invoiceDate?: string
+  fulfillmentDate?: string
 }
 
 export type RecordMovementResult =
@@ -191,6 +194,9 @@ export interface CreatePendingPurchaseInput {
   invoiceNumber?: string
   /** Szállítási díjnál: rajta van-e a szállító számláján (undefined = nem tudni). */
   shippingOnInvoice?: boolean
+  /** A szállítói számla kelte és teljesítési dátuma, ha már ismert (jóváhagyáskor is megadható). */
+  invoiceDate?: string
+  fulfillmentDate?: string
 }
 
 export type ApprovePurchaseOrderResult =
@@ -356,7 +362,7 @@ interface AppState {
     id: string,
     actualQuantity?: number,
     discrepancyNote?: string,
-    invoice?: { invoiceNumber?: string; shippingOnInvoice?: boolean },
+    invoice?: { invoiceNumber?: string; shippingOnInvoice?: boolean; invoiceDate?: string; fulfillmentDate?: string },
   ) => ApprovePurchaseOrderResult
   createPendingSalePrep: (input: CreatePendingSaleInput) => RecordMovementResult
   approveSalePrep: (
@@ -755,6 +761,8 @@ export const useStore = create<AppState>()(
           ok: reason,
           invoiceNumber,
           shippingOnInvoice,
+          invoiceDate,
+          fulfillmentDate,
         } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
@@ -906,6 +914,8 @@ export const useStore = create<AppState>()(
               ok: inventoryReason,
               invoiceNumber: invoiceNumber?.trim() || undefined,
               shippingOnInvoice: type === 'in' && effectiveShippingForMovement(shippingCost) ? shippingOnInvoice : undefined,
+              invoiceDate: type === 'in' && !inventoryReason ? invoiceDate || undefined : undefined,
+              fulfillmentDate: type === 'in' && !inventoryReason ? fulfillmentDate || undefined : undefined,
             },
           ],
           dailyClosings: flagClosingModified(state.dailyClosings, closingCheckLocationId, closingCheckDate),
@@ -1232,7 +1242,7 @@ export const useStore = create<AppState>()(
         }),
 
       createPendingPurchaseOrder: (input) => {
-        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice } = input
+        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice, invoiceDate, fulfillmentDate } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) return { ok: false, reason: 'invalid-quantity' }
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) return { ok: false, reason: 'invalid-quantity' }
@@ -1267,6 +1277,8 @@ export const useStore = create<AppState>()(
               approvalStatus: 'pending',
               invoiceNumber: invoiceNumber?.trim() || undefined,
               shippingOnInvoice: effectiveShippingForMovement(shippingCost) ? shippingOnInvoice : undefined,
+              invoiceDate: invoiceDate || undefined,
+              fulfillmentDate: fulfillmentDate || undefined,
             },
           ],
           auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Rendelés leadva - ${label}`)],
@@ -1345,6 +1357,8 @@ export const useStore = create<AppState>()(
                   discrepancyNote: finalNote,
                   invoiceNumber: invoice?.invoiceNumber?.trim() || m.invoiceNumber,
                   shippingOnInvoice: effectiveShipping > 0 ? (invoice?.shippingOnInvoice ?? m.shippingOnInvoice) : undefined,
+                  invoiceDate: invoice?.invoiceDate || m.invoiceDate,
+                  fulfillmentDate: invoice?.fulfillmentDate || m.fulfillmentDate,
                 }
               : m,
           ),

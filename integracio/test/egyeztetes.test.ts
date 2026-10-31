@@ -177,7 +177,7 @@ leiras("az eredmény fogadása", () => {
   });
   const jelentes = (runId: string, at: string, results: ReconcileResult[]) => ({ runId, companyRef: ceg.companyId, at, asOf: "2026-11-30", from: "2026-11-01", to: "2026-11-30", results });
   const teendok = async () =>
-    (await pool.query<{ cim: string; reszletek: string | null }>("SELECT cim, reszletek FROM integracio.teendok WHERE company_id = $1 AND fajta = 'EGYEZTETES' AND megoldva IS NULL ORDER BY cim", [ceg.companyId])).rows;
+    (await pool.query<{ cim: string; reszletek: string | null }>("SELECT cim, reszletek FROM integracio.teendok WHERE company_id = $1 AND fajta = 'EGYEZTETES' AND megoldva IS NULL ORDER BY kulcs COLLATE "C"", [ceg.companyId])).rows;
 
   it("Teendő a nem rendben lévőből, lezárás a rendben lévőnél; a „nem futott” nem zár le; régebbi kör nem írja felül", async () => {
     const r = await hivas(
@@ -190,8 +190,8 @@ leiras("az eredmény fogadása", () => {
     );
     expect(r.status).toBe(200);
     expect(await teendok()).toEqual([
-      { cim: "Kifizetettség: 1 számla kifizetettsége eltér", reszletek: "• VSZ-1: a Könyvelőben kiegyenlítve" },
       { cim: "Készletérték: 1 500 Ft megmagyarázatlan eltérés", reszletek: "Készletérték a Készletben …" },
+      { cim: "Kifizetettség: 1 számla kifizetettsége eltér", reszletek: "• VSZ-1: a Könyvelőben kiegyenlítve" },
     ]);
     await hivas(RECONCILE_RESULT_PATH, jelentes(randomUUID(), "2026-11-29T01:31:00.000Z", [eredmeny("E1", "RENDBEN"), eredmeny("E4", "RENDBEN")]));
     expect(await teendok()).toHaveLength(2);

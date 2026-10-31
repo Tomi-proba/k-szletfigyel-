@@ -540,6 +540,44 @@ export async function fetchBusinessData(companyId: string, opts: { naplot: boole
   }
 }
 
+// --- frissítés: amit az integrációs szolgáltatás változtatott (TERV.md F15.4) -------------------------
+
+/** Csak ennyi napnál nem régebbi, a Könyvelőből jött mozgásokat frissítünk (a régiek már lezártak). */
+const INTEGRACIO_FRISSITES_NAP = 60
+
+/**
+ * A szerveren az integrációs szolgáltatás által létrehozott vagy módosított sorok: a Könyvelőből jött
+ * (jóváhagyandó) mozgások és a Könyvelő által követett fizetési állapot. Csak azokat a sorokat adja
+ * vissza, amelyek újabbak (nagyobb verziójúak), mint amit a böngésző ismer, és nincsenek épp mentés alatt
+ * (`foglalt`: „tabla:id” kulcsok); ezek verzióját fel is jegyzi. Így egy közben itt végzett, még el nem
+ * küldött módosítás soha nem íródik felül.
+ */
+export async function integracioFrissitesLetoltese(foglalt: ReadonlySet<string>): Promise<{ movements: Movement[]; lots: PurchaseLot[] }> {
+  const db = client()
+  const tol = new Date(Date.now() - INTEGRACIO_FRISSITES_NAP * 86_400_000).toISOString()
+  const [integracios, fizetett, tetelek] = await Promise.all([
+    db.from('movements').select('*').not('integracio_esemeny_id', 'is', null).gte('created_at', tol),
+    db.from('movements').select('*').eq('fizetes_konyvelobol', true),
+    db.from('purchase_lots').select('*').eq('fizetes_konyvelobol', true),
+  ])
+  for (const r of [integracios, fizetett, tetelek]) if (r.error) throw r.error
+  const ujabb = (tabla: string, rows: Record<string, unknown>[] | null) => {
+    const kimenet = new Map<string, Record<string, unknown>>()
+    for (const row of rows ?? []) {
+      const kulcs = `${tabla}:${row.id as string}`
+      if (foglalt.has(kulcs)) continue
+      const v = Number(row.version)
+      if (v > (ismertVerziok.get(kulcs) ?? 0)) kimenet.set(row.id as string, row)
+    }
+    for (const [id, row] of kimenet) ismertVerziok.set(`${tabla}:${id}`, Number(row.version))
+    return [...kimenet.values()]
+  }
+  return {
+    movements: ujabb('movements', [...(integracios.data ?? []), ...(fizetett.data ?? [])]).map(movementFromRow),
+    lots: ujabb('purchase_lots', tetelek.data).map(lotFromRow),
+  }
+}
+
 // --- feltöltés: egy felhasználói művelet = egy mentési köteg ------------------------------
 
 /** A szerveren lévő sorok verziója, úgy, ahogy a sorban álló mentések után LESZ: minden sikeres

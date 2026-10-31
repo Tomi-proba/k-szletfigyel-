@@ -1,0 +1,198 @@
+/*
+ * Közös komponensek (TERV.md C.2-C.3): gombok, kártyák, címkék, figyelmeztetések, gyorsválasztó
+ * „chipek”. Ugyanazokkal az osztálynevekkel, mint a Könyvelőben (.btn, .btn-primary, .card, .badge,
+ * .alert), de már a közös dizájn-tokenekre (dizajn-tokens.css, --szin-*, --kerekites, --tav-*) építve,
+ * hogy a közös felületbe változtatás nélkül beköltözhessenek.
+ *
+ * A „components” rétegben vannak: a Tailwind segédosztályai (pl. w-full, mt-2) felülírhatják őket, a
+ * Tailwind alapstílusa (preflight) viszont nem írja felül ezeket.
+ *
+ * Érintőképernyőn (telefonon) minden gomb legalább 48 px magas, a .btn-big 56 px.
+ */
+@layer components {
+  .kozos {
+    font-family: var(--betu);
+    color: var(--szin-szoveg);
+    line-height: 1.45;
+  }
+
+  .btn {
+    font: inherit;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tav-2);
+    min-height: 44px;
+    padding: var(--tav-2) var(--tav-4);
+    border-radius: var(--kerekites-kicsi);
+    border: 1px solid var(--szin-keret);
+    background: var(--szin-hatter);
+    color: var(--szin-szoveg);
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .btn:hover {
+    background: var(--szin-felulet);
+  }
+  .btn:focus-visible,
+  .chip:focus-visible {
+    outline: 3px solid var(--szin-elsodleges);
+    outline-offset: 2px;
+  }
+  .btn[disabled],
+  .btn[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--szin-elsodleges);
+    border-color: var(--szin-elsodleges);
+    color: var(--szin-elsodlegesen);
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    background: var(--szin-elsodleges-sotet);
+  }
+  /* Az egyértelmű, gyakori „rendben” lépés (pl. „Beérkezett”): zöld. */
+  .btn-success {
+    background: var(--szin-siker);
+    border-color: var(--szin-siker);
+    color: var(--szin-hatter);
+    font-weight: 600;
+  }
+  .btn-success:hover {
+    filter: brightness(0.92);
+  }
+  .btn-danger {
+    color: var(--szin-hiba);
+    border-color: var(--szin-hiba);
+  }
+  .btn-danger-solid {
+    background: var(--szin-hiba);
+    border-color: var(--szin-hiba);
+    color: var(--szin-hatter);
+    font-weight: 600;
+  }
+  .btn-small {
+    min-height: 32px;
+    padding: var(--tav-1) var(--tav-3);
+    font-size: 0.9rem;
+  }
+  .btn-big {
+    min-height: 52px;
+    padding: var(--tav-3) var(--tav-4);
+    font-size: 1.05rem;
+  }
+  .btn-block {
+    width: 100%;
+  }
+
+  .card {
+    background: var(--szin-hatter);
+    border: 1px solid var(--szin-keret);
+    border-radius: var(--kerekites);
+    padding: var(--tav-4);
+    box-shadow: var(--arnyek);
+  }
+  .card-muted {
+    background: var(--szin-felulet);
+    box-shadow: none;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tav-1);
+    padding: 1px var(--tav-2);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    border: 1px solid var(--szin-keret);
+    background: var(--szin-felulet);
+    color: var(--szin-szoveg);
+    white-space: nowrap;
+  }
+  .badge-success {
+    color: var(--szin-siker);
+    background: var(--szin-siker-halvany);
+    border-color: transparent;
+  }
+  .badge-warning {
+    color: var(--szin-figyelmeztetes);
+    background: var(--szin-figyelmeztetes-halvany);
+    border-color: transparent;
+  }
+  .badge-danger {
+    color: var(--szin-hiba);
+    background: var(--szin-felulet);
+    border-color: var(--szin-hiba);
+  }
+  .badge-info {
+    color: var(--szin-elsodleges);
+    background: var(--szin-elsodleges-halvany);
+    border-color: transparent;
+  }
+
+  .alert {
+    padding: var(--tav-3) var(--tav-4);
+    border-radius: var(--kerekites-kicsi);
+    border: 1px solid var(--szin-keret);
+    background: var(--szin-felulet);
+  }
+  .alert-info {
+    background: var(--szin-elsodleges-halvany);
+    border-color: transparent;
+  }
+  .alert-warning {
+    background: var(--szin-figyelmeztetes-halvany);
+    color: var(--szin-figyelmeztetes);
+    border-color: transparent;
+  }
+  .alert-danger {
+    background: var(--szin-felulet);
+    color: var(--szin-hiba);
+    border-color: var(--szin-hiba);
+  }
+  .alert-success {
+    background: var(--szin-siker-halvany);
+    color: var(--szin-siker);
+    border-color: transparent;
+  }
+
+  /* Gyorsválasztó (pl. „Sérült”, „Hiányzott”): egy koppintással kitölti a megjegyzést. */
+  .chip {
+    font: inherit;
+    min-height: 40px;
+    padding: var(--tav-1) var(--tav-3);
+    border-radius: 999px;
+    border: 1px solid var(--szin-keret);
+    background: var(--szin-felulet);
+    color: var(--szin-szoveg);
+    cursor: pointer;
+  }
+  .chip[aria-pressed='true'] {
+    background: var(--szin-elsodleges-halvany);
+    border-color: var(--szin-elsodleges);
+    color: var(--szin-elsodleges);
+    font-weight: 600;
+  }
+
+  .muted {
+    color: var(--szin-halvany);
+  }
+
+  @media (pointer: coarse) {
+    .btn {
+      min-height: 48px;
+    }
+    .btn-small {
+      min-height: 40px;
+    }
+    .btn-big {
+      min-height: 56px;
+    }
+  }
+}

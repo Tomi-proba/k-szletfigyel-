@@ -18,6 +18,7 @@ import { Button, Card, Checkbox, EmptyState, Input, PageHeader, Select } from '.
 import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
 import { currentMonthRange, currentQuarterRange, isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
+import { useOsszekapcsolva } from '../lib/integracio'
 
 interface LedgerRow {
   date: string
@@ -32,6 +33,7 @@ interface LedgerRow {
 
 export function Ledger() {
   const { isReadOnlyViewer } = useAuth()
+  const osszekapcsolva = useOsszekapcsolva()
   const entries = useStore((s) => s.ledgerEntries)
   const categories = useStore((s) => s.ledgerCategories)
   const products = useStore((s) => s.products)
@@ -134,6 +136,12 @@ export function Ledger() {
 
   return (
     <div>
+      {osszekapcsolva && (
+        <p className="kozos alert alert-info mb-4 text-sm" role="note">
+          <strong>Vezetői nézet, nem könyvelés.</strong> A cég össze van kapcsolva a Könyvelővel: a hivatalos könyvelés és az áfa a Könyvelőben van. Ez a
+          napló a gyors áttekintést szolgálja; a fizetési állapotot ott, ahol a Könyvelő követi, nem lehet itt állítani.
+        </p>
+      )}
       <PageHeader
         title="Pénzügyi napló"
         subtitle="Készlettől és vevőktől független bevételek és kiadások"

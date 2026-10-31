@@ -6,7 +6,7 @@ import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/co
 import { todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
-import { fuggoMentesekBeszamitasa, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
+import { fuggoMentesekBeszamitasa, integracioFrissitesLetoltese, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
 import { mentesiSor } from '../lib/mentes'
 import { helyiTartosTarolo } from '../lib/tartosTarolo'
 import { computeDueRecurringOccurrences } from '../lib/ledger'
@@ -24,6 +24,7 @@ import {
   type LedgerEntry,
   type Location,
   type Movement,
+  type MovementReason,
   type MovementType,
   type Product,
   type PurchaseLot,
@@ -77,6 +78,9 @@ function auditEntry(
  * closed. The closing's own snapshotted numbers are deliberately never
  * rewritten (that would falsify a sent report); this just raises a flag so
  * the office knows to double-check it. A no-op when no closing matches. */
+/** Csak szállítási díjnál van értelme a „számlán van-e?” kérdésnek. */
+const effectiveShippingForMovement = (shippingCost: number | undefined) => (shippingCost ?? 0) > 0
+
 function flagClosingModified(closings: DailyClosing[], locationId: string, date: string): DailyClosing[] {
   const now = new Date().toISOString()
   let matched = false
@@ -129,11 +133,18 @@ export interface RecordMovementInput {
    * correct another one (see cancelSale and deleteMovement's 'correction'
    * mode) - points at the original movement's id. */
   correctsMovementId?: string
+  /** Közvetlen mozgás oka (csak az iroda választhatja): leltári hiány és selejt csak kimenő, leltári
+   * többlet csak bejövő lehet. Ilyenkor a mozgás nem eladás és nem beszerzés (TERV.md F15.5). */
+  ok?: MovementReason
+  /** 'in': a szállító számlájának száma; 'out': a vevőszámla száma (ha van). */
+  invoiceNumber?: string
+  /** 'in', szállítási díjnál: rajta van-e a szállító számláján (igen / nem / undefined = nem tudom). */
+  shippingOnInvoice?: boolean
 }
 
 export type RecordMovementResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid-quantity' | 'product-not-found' | 'insufficient-stock'; resultingStock?: number }
+  | { ok: false; reason: 'invalid-quantity' | 'product-not-found' | 'insufficient-stock' | 'invalid-reason'; resultingStock?: number }
 
 export type DeleteMovementMode = 'correction' | 'soft-delete'
 export type DeleteLedgerEntryMode = 'correction' | 'soft-delete'
@@ -176,6 +187,10 @@ export interface CreatePendingPurchaseInput {
   exchangeRate?: number
   /** Várható ÁFA kulcs - jóváhagyáskor kerül át a létrejövő PurchaseLot-ra. */
   vatRatePercent?: number
+  /** A szállító számlájának száma, ha már ismert (jóváhagyáskor is megadható). */
+  invoiceNumber?: string
+  /** Szállítási díjnál: rajta van-e a szállító számláján (undefined = nem tudni). */
+  shippingOnInvoice?: boolean
 }
 
 export type ApprovePurchaseOrderResult =
@@ -208,6 +223,36 @@ export type ApproveIntegrationResult =
     }
 
 export type RejectIntegrationResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' | 'not-integration' | 'reason-required' }
+
+/** Részleges visszáru (TERV.md F15.8) rögzítésének eredménye. */
+export type CreateReturnResult =
+  | { ok: true; id: string }
+  | {
+      ok: false
+      reason: 'not-found' | 'not-returnable' | 'invalid-quantity' | 'reason-required' | 'too-much' | 'not-enough-in-lot'
+      /** too-much: ennyi vehető még vissza; not-enough-in-lot: ennyi maradt az eredeti beszerzési tételből. */
+      available?: number
+    }
+
+/** Ennyi vehető még vissza egy eladásból / küldhető vissza egy beszerzésből (a függő visszárukat is beszámítva). */
+export function returnableQuantity(movements: Movement[], original: Movement): number {
+  const already = movements
+    .filter((m) => m.returnOfMovementId === original.id && !m.deletedAt && m.approvalStatus !== 'rejected')
+    .reduce((sum, m) => sum + (m.approvalStatus === 'pending' ? (m.orderedQuantity ?? m.quantity) : m.quantity), 0)
+  return Math.max(0, original.quantity - already)
+}
+
+/** Visszáru csak jóváhagyott, nem visszavont, közönséges beszerzéshez vagy eladáshoz rögzíthető. */
+export function isReturnable(m: Movement): boolean {
+  return (
+    !m.deletedAt &&
+    (m.approvalStatus === undefined || m.approvalStatus === 'approved') &&
+    !m.cancelled &&
+    !m.correctsMovementId &&
+    !m.returnOfMovementId &&
+    (m.ok === undefined || m.ok === 'normal')
+  )
+}
 
 export type ResubmitPendingMovementResult =
   | { ok: true }
@@ -307,11 +352,16 @@ interface AppState {
 
   // Kétlépcsős jóváhagyás (iroda <-> raktár)
   createPendingPurchaseOrder: (input: CreatePendingPurchaseInput) => RecordMovementResult
-  approvePurchaseOrder: (id: string, actualQuantity?: number, discrepancyNote?: string) => ApprovePurchaseOrderResult
+  approvePurchaseOrder: (
+    id: string,
+    actualQuantity?: number,
+    discrepancyNote?: string,
+    invoice?: { invoiceNumber?: string; shippingOnInvoice?: boolean },
+  ) => ApprovePurchaseOrderResult
   createPendingSalePrep: (input: CreatePendingSaleInput) => RecordMovementResult
   approveSalePrep: (
     id: string,
-    input?: { vatRatePercent?: number; isPaid?: boolean },
+    input?: { vatRatePercent?: number; isPaid?: boolean; invoiceNumber?: string },
     opts?: { allowNegativeStock?: boolean },
   ) => ApproveSaleResult
   rejectSalePrep: (id: string, reason?: string) => RejectSaleResult
@@ -325,6 +375,10 @@ interface AppState {
     opts?: { allowNegativeStock?: boolean },
   ) => ApproveIntegrationResult
   rejectIntegrationMovement: (id: string, reason: string) => RejectIntegrationResult
+  /** Részleges visszáru (F15.8): vevői visszavétel egy eladásból, vagy szállítói visszaküldés egy
+   * beszerzésből. Jóváhagyandóként jön létre (visszavételt a raktár, visszaküldést az iroda hagyja jóvá
+   * ugyanazzal a jóváhagyással, mint a Könyvelőből jött mozgásokat); a készlet csak akkor változik. */
+  createReturn: (input: { originalId: string; quantity: number; reason: string; date?: string }) => CreateReturnResult
 
   setMovementPaid: (movementId: string, isPaid: boolean) => void
   setLotPaid: (lotId: string, isPaid: boolean) => void
@@ -698,9 +752,16 @@ export const useStore = create<AppState>()(
           vatRatePercent,
           vatReclaimable,
           correctsMovementId,
+          ok: reason,
+          invoiceNumber,
+          shippingOnInvoice,
         } = input
         if (!Number.isFinite(quantity) || quantity <= 0) {
           return { ok: false, reason: 'invalid-quantity' }
+        }
+        const inventoryReason = reason && reason !== 'normal' ? reason : undefined
+        if (inventoryReason && (inventoryReason === 'leltar_tobblet') !== (type === 'in')) {
+          return { ok: false, reason: 'invalid-reason' }
         }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) {
           return { ok: false, reason: 'invalid-quantity' }
@@ -746,13 +807,15 @@ export const useStore = create<AppState>()(
           // has real history to draw on.
           const effectiveUnitPrice = unitPrice ?? product.purchasePrice
           const effectiveShipping = shippingCost ?? 0
-          const lotVatReclaimable = vatRatePercent !== undefined ? (vatReclaimable ?? true) : undefined
+          // A leltári többlet nem beszerzés: nincs rajta előzetesen felszámított áfa.
+          const lotVat = inventoryReason ? undefined : vatRatePercent
+          const lotVatReclaimable = lotVat !== undefined ? (vatReclaimable ?? true) : undefined
           const batchUnitCost = lotUnitCost({
             unitPrice: effectiveUnitPrice,
             shippingCost: effectiveShipping,
             quantity,
             exchangeRate: lotExchangeRate,
-            vatRatePercent,
+            vatRatePercent: lotVat,
             vatReclaimable: lotVatReclaimable,
           })
 
@@ -772,7 +835,7 @@ export const useStore = create<AppState>()(
             dueDate: dueDate || undefined,
             isPaid: lotIsPaid,
             paidDate: lotIsPaid ? todayISO() : undefined,
-            vatRatePercent,
+            vatRatePercent: lotVat,
             vatReclaimable: lotVatReclaimable,
           }
           if (unitPrice !== undefined) movementUnitPrice = unitPrice
@@ -829,16 +892,20 @@ export const useStore = create<AppState>()(
               currency: type === 'in' && lotCurrency !== 'HUF' ? lotCurrency : undefined,
               exchangeRate: type === 'in' && lotCurrency !== 'HUF' ? lotExchangeRate : undefined,
               unitCost: movementUnitCost,
-              customerId: type === 'out' ? customerId : undefined,
+              customerId: type === 'out' && !inventoryReason ? customerId : undefined,
               // Snapshotted for every sale (not just customer-tracked ones)
               // so VAT and any later reporting always has the price that
               // was actually charged, not today's (possibly changed) price.
-              saleUnitPrice: type === 'out' ? product.salePrice : undefined,
-              isPaid: type === 'out' && customerId ? (isPaid ?? true) : undefined,
-              vatRatePercent: type === 'out' ? vatRatePercent : undefined,
-              saleStatus: type === 'out' ? 'pending' : undefined,
-              saleStatusChangedAt: type === 'out' ? new Date().toISOString() : undefined,
+              // A leltári hiány és a selejt nem eladás: nincs eladási ára, áfája, kiszállítása.
+              saleUnitPrice: type === 'out' && !inventoryReason ? product.salePrice : undefined,
+              isPaid: type === 'out' && customerId && !inventoryReason ? (isPaid ?? true) : undefined,
+              vatRatePercent: type === 'out' && !inventoryReason ? vatRatePercent : undefined,
+              saleStatus: type === 'out' && !inventoryReason ? 'pending' : undefined,
+              saleStatusChangedAt: type === 'out' && !inventoryReason ? new Date().toISOString() : undefined,
               correctsMovementId,
+              ok: inventoryReason,
+              invoiceNumber: invoiceNumber?.trim() || undefined,
+              shippingOnInvoice: type === 'in' && effectiveShippingForMovement(shippingCost) ? shippingOnInvoice : undefined,
             },
           ],
           dailyClosings: flagClosingModified(state.dailyClosings, closingCheckLocationId, closingCheckDate),
@@ -874,7 +941,8 @@ export const useStore = create<AppState>()(
       setMovementPaid: (movementId, isPaid) =>
         set((state) => {
           const movement = state.movements.find((m) => m.id === movementId)
-          if (!movement) return state
+          // Ha a fizetést a Könyvelő követi (a kiegyenlítésből), kézzel nem állítható (KK6).
+          if (!movement || movement.fizetesKonyvelobol) return state
           const product = state.products.find((p) => p.id === movement.productId)
           const changes = diffFields('movement', { isPaid: movement.isPaid }, { isPaid })
           return {
@@ -899,7 +967,7 @@ export const useStore = create<AppState>()(
       setLotPaid: (lotId, isPaid) =>
         set((state) => {
           const lot = state.lots.find((l) => l.id === lotId)
-          if (!lot) return state
+          if (!lot || lot.fizetesKonyvelobol) return state
           const product = state.products.find((p) => p.id === lot.productId)
           const changes = diffFields('lot', { isPaid: lot.isPaid }, { isPaid })
           return {
@@ -1164,7 +1232,7 @@ export const useStore = create<AppState>()(
         }),
 
       createPendingPurchaseOrder: (input) => {
-        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent } = input
+        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) return { ok: false, reason: 'invalid-quantity' }
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) return { ok: false, reason: 'invalid-quantity' }
@@ -1197,6 +1265,8 @@ export const useStore = create<AppState>()(
               exchangeRate: enteringPrice && orderCurrency !== 'HUF' ? exchangeRate : undefined,
               vatRatePercent,
               approvalStatus: 'pending',
+              invoiceNumber: invoiceNumber?.trim() || undefined,
+              shippingOnInvoice: effectiveShippingForMovement(shippingCost) ? shippingOnInvoice : undefined,
             },
           ],
           auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Rendelés leadva - ${label}`)],
@@ -1204,7 +1274,7 @@ export const useStore = create<AppState>()(
         return { ok: true }
       },
 
-      approvePurchaseOrder: (id, actualQuantity, discrepancyNote) => {
+      approvePurchaseOrder: (id, actualQuantity, discrepancyNote, invoice) => {
         const movement = get().movements.find((m) => m.id === id)
         if (!movement) return { ok: false, reason: 'not-found' }
         if (movement.type !== 'in' || movement.approvalStatus !== 'pending') return { ok: false, reason: 'not-pending' }
@@ -1266,7 +1336,16 @@ export const useStore = create<AppState>()(
           lots: [...state.lots, newLot],
           movements: state.movements.map((m) =>
             m.id === id
-              ? { ...m, quantity: finalQuantity, vatRatePercent: undefined, approvalStatus: 'approved', approvedAt: now, discrepancyNote: finalNote }
+              ? {
+                  ...m,
+                  quantity: finalQuantity,
+                  vatRatePercent: undefined,
+                  approvalStatus: 'approved',
+                  approvedAt: now,
+                  discrepancyNote: finalNote,
+                  invoiceNumber: invoice?.invoiceNumber?.trim() || m.invoiceNumber,
+                  shippingOnInvoice: effectiveShipping > 0 ? (invoice?.shippingOnInvoice ?? m.shippingOnInvoice) : undefined,
+                }
               : m,
           ),
           dailyClosings: flagClosingModified(state.dailyClosings, movement.locationId, movement.date),
@@ -1351,6 +1430,7 @@ export const useStore = create<AppState>()(
                   saleUnitPrice: product.salePrice,
                   isPaid,
                   vatRatePercent,
+                  invoiceNumber: input?.invoiceNumber?.trim() || m.invoiceNumber,
                   saleStatus: 'pending',
                   saleStatusChangedAt: now,
                   approvalStatus: 'approved',
@@ -1401,7 +1481,9 @@ export const useStore = create<AppState>()(
       approveIntegrationMovement: (id, input, opts) => {
         const movement = get().movements.find((m) => m.id === id)
         if (!movement) return { ok: false, reason: 'not-found' }
-        if (!movement.integracioEsemenyId) return { ok: false, reason: 'not-integration' }
+        // A Könyvelőből jött mozgások és a részleges visszáruk jóváhagyása (mindkettőnél a ténylegesen mozgó
+        // mennyiséggel, eltérésnél megjegyzéssel).
+        if (!movement.integracioEsemenyId && !movement.returnOfMovementId) return { ok: false, reason: 'not-integration' }
         if (movement.approvalStatus !== 'pending' || movement.deletedAt) return { ok: false, reason: 'not-pending' }
         const product = get().products.find((p) => p.id === movement.productId)
         if (!product) return { ok: false, reason: 'not-found' }
@@ -1510,7 +1592,7 @@ export const useStore = create<AppState>()(
       rejectIntegrationMovement: (id, reason) => {
         const movement = get().movements.find((m) => m.id === id)
         if (!movement) return { ok: false, reason: 'not-found' }
-        if (!movement.integracioEsemenyId) return { ok: false, reason: 'not-integration' }
+        if (!movement.integracioEsemenyId && !movement.returnOfMovementId) return { ok: false, reason: 'not-integration' }
         if (movement.approvalStatus !== 'pending' || movement.deletedAt) return { ok: false, reason: 'not-pending' }
         const trimmed = reason.trim()
         if (!trimmed) return { ok: false, reason: 'reason-required' }
@@ -1525,6 +1607,53 @@ export const useStore = create<AppState>()(
           ],
         }))
         return { ok: true }
+      },
+
+      createReturn: ({ originalId, quantity, reason, date }) => {
+        const original = get().movements.find((m) => m.id === originalId)
+        if (!original) return { ok: false, reason: 'not-found' }
+        if (!isReturnable(original)) return { ok: false, reason: 'not-returnable' }
+        if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+        const trimmed = reason.trim()
+        if (!trimmed) return { ok: false, reason: 'reason-required' }
+        const available = returnableQuantity(get().movements, original)
+        if (quantity > available + 1e-9) return { ok: false, reason: 'too-much', available }
+        const customerReturn = original.type === 'out'
+        if (!customerReturn) {
+          // A visszaküldés az eredeti beszerzési tételből fogy; ha abból nincs elég, nem választunk másikat.
+          const lot = get().lots.find((l) => l.movementId === original.id && !l.deletedAt)
+          const inLot = lot?.remainingQuantity ?? 0
+          if (quantity > inLot + 1e-9) return { ok: false, reason: 'not-enough-in-lot', available: inLot }
+        }
+        const product = get().products.find((p) => p.id === original.productId)
+        const id = createId()
+        const label = `${product?.name ?? 'Termék'} (${quantity} ${product?.unit ?? 'db'})`
+        set((state) => ({
+          movements: [
+            ...state.movements,
+            {
+              id,
+              productId: original.productId,
+              locationId: original.locationId,
+              date: date ?? todayISO(),
+              type: customerReturn ? 'in' : 'out',
+              quantity,
+              orderedQuantity: quantity,
+              note: trimmed,
+              createdAt: new Date().toISOString(),
+              // A vevői visszavétel az eladáskori egységköltségen kerül vissza a készletbe.
+              unitPrice: customerReturn ? (original.unitCost ?? 0) : undefined,
+              customerId: customerReturn ? original.customerId : undefined,
+              returnOfMovementId: original.id,
+              approvalStatus: 'pending',
+            },
+          ],
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', id, label, 'create', `${customerReturn ? 'Visszavétel rögzítve (a raktár hagyja jóvá)' : 'Visszaküldés előkészítve (az iroda hagyja jóvá)'} - ${label}: ${trimmed}`),
+          ],
+        }))
+        return { ok: true, id }
       },
 
       resubmitPendingMovement: (id, updates) => {
@@ -1948,6 +2077,33 @@ export function hydrateFromRemote(
   // Egy korábbi munkamenetből megmaradt, még el nem küldött mentések a betöltött adatra épülnek
   // (az elakadtak nem: azokat a felhasználó jóváhagyásával eldobjuk).
   if (mentesiSor.aktualisAllapot.fajta !== 'elakadt') fuggoMentesekBeszamitasa(mentesiSor.fuggoTetelek)
+}
+
+/**
+ * Az integrációs szolgáltatás szerveren végzett változásainak betöltése (a Könyvelőből jött jóváhagyandó
+ * mozgások, a Könyvelő által követett fizetés) - a jóváhagyási lista ezt percenként hívja (F15.4). Csak
+ * szerveres módban; a még el nem küldött helyi módosításokat nem írja felül. Igaz, ha változott valami.
+ */
+export async function integracioFrissites(): Promise<boolean> {
+  if (useStore.getState().dataMode !== 'remote') return false
+  const foglalt = new Set(mentesiSor.fuggoTetelek.flatMap((t) => t.valtozasok.map((v) => `${v.tabla}:${v.sor.id as string}`)))
+  const { movements, lots } = await integracioFrissitesLetoltese(foglalt)
+  if (!movements.length && !lots.length) return false
+  const csere = <T extends { id: string }>(regi: T[], uj: T[]) => {
+    if (!uj.length) return regi
+    const byId = new Map(uj.map((x) => [x.id, x]))
+    const megvolt = new Set<string>()
+    const kesz = regi.map((x) => {
+      const u = byId.get(x.id)
+      if (!u) return x
+      megvolt.add(x.id)
+      return u
+    })
+    return [...kesz, ...uj.filter((x) => !megvolt.has(x.id))]
+  }
+  // Közvetlen setState: ez letöltés, nem helyi módosítás, tehát nem megy vissza mentésként.
+  useStore.setState((s) => ({ movements: csere(s.movements, movements), lots: csere(s.lots, lots) }))
+  return true
 }
 
 /** Igaz, amíg a módváltás miatt a helyi pillanatképet nem szabad írni (lásd a persist storage-ot). */

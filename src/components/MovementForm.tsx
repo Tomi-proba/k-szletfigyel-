@@ -2,13 +2,29 @@ import { Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
-import type { Currency, MovementType } from '../types'
+import type { Currency, MovementReason, MovementType } from '../types'
+import { lezartIdoszakban, useLezartIdoszakok } from '../lib/integracio'
 import { todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency } from '../lib/format'
 import { ProductPicker } from './ProductPicker'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
+
+/** Az „Ok” (csak az iroda választhatja): a leltári hiány és a selejt kimenő, a többlet bejövő (F15.5). */
+const OK_VALASZTEK: Record<MovementType, { value: MovementReason; label: string }[]> = {
+  out: [
+    { value: 'normal', label: 'Normál (eladás)' },
+    { value: 'leltar_hiany', label: 'Leltári hiány' },
+    { value: 'selejt', label: 'Selejt' },
+  ],
+  in: [
+    { value: 'normal', label: 'Normál (beszerzés)' },
+    { value: 'leltar_tobblet', label: 'Leltári többlet' },
+  ],
+}
+
+type SzamlanVan = 'igen' | 'nem' | 'nemtudom'
 
 const CURRENCIES: { value: Currency; label: string }[] = [
   { value: 'HUF', label: 'HUF' },
@@ -52,6 +68,12 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     return defaultRate !== undefined ? String(defaultRate) : ''
   })
   const [vatReclaimable, setVatReclaimable] = useState(true)
+  const [ok, setOk] = useState<MovementReason>('normal')
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [szamlanVan, setSzamlanVan] = useState<SzamlanVan>('nemtudom')
+  const lezartak = useLezartIdoszakok()
+  const lezart = lezartIdoszakban(date, lezartak)
+  const leltar = ok !== 'normal'
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -153,8 +175,11 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         isPaid: type === 'out' && trackCustomer ? isPaid : undefined,
         dueDate: type === 'in' && trackDueDate ? dueDate : undefined,
         invoicePaid: type === 'in' && trackDueDate ? invoicePaid : undefined,
-        vatRatePercent: vatRateNumber,
-        vatReclaimable: type === 'in' ? vatReclaimable : undefined,
+        vatRatePercent: leltar ? undefined : vatRateNumber,
+        vatReclaimable: type === 'in' && !leltar ? vatReclaimable : undefined,
+        ok: leltar ? ok : undefined,
+        invoiceNumber: leltar ? undefined : invoiceNumber,
+        shippingOnInvoice: type === 'in' && !leltar && (shippingCostNumber ?? 0) > 0 ? (szamlanVan === 'nemtudom' ? undefined : szamlanVan === 'igen') : undefined,
       },
       { allowNegativeStock },
     )
@@ -170,6 +195,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       resetDueDateSection()
       setVatRate(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
       setVatReclaimable(true)
+      setOk('normal')
+      setInvoiceNumber('')
+      setSzamlanVan('nemtudom')
       setSuccessTick((t) => t + 1)
       onDone?.()
       return
@@ -179,7 +207,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setPendingNegative({ resultingStock: result.resultingStock ?? 0 })
       return
     }
-    setError('A mozgás nem menthető.')
+    setError(result.reason === 'invalid-reason' ? 'Ez az ok ehhez az irányhoz nem választható.' : 'A mozgás nem menthető.')
   }
 
   return (
@@ -197,7 +225,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setType('in')}
+            onClick={() => {
+              setType('in')
+              setOk('normal')
+            }}
             className={`rounded-lg border py-3 text-sm font-semibold transition-colors ${
               type === 'in'
                 ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
@@ -208,7 +239,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </button>
           <button
             type="button"
-            onClick={() => setType('out')}
+            onClick={() => {
+              setType('out')
+              setOk('normal')
+            }}
             className={`rounded-lg border py-3 text-sm font-semibold transition-colors ${
               type === 'out'
                 ? 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
@@ -219,6 +253,25 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </button>
         </div>
       </FieldGroup>
+
+      {!isWarehouseUser && (
+        <Field label="Ok">
+          <Select value={ok} onChange={(e) => setOk(e.target.value as MovementReason)}>
+            {OK_VALASZTEK[type].map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          {leltar && (
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+              {type === 'out'
+                ? 'Nem eladás: nincs vevő, eladási ár és áfa. A bekerülési értéken (FIFO/átlagár) csökken a készlet; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'
+                : 'Nem beszerzés: nincs szállító és áfa. A megadott egységáron kerül a készletbe; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'}
+            </span>
+          )}
+        </Field>
+      )}
 
       <FieldGroup label={`Mennyiség${product ? ` (${product.unit})` : ''}`}>
         <div className="flex items-center gap-2">
@@ -302,7 +355,28 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'in' && !isWarehouseUser && (
+      {type === 'in' && !isWarehouseUser && !leltar && (
+        <Field label="Szállítói számla száma (opcionális)">
+          <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
+        </Field>
+      )}
+
+      {type === 'in' && !isWarehouseUser && !leltar && (shippingCostNumber ?? 0) > 0 && (
+        <FieldGroup label="A szállítási díj a szállító számláján van?">
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="A szállítási díj a szállító számláján van?">
+            {(['igen', 'nem', 'nemtudom'] as const).map((v) => (
+              <button key={v} type="button" className="chip" aria-pressed={szamlanVan === v} onClick={() => setSzamlanVan(v)}>
+                {v === 'igen' ? 'Igen' : v === 'nem' ? 'Nem (külön számla)' : 'Nem tudom'}
+              </button>
+            ))}
+          </div>
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            A bekerülési értékbe mindenképp beleszámít. A Könyvelő csak az „Igen” esetén teszi a szállító számlájára; egyébként ott Teendő lesz (nem találgat).
+          </span>
+        </FieldGroup>
+      )}
+
+      {type === 'in' && !isWarehouseUser && !leltar && (
         <FieldGroup label="ÁFA (opcionális)">
           <div className="grid grid-cols-2 gap-3">
             <label className="mb-3 block text-sm">
@@ -347,7 +421,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'in' && !isWarehouseUser && (
+      {type === 'in' && !isWarehouseUser && !leltar && (
         <FieldGroup label="Beszállítói számla fizetési határideje">
           <Checkbox
             label="Fizetési határidő nyomon követése (kimenő kötelezettség)"
@@ -396,7 +470,13 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </FieldGroup>
       )}
 
-      {type === 'out' && !isWarehouseUser && (
+      {type === 'out' && !isWarehouseUser && !leltar && (
+        <Field label="Vevőszámla száma (opcionális)">
+          <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="ha van számla" />
+        </Field>
+      )}
+
+      {type === 'out' && !isWarehouseUser && !leltar && (
         <Field label="ÁFA kulcs (%, opcionális)">
           <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
           <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
@@ -405,7 +485,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </Field>
       )}
 
-      {type === 'out' && !isWarehouseUser && (
+      {type === 'out' && !isWarehouseUser && !leltar && (
         <FieldGroup label="Vevő">
           <Checkbox
             label="Nem sima eladás - vevőhöz rögzítem"
@@ -475,6 +555,12 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
 
       <Field label="Dátum">
         <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
+        {lezart && (
+          <span className="kozos alert alert-warning mt-2 block text-sm" role="status">
+            Ez a nap a Könyvelőben lezárt időszakba esik ({lezart.kezdet} – {lezart.veg}). A mozgás rögzíthető, de a könyvelésben csak egy nyitott időszakba
+            kerülhet; szóljon a könyvelőnek.
+          </span>
+        )}
       </Field>
 
       <Field label="Megjegyzés (opcionális)">

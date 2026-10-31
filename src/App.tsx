@@ -23,6 +23,7 @@ import { Subscription } from './pages/Subscription'
 import { Admin } from './pages/Admin'
 import { Team } from './pages/Team'
 import { Approvals } from './pages/Approvals'
+import { Jovahagyando } from './pages/Jovahagyando'
 import { AsztaliAdatMento } from './components/AsztaliAdatMento'
 
 function App() {
@@ -127,6 +128,7 @@ function App() {
             }
           />
           <Route path="napi-zaras" element={<DailyClosingPage />} />
+          <Route path="jovahagyasra-var" element={<Jovahagyando />} />
           <Route
             path="napi-jelentesek"
             element={

@@ -21,6 +21,12 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
 
   const [actualQuantity, setActualQuantity] = useState(String(movement.quantity))
   const [note, setNote] = useState('')
+  // A számlaszám és a szállítási díj kérdése az irodai adat (F15.3, F15.7/2): a raktáros nem látja.
+  const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
+  const [szamlanVan, setSzamlanVan] = useState<'igen' | 'nem' | 'nemtudom'>(
+    movement.shippingOnInvoice === undefined ? 'nemtudom' : movement.shippingOnInvoice ? 'igen' : 'nem',
+  )
+  const vanSzallitas = (movement.shippingCost ?? 0) > 0
   const [error, setError] = useState<string | null>(null)
 
   const actualQtyNumber = Number(actualQuantity.replace(',', '.'))
@@ -31,7 +37,12 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
     if (!Number.isFinite(actualQtyNumber) || actualQtyNumber <= 0) {
       return setError('A tényleges mennyiségnek pozitív számnak kell lennie.')
     }
-    const result = approvePurchaseOrder(movement.id, actualQtyNumber, note.trim() || undefined)
+    const result = approvePurchaseOrder(
+      movement.id,
+      actualQtyNumber,
+      note.trim() || undefined,
+      isWarehouseUser ? undefined : { invoiceNumber, shippingOnInvoice: vanSzallitas && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined },
+    )
     if (!result.ok) return setError('A jóváhagyás nem sikerült.')
     onClose()
   }
@@ -65,6 +76,25 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
       <Field label="Megjegyzés az eltérésről (opcionális)">
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. sérült volt 2 db, ezért kevesebb…" />
       </Field>
+
+      {!isWarehouseUser && (
+        <Field label="Szállítói számla száma (opcionális)">
+          <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
+        </Field>
+      )}
+
+      {!isWarehouseUser && vanSzallitas && (
+        <div className="kozos mb-3">
+          <span className="mb-1 block text-sm font-medium">A szállítási díj a szállító számláján van?</span>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="A szállítási díj a szállító számláján van?">
+            {(['igen', 'nem', 'nemtudom'] as const).map((v) => (
+              <button key={v} type="button" className="chip" aria-pressed={szamlanVan === v} onClick={() => setSzamlanVan(v)}>
+                {v === 'igen' ? 'Igen' : v === 'nem' ? 'Nem (külön számla)' : 'Nem tudom'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 

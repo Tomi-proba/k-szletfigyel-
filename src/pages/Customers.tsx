@@ -1,5 +1,5 @@
 import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
 import { useAlerts } from '../hooks/useAlerts'
@@ -73,6 +73,8 @@ export function Customers() {
   const deleteCustomer = useStore((s) => s.deleteCustomer)
   const restoreCustomer = useStore((s) => s.restoreCustomer)
   const setMovementPaid = useStore((s) => s.setMovementPaid)
+  const allMovements = useStore((s) => s.movements)
+  const konyvelobolKovetett = useMemo(() => new Set(allMovements.filter((m) => m.fizetesKonyvelobol).map((m) => m.id)), [allMovements])
   const alerts = useAlerts()
 
   const [creating, setCreating] = useState(false)
@@ -115,10 +117,14 @@ export function Customers() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
-                  {!isReadOnlyViewer && (
-                    <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
-                      <CheckCircle2 size={16} /> Kifizetve
-                    </Button>
+                  {konyvelobolKovetett.has(sale.movementId) ? (
+                    <span className="badge badge-info kozos" title="A fizetést a Könyvelő a kiegyenlítésből követi; itt nem állítható.">A Könyvelő követi</span>
+                  ) : (
+                    !isReadOnlyViewer && (
+                      <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                        <CheckCircle2 size={16} /> Kifizetve
+                      </Button>
+                    )
                   )}
                 </div>
               </div>

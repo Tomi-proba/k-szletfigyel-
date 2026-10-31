@@ -966,3 +966,74 @@ kiadásnál vagy visszavételnél a bekerülési érték.
   átnevezése.
 - Ezekből a mozgásokból nem megy külön beszerzés- vagy eladásesemény, így a Könyvelőben a számla nem
   duplázódik.
+
+## 25. A felület: jóváhagyás telefonról, kapcsolat a többi programmal, visszáru (2026-10-31, I3 5. lépés)
+
+### 25.1 „Jóváhagyásra vár” (`/jovahagyasra-var`)
+Ide kerül a Könyvelő számláiból jött áru és a részleges visszáru. A menüben és a Kezdőlapon akkor jelenik
+meg, ha van ilyen tétel, saját számlálóval. A lista percenként magától frissül, és van rajta „Frissítés”
+gomb is.
+
+- **Telefonra tervezve:**
+  - egy oszlopban, nagy kártyákon: termék, mennyiség, honnan jött („Könyvelő, SZSZ-…”), dátum;
+  - a fő gomb 52–56 px magas és teljes szélességű, alatta két másik gomb;
+  - nincs vízszintes görgetés.
+
+  Valódi böngészőben, 390 px széles telefonméretben ellenőrizve.
+- **Egyszerű szavak, a helyzethez illően:**
+
+  | Helyzet | Fő gomb | Ha kevesebb | Ha semmi |
+  |---|---|---|---|
+  | beérkező áru | Beérkezett | Kevesebb jött | Nem érkezett meg |
+  | kiadandó áru | Kiadva | Kevesebb ment ki | Nem ment ki |
+  | vevő hozza vissza | Visszajött | Kevesebb jött vissza | Nem jött vissza |
+  | visszaküldés a szállítónak | Visszaküldve | Kevesebbet küldtünk | Nem küldtük vissza |
+
+- **„Kevesebb …”:** megkérdezi a tényleges mennyiséget. Az okot egy koppintással ki lehet választani
+  („Hiányzott”, „Sérült” stb.), vagy be lehet írni; ok nélkül nem rögzíthető. Az eltérés a megjegyzéssel
+  együtt a Könyvelőbe kerül, és ott Teendő lesz belőle.
+- **Ha nincs elég áru:** a program megmondja, mennyi maradna. Csak a „Megszámoltam, mégis kiadom” gombbal
+  lehet így is továbbmenni.
+- **Ki hagyhatja jóvá:**
+  - a Könyvelőből jött tételt a raktár (és az iroda);
+  - a kézi visszavételt a raktár, a kézi visszaküldést az iroda (nem az, aki rögzítette);
+  - a tulajdonos csak megnézheti.
+- A Mozgásnaplóban ezeknél a tételeknél a „Jóváhagyás” gomb ide visz. A Könyvelőből jött tétel ott nem
+  törölhető: azt a Könyvelőben, sztornóval lehet visszavonni.
+
+### 25.2 Beállítások → Kapcsolat a többi programmal (iroda)
+- Állapot: össze van-e kapcsolva a cég, hány esemény vár és mióta, mi volt az utolsó hiba.
+- **Kapcsolódási kód** (csak a fő iroda), a cég adószámával. A kód csak egyszer látszik, és másolható.
+- **Teendők.** Ha egy változás nem küldhető el, a fő iroda indoklással kihagyhatja; ez a naplóba kerül.
+- Helyi módban a szakasz csak annyit mond, hogy összekapcsolni szerveres módban lehet.
+
+### 25.3 Rögzítésnél és jóváhagyásnál
+- **„Ok” mező** (csak az iroda): normál / leltári hiány / selejt (kimenő), illetve normál / leltári
+  többlet (bejövő). A leltári mozgás nem eladás és nem beszerzés: nincs vevője, eladási ára, áfája.
+- **Számlaszám:** a rögzítéskor, a rendeléskor és a jóváhagyáskor is megadható. Kimenőnél a vevőszámla
+  számával a Könyvelő párosít.
+- **„A szállítási díj a szállító számláján van?”** Igen / Nem (külön számla) / Nem tudom; csak ha van
+  szállítási díj. Megadható a rendeléskor, a rögzítéskor és az irodai jóváhagyáskor.
+- **Lezárt időszak:** ha a dátum a Könyvelőben lezárt időszakba esik, figyelmeztetés jelenik meg; a
+  rögzítést nem tiltja.
+
+### 25.4 Részleges visszáru (F15.8)
+- A Mozgásnaplóban a jóváhagyott eladás sorában „Visszavétel”, a beszerzés sorában „Visszaküldés”.
+- Meg kell adni a mennyiséget és az okot. A program kiírja, legfeljebb mennyi vehető vissza, illetve küldhető
+  vissza ugyanabból a beszerzésből.
+- A visszáru jóváhagyásra vár; a készlet csak a jóváhagyáskor változik.
+
+### 25.5 Fizetés és vezetői nézet (KK6, KK11)
+- Ahol a fizetést a Könyvelő követi, a „Kifizetve” gomb helyett „A Könyvelő követi” felirat látszik;
+  kézzel nem állítható.
+- Összekapcsolt cégnél a Pénzügyi napló tetején: „Vezetői nézet, nem könyvelés”.
+
+### 25.6 Közös kinézet (a későbbi közös felülethez)
+- **Tokenek:** a `src/kozos/dizajn-tokens.css` a közös dizájn-tokenek (AWEBOLDAL `packages/dizajn`)
+  változatlan másolata. A teszt a lenyomattal ellenőrzi, hogy senki nem írta át.
+- **Komponensek:** a `src/kozos/kozos.css`-ben a közös gombok, kártyák, címkék és figyelmeztetések vannak.
+  Ugyanazok az osztálynevek, mint a Könyvelőben (`.btn`, `.btn-primary`, `.card`, `.badge`, `.alert`),
+  de csak a közös tokenekre építenek. A teszt ellenőrzi, hogy nincs bennük beégetett szín.
+- Az új képernyők (jóváhagyási lista, Integráció beállítás, visszáru) már ezekből épülnek, így változtatás
+  nélkül beköltözhetnek a közös felületbe. A régi képernyők a beköltözéskor állnak át (TERV.md C.3).
+- A sötét mód a közös felülettel jön; addig a Készlet világos marad (`data-theme="light"`).

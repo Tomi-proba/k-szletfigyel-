@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { IntegracioBeallitas } from '../components/IntegracioBeallitas'
 import { useStore } from '../store/useStore'
 import { DEFAULT_SETTINGS } from '../types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -115,6 +116,10 @@ export function Settings() {
           </Button>
           {regiKereses && <AsztaliAdatMento kenyszeritett onClose={() => setRegiKereses(false)} />}
         </Card>
+      )}
+
+      {(effectiveRole === 'fo_iroda' || effectiveRole === 'iroda' || effectiveRole === 'tulajdonos' || !effectiveRole) && (
+        <IntegracioBeallitas foIroda={effectiveRole === 'fo_iroda'} />
       )}
 
       {profile && (

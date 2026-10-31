@@ -18,6 +18,7 @@ import {
   type UnpaidSale,
 } from '../lib/alerts'
 import { computePayableObligations, type PayableObligation } from '../lib/payables'
+import { jovahagyandoIntegracios } from '../lib/integracio'
 import { computeMissingClosings, type MissingClosingAlert } from '../lib/dailyClosing'
 import { todayISO } from '../lib/dates'
 import type { Movement, Product } from '../types'
@@ -52,6 +53,8 @@ export interface AlertsData {
    * raktáros pont ezekre vár/ezeket küldte be, nem elrejteni kell előle). */
   pendingPurchaseApprovals: Movement[]
   pendingSaleApprovals: Movement[]
+  /** A Könyvelőből jött és a visszáru-mozgások, amelyek jóváhagyásra várnak (F15.4, F15.8). */
+  pendingIntegrationApprovals: Movement[]
   rejectedSales: Movement[]
 }
 
@@ -100,8 +103,10 @@ export function useAlerts(): AlertsData {
     const missingClosings = computeMissingClosings(locations, movements, dailyClosings, settings.missingClosingGraceDays, todayISO())
 
     const activeMovements = movements.filter((m) => !m.deletedAt)
-    const pendingPurchaseApprovals = activeMovements.filter((m) => m.type === 'in' && m.approvalStatus === 'pending')
-    const pendingSaleApprovals = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'pending')
+    // A Könyvelőből jött és a visszáru-mozgásoknak saját jóváhagyási listájuk van (pages/Jovahagyando.tsx).
+    const pendingPurchaseApprovals = activeMovements.filter((m) => m.type === 'in' && m.approvalStatus === 'pending' && !jovahagyandoIntegracios(m))
+    const pendingSaleApprovals = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'pending' && !jovahagyandoIntegracios(m))
+    const pendingIntegrationApprovals = activeMovements.filter(jovahagyandoIntegracios)
     const rejectedSales = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'rejected')
 
     return {
@@ -119,6 +124,7 @@ export function useAlerts(): AlertsData {
       missingClosings,
       pendingPurchaseApprovals,
       pendingSaleApprovals,
+      pendingIntegrationApprovals,
       rejectedSales,
     }
   }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser])

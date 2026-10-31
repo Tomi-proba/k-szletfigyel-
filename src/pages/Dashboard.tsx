@@ -120,6 +120,19 @@ export function Dashboard() {
             />
           </div>
 
+          {alerts.pendingIntegrationApprovals.length > 0 && (
+            <Link to="/jovahagyasra-var" className="card kozos flex items-center justify-between gap-3 no-underline">
+              <span className="flex items-center gap-2">
+                <ClipboardCheck size={22} aria-hidden="true" className="text-[var(--szin-figyelmeztetes)]" />
+                <span>
+                  <span className="block font-semibold">{alerts.pendingIntegrationApprovals.length} tétel jóváhagyásra vár</span>
+                  <span className="muted block text-sm">A Könyvelő számláiból jött áru és a visszáruk</span>
+                </span>
+              </span>
+              <span className="btn btn-primary">Megnyitás</span>
+            </Link>
+          )}
+
           {(isWarehouseUser ? alerts.pendingPurchaseApprovals.length + alerts.rejectedSales.length : alerts.pendingSaleApprovals.length) > 0 && (
             <Card>
               <div className="mb-2 flex items-center gap-2 text-[var(--color-text)]">

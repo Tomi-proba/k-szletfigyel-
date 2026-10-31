@@ -32,6 +32,8 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
     return p?.defaultVatRatePercent !== undefined ? String(p.defaultVatRatePercent) : ''
   })
   const [note, setNote] = useState('')
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [szamlanVan, setSzamlanVan] = useState<'igen' | 'nem' | 'nemtudom'>('nemtudom')
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
 
@@ -71,6 +73,8 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       currency: unitPrice.trim() !== '' ? currency : undefined,
       exchangeRate: unitPrice.trim() !== '' && currency !== 'HUF' ? exchangeRateNumber : undefined,
       vatRatePercent: vatRateNumber,
+      invoiceNumber,
+      shippingOnInvoice: (shippingCostNumber ?? 0) > 0 && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined,
     })
     if (!result.ok) return setError('A rendelés nem rögzíthető.')
 
@@ -138,6 +142,23 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       <Field label="ÁFA kulcs (%, opcionális)">
         <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
       </Field>
+
+      <Field label="Szállítói számla száma (opcionális, ha már megvan)">
+        <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
+      </Field>
+
+      {(shippingCostNumber ?? 0) > 0 && (
+        <div className="kozos mb-3">
+          <span className="mb-1 block text-sm font-medium">A szállítási díj a szállító számláján van?</span>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="A szállítási díj a szállító számláján van?">
+            {(['igen', 'nem', 'nemtudom'] as const).map((v) => (
+              <button key={v} type="button" className="chip" aria-pressed={szamlanVan === v} onClick={() => setSzamlanVan(v)}>
+                {v === 'igen' ? 'Igen' : v === 'nem' ? 'Nem (külön számla)' : 'Nem tudom'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Field label="Megjegyzés (opcionális)">
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. várható beszállító neve…" />

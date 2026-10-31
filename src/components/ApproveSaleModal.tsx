@@ -20,6 +20,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   const [view, setView] = useState<'approve' | 'reject'>('approve')
   const [vatRate, setVatRate] = useState(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
   const [isPaid, setIsPaid] = useState(true)
+  const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
   const [rejectReason, setRejectReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -33,7 +34,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
     }
     const result = approveSalePrep(
       movement.id,
-      { vatRatePercent: vatRateNumber, isPaid: movement.customerId ? isPaid : undefined },
+      { vatRatePercent: vatRateNumber, isPaid: movement.customerId ? isPaid : undefined, invoiceNumber },
       { allowNegativeStock },
     )
     if (result.ok) return onClose()
@@ -67,6 +68,11 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
         <>
           <Field label="ÁFA kulcs (%, opcionális)">
             <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
+          </Field>
+
+          <Field label="Vevőszámla száma (opcionális)">
+            <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="ha már elkészült a számla" />
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Összekapcsolt cégnél a Könyvelő ezzel párosítja a vevőszámlához.</span>
           </Field>
 
           {movement.customerId && (

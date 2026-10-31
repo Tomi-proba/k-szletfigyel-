@@ -39,6 +39,13 @@ export function Alerts() {
   const setMovementPaid = useStore((s) => s.setMovementPaid)
   const setLotPaid = useStore((s) => s.setLotPaid)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
+  // A Könyvelő által követett fizetés kézzel nem állítható (KK6).
+  const allMovements = useStore((s) => s.movements)
+  const allLots = useStore((s) => s.lots)
+  const konyvelobolKovetett = useMemo(
+    () => new Set([...allMovements.filter((m) => m.fizetesKonyvelobol).map((m) => m.id), ...allLots.filter((l) => l.fizetesKonyvelobol).map((l) => l.id)]),
+    [allMovements, allLots],
+  )
   const [payableWindow, setPayableWindow] = useState(0)
   const [openSaleStatusFilter, setOpenSaleStatusFilter] = useState<'' | SaleStatus>('')
 
@@ -219,10 +226,14 @@ export function Alerts() {
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
-                      {!isReadOnlyViewer && (
-                        <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
-                          <CheckCircle2 size={16} /> Kifizetve
-                        </Button>
+                      {konyvelobolKovetett.has(sale.movementId) ? (
+                        <span className="badge badge-info kozos" title="A fizetést a Könyvelő a kiegyenlítésből követi; itt nem állítható.">A Könyvelő követi</span>
+                      ) : (
+                        !isReadOnlyViewer && (
+                          <Button variant="secondary" onClick={() => setMovementPaid(sale.movementId, true)}>
+                            <CheckCircle2 size={16} /> Kifizetve
+                          </Button>
+                        )
                       )}
                     </div>
                   </Card>
@@ -275,10 +286,14 @@ export function Alerts() {
                       <span className={`text-lg font-bold ${p.urgency === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--color-warning)]'}`}>
                         {formatCurrency(p.amount)}
                       </span>
-                      {!isReadOnlyViewer && (
-                        <Button variant="secondary" onClick={() => markPayablePaid(p)}>
-                          <CheckCircle2 size={16} /> Kifizetve
-                        </Button>
+                      {konyvelobolKovetett.has(p.id) ? (
+                        <span className="badge badge-info kozos" title="A fizetést a Könyvelő a kiegyenlítésből követi; itt nem állítható.">A Könyvelő követi</span>
+                      ) : (
+                        !isReadOnlyViewer && (
+                          <Button variant="secondary" onClick={() => markPayablePaid(p)}>
+                            <CheckCircle2 size={16} /> Kifizetve
+                          </Button>
+                        )
                       )}
                     </div>
                   </Card>

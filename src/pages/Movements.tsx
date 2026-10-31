@@ -1,8 +1,10 @@
-import { CheckCircle2, CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCircle2, CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useStore } from '../store/useStore'
+import { isReturnable, useStore } from '../store/useStore'
+import { jovahagyandoIntegracios } from '../lib/integracio'
+import { VisszaruModal } from '../components/VisszaruModal'
 import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -17,7 +19,9 @@ import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber }
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { lotUnitCost } from '../lib/costing'
-import type { Movement, Product, PurchaseLot, SaleStatus } from '../types'
+import type { Movement, MovementReason, Product, PurchaseLot, SaleStatus } from '../types'
+
+const OK_FELIRAT: Record<MovementReason, string> = { normal: '', leltar_hiany: 'Leltári hiány', leltar_tobblet: 'Leltári többlet', selejt: 'Selejt' }
 
 const SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
 const SALE_STATUS_OPTIONS: SaleStatus[] = ['pending', 'shipping', 'delivered']
@@ -88,6 +92,7 @@ export function Movements() {
   const [deleting, setDeleting] = useState<Movement | null>(null)
   const [editingVat, setEditingVat] = useState<Movement | null>(null)
   const [cancelling, setCancelling] = useState<Movement | null>(null)
+  const [returning, setReturning] = useState<Movement | null>(null)
   // Kétlépcsős jóváhagyás (iroda <-> raktár, lásd DOCUMENTATION.md 15.
   // fejezet): az iroda ad le rendelést, a raktáros hagyja jóvá a
   // beérkezést; a raktáros készíti elő a kiszállítást, az iroda hagyja
@@ -323,6 +328,16 @@ export function Movements() {
                       {m.correctsMovementId && (
                         <div className="text-xs font-medium text-[var(--color-warning)]">Korrekció - #{m.correctsMovementId.slice(0, 8)}</div>
                       )}
+                      {m.integracioForras && <div className="text-xs text-[var(--color-text-muted)]">Könyvelő, {m.integracioForras}</div>}
+                      {m.returnOfMovementId && (
+                        <div className="text-xs font-medium text-[var(--color-warning)]">
+                          {m.type === 'in' ? 'Visszavétel' : 'Visszaküldés'} - #{m.returnOfMovementId.slice(0, 8)}
+                        </div>
+                      )}
+                      {m.ok && m.ok !== 'normal' && (
+                        <div className="text-xs font-medium text-[var(--color-warning)]">{OK_FELIRAT[m.ok]}</div>
+                      )}
+                      {m.invoiceNumber && <div className="text-xs text-[var(--color-text-muted)]">Számla: {m.invoiceNumber}</div>}
                       {m.approvalStatus === 'pending' && (
                         <div className="mt-0.5 inline-block rounded-full bg-[var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-warning)]">
                           {m.type === 'in' ? 'Beérkezésre vár' : 'Jóváhagyásra vár'}
@@ -400,6 +415,7 @@ export function Movements() {
                             <div className="text-[var(--color-text)]">{customerById.get(m.customerId)?.name ?? 'Törölt vevő'}</div>
                             <div className={m.isPaid ? 'text-xs text-[var(--color-success)]' : 'text-xs font-medium text-[var(--color-danger)]'}>
                               {m.isPaid ? 'Fizetve' : 'Nem fizetett'}
+                              {m.fizetesKonyvelobol && <span className="ml-1 text-[var(--color-text-muted)]">(a Könyvelő követi)</span>}
                             </div>
                           </>
                         )}
@@ -450,6 +466,23 @@ export function Movements() {
                         >
                           <RotateCcw size={16} />
                         </button>
+                      ) : jovahagyandoIntegracios(m) ? (
+                        <>
+                          <Link to="/jovahagyasra-var" className="btn btn-small" title="A Könyvelőből jött és a visszáru-tételek külön listában hagyhatók jóvá">
+                            Jóváhagyás
+                          </Link>
+                          {/* A Könyvelőből jött tételt csak a Könyvelő vonhatja vissza (sztornóval); a kézi visszárut a rögzítője törölheti. */}
+                          {!m.integracioEsemenyId && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPending(m)}
+                              aria-label="Tétel törlése"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </>
                       ) : m.approvalStatus === 'pending' ? (
                         <>
                           <button
@@ -492,6 +525,17 @@ export function Movements() {
                         </>
                       ) : isCancelled ? null : (
                         <>
+                          {isReturnable(m) && (m.type === 'out' ? !isWarehouseUser : true) && (
+                            <button
+                              type="button"
+                              onClick={() => setReturning(m)}
+                              aria-label={m.type === 'out' ? 'Részleges visszavétel' : 'Részleges visszaküldés'}
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-primary)]"
+                              title={m.type === 'out' ? 'Visszavétel (a vevő visszahozza egy részét)' : 'Visszaküldés a szállítónak (egy része)'}
+                            >
+                              <Undo2 size={16} />
+                            </button>
+                          )}
                           {m.type === 'out' && (
                             <button
                               type="button"
@@ -552,6 +596,8 @@ export function Movements() {
           onCancel={() => setDeleting(null)}
         />
       )}
+
+      {returning && <VisszaruModal original={returning} onClose={() => setReturning(null)} />}
 
       {editingVat && <VatEditModal movement={editingVat} lot={lotByMovementId.get(editingVat.id) ?? null} onClose={() => setEditingVat(null)} />}
 

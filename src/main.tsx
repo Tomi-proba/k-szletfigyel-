@@ -2,6 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
+// A közös dizájn (TERV.md C.3): tokenek és komponensek, a többi modullal azonos osztálynevekkel.
+import './kozos/dizajn-tokens.css'
+import './kozos/kozos.css'
 import App from './App.tsx'
 import { AuthProvider } from './hooks/useAuth.tsx'
 

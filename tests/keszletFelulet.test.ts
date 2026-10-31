@@ -12,7 +12,7 @@ vi.mock('../src/lib/remoteSync', async (eredeti) => ({
 
 import { integracioFrissites, returnableQuantity, useStore } from '../src/store/useStore'
 import { fajtaja, jovahagyhatja, SZOVEG } from '../src/lib/jovahagyando'
-import { lezartIdoszakban } from '../src/lib/integracio'
+import { bekuldottAfaIdoszakban, lezartIdoszakban } from '../src/lib/integracio'
 import { DEFAULT_SETTINGS, type Movement } from '../src/types'
 
 const store = () => useStore.getState()
@@ -158,5 +158,16 @@ describe('jóváhagyási lista: szavak és szerepkörök', () => {
     const l = [{ fajta: 'PERIOD' as const, kezdet: '2026-10-01', veg: '2026-10-31' }]
     expect(lezartIdoszakban('2026-10-15', l)).toEqual(l[0])
     expect(lezartIdoszakban('2026-11-01', l)).toBeNull()
+  })
+
+  it('beküldött áfaidőszak (I5): külön figyelmeztetés, a lezárt időszaktól függetlenül', () => {
+    const l = [
+      { fajta: 'AFA_BEKULDVE' as const, kezdet: '2026-09-01', veg: '2026-09-30' },
+      { fajta: 'PERIOD' as const, kezdet: '2026-10-01', veg: '2026-10-31' },
+    ]
+    expect(bekuldottAfaIdoszakban('2026-09-15', l)).toEqual(l[0])
+    expect(lezartIdoszakban('2026-09-15', l)).toBeNull()
+    expect(bekuldottAfaIdoszakban('2026-10-15', l)).toBeNull()
+    expect(lezartIdoszakban('2026-10-15', l)).toEqual(l[1])
   })
 })

@@ -1092,3 +1092,15 @@ projektben a `schema.sql` végén szerepel).
 A közös próba (AWEBOLDAL, `integracio:proba`) 8. lépése a három valódi programmal végigjátssza: az első kör
 nyitó különbséget mutat, a Könyvelőben indoklással elfogadják, a Készlet is megkapja a frissített
 eredményt; egy szándékos kézi könyvelés a készletszámlára a következő körben Teendő lesz itt is.
+
+## 28. Beküldött áfabevallás időszaka (2026-10-31, I5 4. lépés)
+
+Ha a cég az eÁFA-t is összekapcsolta, az eÁFA minden beküldésről szól a központon át
+(`eafa.bevallas.bekuldve`). A Készlet az időszakot a lezárt időszakok mellé jegyzi fel (fajta: `AFA_BEKULDVE`).
+Ha valaki erre az időszakra rögzít mozgást, a dátum alatt figyelmeztetés jelenik meg: „az áfabevallást már
+beküldték… ha áfás, a könyvelőnél önellenőrzés lehet szükséges”.
+
+- **Nem tiltás.** A mozgás ugyanúgy rögzíthető; a Könyvelőben piszkozat lesz belőle, ott is figyelmeztet.
+- **A döntés máshol születik.** Az önellenőrzésről az eÁFA-ban ember dönt; a beküldött bevallás magától
+  soha nem változik.
+- **Meglévő projektben** a `supabase/migrations/2026-10-31_afa_idoszak.sql` fájlt kell lefuttatni.

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementReason, MovementType } from '../types'
-import { lezartIdoszakban, useLezartIdoszakok } from '../lib/integracio'
+import { bekuldottAfaIdoszakban, lezartIdoszakban, useLezartIdoszakok } from '../lib/integracio'
 import { todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency } from '../lib/format'
@@ -75,6 +75,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [fulfillmentDate, setFulfillmentDate] = useState('')
   const lezartak = useLezartIdoszakok()
   const lezart = lezartIdoszakban(date, lezartak)
+  const afaBekuldve = bekuldottAfaIdoszakban(date, lezartak)
   const leltar = ok !== 'normal'
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
@@ -581,6 +582,12 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           <span className="kozos alert alert-warning mt-2 block text-sm" role="status">
             Ez a nap a Könyvelőben lezárt időszakba esik ({lezart.kezdet} – {lezart.veg}). A mozgás rögzíthető, de a könyvelésben csak egy nyitott időszakba
             kerülhet; szóljon a könyvelőnek.
+          </span>
+        )}
+        {afaBekuldve && (
+          <span className="kozos alert alert-warning mt-2 block text-sm" role="status">
+            Erre az időszakra ({afaBekuldve.kezdet} – {afaBekuldve.veg}) az áfabevallást már beküldték. A mozgás rögzíthető, de ha áfás, a könyvelőnél
+            önellenőrzés lehet szükséges; szóljon neki.
           </span>
         )}
       </Field>

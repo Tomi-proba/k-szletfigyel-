@@ -21,7 +21,8 @@ import { filler, isoDate } from "./esemeny.ts";
 export const RECONCILE_PATH = "/api/integracio/v1/egyeztetes";
 export const RECONCILE_RESULT_PATH = "/api/integracio/v1/egyeztetes/eredmeny";
 
-export const RECONCILE_CHECKS = ["E1", "E2", "E3", "E4", "E5", "E6"] as const;
+/** E1–E6: Készlet ↔ Könyvelő (I4); A1–A4: áfa, Könyvelő ↔ eÁFA (I5, F17.3). */
+export const RECONCILE_CHECKS = ["E1", "E2", "E3", "E4", "E5", "E6", "A1", "A2", "A3", "A4"] as const;
 export type ReconcileCheck = (typeof RECONCILE_CHECKS)[number];
 
 export const RECONCILE_CHECK_LABELS: Record<ReconcileCheck, string> = {
@@ -31,6 +32,17 @@ export const RECONCILE_CHECK_LABELS: Record<ReconcileCheck, string> = {
   E4: "Kifizetettség",
   E5: "Átadások teljessége",
   E6: "Kapcsolatok épsége",
+  A1: "Fizetendő áfa",
+  A2: "Levonható áfa",
+  A3: "Beküldött bevallások utólagos változásai",
+  A4: "Áfás bizonylatok párosítása",
+};
+
+/** Mely ellenőrzések kinek szólnak (az eredményből ennyit kap a modul). */
+export const RECONCILE_CHECKS_FOR: Record<"konyvelo" | "keszlet" | "eafa", readonly ReconcileCheck[]> = {
+  konyvelo: RECONCILE_CHECKS,
+  keszlet: ["E1", "E2", "E3", "E4", "E5", "E6"],
+  eafa: ["A1", "A2", "A3", "A4"],
 };
 
 /**
@@ -207,6 +219,104 @@ export const baselineAcceptSchema = z.object({
   acceptedBy: z.string().min(1).max(200),
 });
 export type BaselineAccept = z.infer<typeof baselineAcceptSchema>;
+
+// ---------- Áfa-egyeztetés (I5, TERV.md F17.3) ----------
+
+/**
+ * `POST /api/integracio/v1/egyeztetes/afa`: a Könyvelő és az eÁFA áfaszámai. A központ előbb az eÁFA-t
+ * kérdezi (ő tudja a bevallási időszakokat), utána a Könyvelőt ugyanezekre az időszakokra.
+ */
+export const RECONCILE_VAT_PATH = "/api/integracio/v1/egyeztetes/afa";
+
+const period = z.object({ from: isoDate, to: isoDate });
+
+export const vatReconcileRequestSchema = z.object({
+  runId: uuid,
+  companyRef: z.string().min(1).max(100),
+  asOf: isoDate,
+  /** Csak a Könyvelőnek: az eÁFA által megadott bevallási időszakok. */
+  periods: z.array(period).max(24),
+  /** A központ szerint ennek a modulnak átadott események (a bejövő táblában meg kell lenniük). */
+  events: z.array(uuid).max(20_000),
+});
+export type VatReconcileRequest = z.infer<typeof vatReconcileRequestSchema>;
+
+/**
+ * A Könyvelő áfaszámai időszakonként, könyvelt bizonylatokból, a könyvelés napja szerint. Áfás bizonylat:
+ * amelynek 466-os vagy 467-es sora van; kivéve az áfa-elszámolás átvezetését (468) és az évnyitást/-zárást.
+ */
+export const konyveloVatAnswerSchema = z.object({
+  module: z.literal("konyvelo"),
+  periods: z
+    .array(
+      period.extend({
+        /** A 467 követel − tartozik forgalma (fizetendő áfa). */
+        output: filler,
+        /** A 466 tartozik − követel forgalma (levonható áfa). */
+        input: filler,
+        /** Kimaradt, mert áfa-elszámolás (468) vagy évnyitás/-zárás: darabszám, tájékoztatásul. */
+        settlementDocuments: count,
+        documents: z
+          .array(
+            z.object({
+              documentId: z.string().max(100),
+              serialNumber: z.string().max(100).nullable(),
+              externalNumber: z.string().max(100).nullable(),
+              partnerTaxNumber: z.string().max(20).nullable(),
+              accountingDate: isoDate,
+              postedAt: isoDateTime,
+              output: filler,
+              input: filler,
+            }),
+          )
+          .max(40_000),
+      }),
+    )
+    .max(24),
+  missingEvents: z.array(uuid),
+  outbox: outboxState,
+});
+export type KonyveloVatAnswer = z.infer<typeof konyveloVatAnswerSchema>;
+
+const vatAmounts = z.object({ output: filler, input: filler });
+
+/** Az eÁFA áfaszámai bevallási időszakonként, az esedékesség napja szerint. */
+export const eafaVatAnswerSchema = z.object({
+  module: z.literal("eafa"),
+  environment: z.enum(["TEST", "PRODUCTION"]),
+  periods: z
+    .array(
+      period.extend({
+        frequency: z.enum(["MONTHLY", "QUARTERLY", "YEARLY"]),
+        /** NONE: még nincs bevallás az időszakra. */
+        state: z.enum(["NONE", "DRAFT", "SUBMITTED"]),
+        /** A jóváhagyott analitika összege (beküldött időszaknál a beküldött változaté). */
+        approved: vatAmounts,
+        /** Jóváhagyásra váró javaslatok. */
+        proposals: z.object({ count, oldest: isoDateTime.nullable() }),
+        /** Utólagos változások (csak beküldött időszaknál): még nem rendezettek. */
+        laterChanges: z
+          .array(z.object({ documentId: z.string().max(100), output: filler, input: filler, createdAt: isoDateTime }))
+          .max(10_000),
+        /** A Könyvelő bizonylataival párosított tételek: melyik bizonylat, melyik állapotban, mennyivel. */
+        paired: z
+          .array(z.object({ documentId: z.string().max(100), status: z.enum(["PROPOSAL", "APPROVED", "EXCLUDED"]), output: filler, input: filler }))
+          .max(40_000),
+        /** Jóváhagyott tételek, amelyekhez nincs könyvelt bizonylat (pl. a NAV-ban van, a Könyvelőben nincs). */
+        unbooked: z
+          .array(z.object({ documentNumber: z.string().max(100), partnerTaxNumber: z.string().max(20).nullable(), output: filler, input: filler }))
+          .max(10_000),
+      }),
+    )
+    .max(24),
+  /** A Könyvelő bizonylatai, amelyeket az eÁFA nem tudott tételhez kötni (ember dönt). */
+  unpaired: z
+    .array(z.object({ documentId: z.string().max(100), serialNumber: z.string().max(100).nullable(), reason: z.enum(["NO_NAV", "AMBIGUOUS", "PERIOD_CHOICE"]) }))
+    .max(10_000),
+  missingEvents: z.array(uuid),
+  outbox: outboxState,
+});
+export type EafaVatAnswer = z.infer<typeof eafaVatAnswerSchema>;
 
 /** Forintos kiírás fillérből: 254000000 → „2 540 000 Ft”, 120 → „1,20 Ft”. */
 export function forint(f: number): string {

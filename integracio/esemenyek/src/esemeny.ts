@@ -521,6 +521,42 @@ export const EVENT_TYPES: readonly EventTypeDefinition[] = [
     }),
   },
   {
+    type: "eafa.bevallas.bekuldve",
+    version: 1,
+    description:
+      "Az eÁFA-ban beküldtek egy áfabevallást vagy annak módosítását (KE3, TERV.md F17.2). A Könyvelő és a Készlet figyelmeztet, ha valaki ennek az időszakába könyvel vagy rögzít. Forrásrekord: bevallas_idoszak (az időszak), így egy időszak eseményei sorrendben mennek.",
+    consumers: ["konyvelo", "keszlet"],
+    payload: z.object({
+      declarationId: z.string(),
+      periodStart: isoDate,
+      periodEnd: isoDate,
+      frequency: z.enum(["MONTHLY", "QUARTERLY", "YEARLY"]),
+      /** ORIGINAL: alapbevallás; SELF_CHECK: önellenőrzés; CORRECTION: helyesbítés; NAV_CORRECTION: a NAV értesítése szerinti javítás. */
+      kind: z.enum(["ORIGINAL", "SELF_CHECK", "CORRECTION", "NAV_CORRECTION"]),
+      /** A NAV-környezet, amelyre az összekapcsolás szól (tájékoztatásul). */
+      environment: z.enum(["TEST", "PRODUCTION"]),
+      submittedAt: isoDateTime,
+    }),
+  },
+  {
+    type: "eafa.idoszak.utolagos_valtozas",
+    version: 1,
+    description:
+      "Egy már beküldött bevallás időszakát utólagos változás érinti (F17.2): a gyűjtő Teendő állapota. OPEN: önellenőrzés szükséges lehet; RESOLVED: a változások bekerültek egy beküldött önellenőrzésbe, vagy indoklással lezárták. A Könyvelőben ebből Teendő lesz (és zárul le). Forrásrekord: bevallas_idoszak.",
+    consumers: ["konyvelo"],
+    payload: z.object({
+      periodStart: isoDate,
+      periodEnd: isoDate,
+      status: z.enum(["OPEN", "RESOLVED"]),
+      /** A még nem rendezett utólagos változások száma és nettó áfahatása (fillér; pozitív: több fizetendő). */
+      changes: z.number().int().nonnegative(),
+      outputVatEffect: filler,
+      inputVatEffect: filler,
+      resolution: z.enum(["SELF_CHECK_SUBMITTED", "NOT_NEEDED"]).nullable(),
+      note: z.string().max(1000).nullable(),
+    }),
+  },
+  {
     type: "torzs.partner.valtozott",
     version: 1,
     description: "Egy partner adatai megváltoztak (M2).",

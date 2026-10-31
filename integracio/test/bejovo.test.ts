@@ -298,6 +298,16 @@ leiras("kiegyenlítés, időszak, partner", () => {
     expect(await lista()).toEqual([]);
   });
 
+  it("beküldött áfabevallás (eÁFA, I5): az időszak bekerül, a felület figyelmeztet belőle (nem tilt)", async () => {
+    const e = { ...konyvelo("eafa.bevallas.bekuldve", 1, "bevallas_idoszak", "2026-09-01_2026-09-30", {
+      declarationId: "d1", periodStart: "2026-09-01", periodEnd: "2026-09-30", frequency: "MONTHLY", kind: "ORIGINAL", environment: "TEST", submittedAt: "2026-10-12T08:00:00Z",
+    }) };
+    e.source = { ...e.source, module: "eafa" };
+    expect(await kuld(e)).toMatchObject({ outcome: "APPLIED" });
+    const lista = await neveben(pool, raktaros, async (db) => (await db.query("SELECT public.integracio_lezart_idoszakok() AS l")).rows[0].l);
+    expect(lista).toEqual([{ fajta: "AFA_BEKULDVE", kezdet: "2026-09-01", veg: "2026-09-30" }]);
+  });
+
   it("partner: csak pontos adószám-egyezésnél frissíti a nevet (naplózva, a Könyvelő felé visszhang nélkül); egyébként Teendő", async () => {
     const e = konyvelo("torzs.partner.valtozott", 1, "partner", "P1", { partner: { name: "Ajtó és Ablak Kft.", taxNumber: "10537914-4-44" }, anonymized: false });
     expect(await kuld(e)).toMatchObject({ outcome: "APPLIED", target: { recordType: "partner", recordId: szallitoId } });

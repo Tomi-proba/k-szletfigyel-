@@ -38,7 +38,8 @@ export type IntegracioAllapot = {
   teendok: IntegracioTeendo[]
 }
 
-export type LezartIdoszak = { fajta: 'PERIOD' | 'FISCAL_YEAR'; kezdet: string; veg: string }
+/** PERIOD, FISCAL_YEAR: a Könyvelőben lezárt időszak; AFA_BEKULDVE: az eÁFA-ban beküldött áfabevallás időszaka. */
+export type LezartIdoszak = { fajta: 'PERIOD' | 'FISCAL_YEAR' | 'AFA_BEKULDVE'; kezdet: string; veg: string }
 
 function db() {
   if (!supabase) throw new Error('A kapcsolat a többi programmal csak szerveres módban (bejelentkezve) érhető el.')
@@ -65,7 +66,12 @@ export const lezartIdoszakokLekerese = () => rpc<LezartIdoszak[]>('integracio_le
 
 /** A dátum a Könyvelőben lezárt időszakba esik-e (a Készlet figyelmeztet, de nem tilt; KK9). */
 export function lezartIdoszakban(datum: string, lista: readonly LezartIdoszak[]): LezartIdoszak | null {
-  return lista.find((l) => l.kezdet <= datum && datum <= l.veg) ?? null
+  return lista.find((l) => l.fajta !== 'AFA_BEKULDVE' && l.kezdet <= datum && datum <= l.veg) ?? null
+}
+
+/** A dátum az eÁFA-ban már beküldött áfabevallás időszakába esik-e (figyelmeztetés, nem tiltás; F17.2). */
+export function bekuldottAfaIdoszakban(datum: string, lista: readonly LezartIdoszak[]): LezartIdoszak | null {
+  return lista.find((l) => l.fajta === 'AFA_BEKULDVE' && l.kezdet <= datum && datum <= l.veg) ?? null
 }
 
 /** A Könyvelőben lezárt időszakok (szerveres módban, 5 percenként frissítve). Hiba esetén üres lista: a

@@ -316,6 +316,19 @@ async function idoszak(client: pg.PoolClient, d: InboundDelivery): Promise<Inbou
   return { outcome: "APPLIED" };
 }
 
+// ---------- Beküldött áfabevallás (I5, F17.2) ----------
+
+/** Az eÁFA-ban beküldött áfaidőszak: a Készlet figyelmeztet, ha erre az időszakra rögzítenek (nem tilt). */
+async function afaBekuldve(client: pg.PoolClient, d: InboundDelivery): Promise<InboundResult> {
+  const p = d.event.payload as unknown as { periodStart: string; periodEnd: string };
+  await client.query(
+    `INSERT INTO integracio.lezart_idoszakok (company_id, fajta, kezdet, veg) VALUES ($1, 'AFA_BEKULDVE', $2, $3)
+     ON CONFLICT (company_id, fajta, kezdet) DO UPDATE SET veg = EXCLUDED.veg, lezarva = now()`,
+    [d.targetCompanyRef, p.periodStart, p.periodEnd],
+  );
+  return { outcome: "APPLIED" };
+}
+
 // ---------- Partner (M2) ----------
 
 async function partner(client: pg.PoolClient, d: InboundDelivery): Promise<InboundResult> {
@@ -355,6 +368,7 @@ export const KEZELOK: Kezelok = {
   "konyvelo.kiegyenlites.bontva@2": kiegyenlites,
   "konyvelo.idoszak.lezarva@1": idoszak,
   "konyvelo.idoszak.feloldva@1": idoszak,
+  "eafa.bevallas.bekuldve@1": afaBekuldve,
   "torzs.partner.valtozott@1": partner,
 };
 

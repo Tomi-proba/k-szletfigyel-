@@ -99,14 +99,22 @@ const tetelKoltseg = (l: Sor) => ({
   vatReclaimable: l.vat_reclaimable === null || l.vat_reclaimable === undefined ? undefined : Boolean(l.vat_reclaimable),
 });
 
-/** Egy mozgás eseményeinek forrásrekordja. A visszáru az eredeti mozgás rekordján megy (sorrend). */
+/** A Könyvelő bizonylatából jött (jóváhagyandóként létrehozott) mozgás (F15.4). */
+const konyvelobol = (m: Sor | null | undefined) => Boolean(m?.integracio_esemeny_id && m.integracio_dokumentum_id);
+
+/**
+ * Egy mozgás eseményeinek forrásrekordja. A visszáru az eredeti mozgás rekordján megy (sorrend). A
+ * Könyvelőből jött mozgásoké „konyvelo_mozgas”: ezekről a Könyvelő a bizonylatából már tud.
+ */
 export function mozgasRekordja(k: Kep): { type: string; id: string } {
   const m = k.mozgas;
   const fajta = mozgasFajta(m);
   if (fajta === "RETURN") {
     if (!k.eredeti) throw new EpitesiHiba("A visszáru eredeti mozgása nem található.");
+    if (konyvelobol(k.eredeti)) return { type: "konyvelo_mozgas", id: String(k.eredeti.id) };
     return { type: k.eredeti.type === "in" ? "beszerzes" : "eladas", id: String(k.eredeti.id) };
   }
+  if (konyvelobol(m)) return { type: "konyvelo_mozgas", id: String(m.id) };
   if (fajta === "INVENTORY") return { type: "leltar", id: String(m.id) };
   return { type: fajta === "PURCHASE" ? "beszerzes" : "eladas", id: String(m.id) };
 }
@@ -264,6 +272,38 @@ function visszaru(k: Kep) {
   };
 }
 
+type Cel = "RECEIPT" | "ISSUE" | "CUSTOMER_RETURN" | "SUPPLIER_RETURN" | "REVERSAL";
+
+/**
+ * A Könyvelőből jött mozgás jóváhagyása vagy elutasítása (F15.4): a várt és a tényleges mennyiséggel. Az
+ * eltérésből a Könyvelőben Teendő lesz; a könyvelést a program magától nem javítja.
+ */
+function jovahagyas(m: Sor, k: Kep, cel: Cel, eredeti: Sor | null) {
+  const elutasitva = m.approval_status === "rejected";
+  const tenyleges = elutasitva ? 0 : mennyiseg(m);
+  const vart = szam(m.ordered_quantity) ?? mennyiseg(m);
+  if (!(vart > 0)) throw new EpitesiHiba("A Könyvelőből jött mozgásnál nincs meg a várt mennyiség.");
+  let koltseg: number | null = null;
+  if (cel === "ISSUE") koltseg = tenyleges === 0 ? 0 : filler(tenyleges * kotelezo(m.unit_cost, "A kiadásnak nincs rögzített egységköltsége (ELÁBÉ)."));
+  else if (cel === "CUSTOMER_RETURN" || (cel === "REVERSAL" && m.type === "in")) {
+    koltseg = tenyleges === 0 ? 0 : filler(tenyleges * kotelezo(m.unit_price, "A visszavételnek nincs rögzített egységára."));
+  }
+  return {
+    movementId: String(m.id),
+    purpose: cel,
+    sourceDocument: { documentId: String(m.integracio_dokumentum_id), serialNumber: szoveg(m.integracio_forras), eventId: String(m.integracio_esemeny_id) },
+    originalMovementId: eredeti ? String(eredeti.id) : null,
+    date: String(m.date),
+    productId: String(k.termek.id),
+    productName: String(k.termek.name),
+    unit: szoveg(k.termek.unit),
+    expectedQuantity: vart,
+    actualQuantity: tenyleges,
+    note: (szoveg(m.discrepancy_note) ?? szoveg(m.reject_reason))?.slice(0, 500) ?? null,
+    costOfGoods: koltseg === null ? null : Math.max(0, koltseg),
+  };
+}
+
 function visszavonasOka(k: Kep): string {
   const m = k.mozgas;
   if (k.korrekcio) return (szoveg(k.korrekcio.note) ?? "Korrekciós tétel a Készletben").slice(0, 500);
@@ -294,7 +334,8 @@ function napiZaras(kep: Sor) {
   const returnIds: string[] = [];
   for (const k of (kep.mozgasok as Kep[]) ?? []) {
     const m = k.mozgas;
-    if (!hatalyos(m) || m.cancelled || m.corrects_movement_id) continue;
+    // A Könyvelőből jött (számlás) mozgás nem készpénzes forgalom, akkor sem, ha a vevő nincs meg a Készletben.
+    if (!hatalyos(m) || m.cancelled || m.corrects_movement_id || konyvelobol(m) || konyvelobol(k.eredeti)) continue;
     const fajta = mozgasFajta(m);
     if (fajta === "SALE" && !m.customer_id) {
       elad.push(eladasSor(m, k.termek, szam(m.sale_unit_price), szam(m.vat_rate_percent), mennyiseg(m)));
@@ -329,8 +370,17 @@ export function tervez(v: Valtozas): Terv {
       const k = v.pillanatkep as unknown as Kep;
       const fajta = mozgasFajta(k.mozgas);
       const record = { ...mozgasRekordja(k), url: "/mozgasnaplo" };
-      // A Könyvelőből érkezett és itt jóváhagyott mozgás a beérkezett eseményre hivatkozik (visszhang tiltása).
-      const causedBy = oka ?? (szoveg(k.mozgas.integracio_esemeny_id) ?? undefined);
+      // Csak az hivatkozik beérkezett eseményre, ami a fogadó tranzakciójában történt. A raktáros jóváhagyása
+      // új tény (pl. eltérő mennyiség, ELÁBÉ): ennek el KELL jutnia a Könyvelőbe, ezért nem visszhang.
+      const causedBy = oka;
+      if (konyvelobol(k.mozgas)) {
+        const m = k.mozgas;
+        const cel: Cel = fajta === "RETURN" ? (m.type === "in" ? "CUSTOMER_RETURN" : "SUPPLIER_RETURN") : m.type === "in" ? "RECEIPT" : "ISSUE";
+        return {
+          record: { ...record, label: cimke(m.approval_status === "rejected" ? "Nem érkezett meg / nem ment ki" : "Jóváhagyva", k) },
+          esemeny: { type: "keszlet.mozgas.jovahagyva", version: 1, payload: jovahagyas(m, k, cel, fajta === "RETURN" ? k.eredeti : null), causedBy },
+        };
+      }
       if (fajta === "PURCHASE") return { record: { ...record, label: cimke("Beszerzés", k) }, esemeny: { type: "keszlet.beszerzes.veglegesitve", version: 3, payload: beszerzes(k), causedBy } };
       if (fajta === "SALE") return { record: { ...record, label: cimke("Eladás", k) }, esemeny: { type: "keszlet.eladas.veglegesitve", version: 2, payload: eladas(k), causedBy } };
       if (fajta === "INVENTORY") return { record: { ...record, label: cimke("Leltáreltérés", k) }, esemeny: { type: "keszlet.leltar.elteres", version: 1, payload: leltar(k), causedBy } };
@@ -338,6 +388,13 @@ export function tervez(v: Valtozas): Terv {
     }
     case "mozgas_visszavonas": {
       const k = v.pillanatkep as unknown as Kep;
+      // A Könyvelőben sztornózott számla mozgásának visszavétele (a fogadó hozta létre, a raktáros hagyta jóvá).
+      if (k.korrekcio && konyvelobol(k.korrekcio)) {
+        return {
+          record: { ...mozgasRekordja(k), url: "/mozgasnaplo", label: cimke("Visszavétel a Könyvelő sztornója miatt", k) },
+          esemeny: { type: "keszlet.mozgas.jovahagyva", version: 1, payload: jovahagyas(k.korrekcio, k, "REVERSAL", k.mozgas), causedBy: oka },
+        };
+      }
       return {
         record: { ...mozgasRekordja(k), url: "/mozgasnaplo", label: cimke("Visszavonás", k) },
         esemeny: {

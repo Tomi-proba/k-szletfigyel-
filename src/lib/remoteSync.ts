@@ -146,6 +146,7 @@ function lotFromRow(row: Record<string, unknown>): PurchaseLot {
     vatRatePercent: row.vat_rate_percent === null ? undefined : Number(row.vat_rate_percent),
     vatReclaimable: (row.vat_reclaimable as boolean | null) ?? undefined,
     deletedAt: (row.deleted_at as string | null) ?? undefined,
+    fizetesKonyvelobol: Boolean(row.fizetes_konyvelobol) || undefined,
   }
 }
 function lotToRow(companyId: string, l: PurchaseLot) {
@@ -203,8 +204,17 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     approvedAt: (row.approved_at as string | null) ?? undefined,
     rejectedAt: (row.rejected_at as string | null) ?? undefined,
     rejectReason: (row.reject_reason as string | null) ?? undefined,
+    ok: (row.ok as Movement['ok'] | null) ?? undefined,
+    returnOfMovementId: (row.return_of_movement_id as string | null) ?? undefined,
+    invoiceNumber: (row.invoice_number as string | null) ?? undefined,
+    shippingOnInvoice: row.shipping_on_invoice === null || row.shipping_on_invoice === undefined ? undefined : Boolean(row.shipping_on_invoice),
+    integracioEsemenyId: (row.integracio_esemeny_id as string | null) ?? undefined,
+    integracioDokumentumId: (row.integracio_dokumentum_id as string | null) ?? undefined,
+    integracioForras: (row.integracio_forras as string | null) ?? undefined,
+    fizetesKonyvelobol: Boolean(row.fizetes_konyvelobol) || undefined,
   }
 }
+// Az integracio_* és a fizetes_konyvelobol mezőt csak az integrációs szolgáltatás írja: a böngésző nem küldi.
 function movementToRow(companyId: string, m: Movement) {
   return {
     id: m.id,
@@ -238,6 +248,10 @@ function movementToRow(companyId: string, m: Movement) {
     approved_at: m.approvedAt ?? null,
     rejected_at: m.rejectedAt ?? null,
     reject_reason: m.rejectReason ?? null,
+    ok: m.ok ?? null,
+    return_of_movement_id: m.returnOfMovementId ?? null,
+    invoice_number: m.invoiceNumber ?? null,
+    shipping_on_invoice: m.shippingOnInvoice ?? null,
   }
 }
 

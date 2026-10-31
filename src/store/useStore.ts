@@ -196,6 +196,19 @@ export type ApproveSaleResult =
 
 export type RejectSaleResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' }
 
+/** A Könyvelő bizonylatából jött jóváhagyandó mozgás jóváhagyásának eredménye (F15.4). */
+export type ApproveIntegrationResult =
+  | { ok: true }
+  | {
+      ok: false
+      reason: 'not-found' | 'not-pending' | 'not-integration' | 'invalid-quantity' | 'note-required' | 'insufficient-stock' | 'insufficient-lot'
+      /** insufficient-stock: a jóváhagyás utáni készlet; insufficient-lot: ennyi maradt az eredeti beszerzési tételből. */
+      resultingStock?: number
+      available?: number
+    }
+
+export type RejectIntegrationResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' | 'not-integration' | 'reason-required' }
+
 export type ResubmitPendingMovementResult =
   | { ok: true }
   | { ok: false; reason: 'not-found' | 'not-editable' | 'invalid-quantity' }
@@ -303,6 +316,15 @@ interface AppState {
   ) => ApproveSaleResult
   rejectSalePrep: (id: string, reason?: string) => RejectSaleResult
   resubmitPendingMovement: (id: string, updates: { quantity?: number; customerId?: string; note?: string }) => ResubmitPendingMovementResult
+
+  // A Könyvelő bizonylatából jött jóváhagyandó mozgások (F15.4): a raktáros egy kattintással jóváhagyja a
+  // számlán szereplő mennyiséggel, vagy átírja (megjegyzéssel); ha egyáltalán nem érkezett / nem ment ki, elutasítja.
+  approveIntegrationMovement: (
+    id: string,
+    input?: { actualQuantity?: number; note?: string },
+    opts?: { allowNegativeStock?: boolean },
+  ) => ApproveIntegrationResult
+  rejectIntegrationMovement: (id: string, reason: string) => RejectIntegrationResult
 
   setMovementPaid: (movementId: string, isPaid: boolean) => void
   setLotPaid: (lotId: string, isPaid: boolean) => void
@@ -1371,6 +1393,135 @@ export const useStore = create<AppState>()(
           auditLog: [
             ...state.auditLog,
             auditEntry('movement', id, label, 'update', `Kiszállítás elutasítva - ${label}${trimmedReason ? ` (${trimmedReason})` : ''}`),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      approveIntegrationMovement: (id, input, opts) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (!movement.integracioEsemenyId) return { ok: false, reason: 'not-integration' }
+        if (movement.approvalStatus !== 'pending' || movement.deletedAt) return { ok: false, reason: 'not-pending' }
+        const product = get().products.find((p) => p.id === movement.productId)
+        if (!product) return { ok: false, reason: 'not-found' }
+        const expected = movement.orderedQuantity ?? movement.quantity
+        const actual = input?.actualQuantity ?? movement.quantity
+        if (!Number.isFinite(actual) || actual <= 0) return { ok: false, reason: 'invalid-quantity' }
+        const note = input?.note?.trim() || undefined
+        // Eltérésnél kötelező a megjegyzés: a Könyvelőben ebből lesz a Teendő szövege.
+        if (actual !== expected && !note) return { ok: false, reason: 'note-required' }
+        const discrepancyNote = note ?? undefined
+
+        const now = new Date().toISOString()
+        const { costingMethod } = get().settings
+        // A visszaküldés (szállítói visszáru, illetve a beérkezés visszavétele) az eredeti beszerzési tételből fogy,
+        // ugyanazon az áron; ha abból nem maradt elég, nem választunk helyette másik tételt.
+        const sourceMovementId = movement.type === 'out' ? (movement.returnOfMovementId ?? movement.correctsMovementId) : undefined
+        let lots = get().lots
+        let unitCost: number | undefined
+        let stockDelta: number
+        let nextPurchasePrice = product.purchasePrice
+        let newLot: PurchaseLot | undefined
+
+        if (movement.type === 'in') {
+          const unitPrice = movement.unitPrice ?? product.purchasePrice
+          // Áfa csak a szállítói számla beérkezésénél kerül a tételre (visszaigényelhető előzetes áfa);
+          // a vevői visszavétel és a kiadás visszavétele nem beszerzés.
+          const isReceipt = !movement.returnOfMovementId && !movement.correctsMovementId
+          const vatRatePercent = isReceipt ? movement.vatRatePercent : undefined
+          const vatReclaimable = vatRatePercent !== undefined ? true : undefined
+          const batchUnitCost = lotUnitCost({ unitPrice, shippingCost: 0, quantity: actual, exchangeRate: 1, vatRatePercent, vatReclaimable })
+          newLot = {
+            id: createId(),
+            productId: movement.productId,
+            movementId: movement.id,
+            date: movement.date,
+            quantity: actual,
+            remainingQuantity: actual,
+            unitPrice,
+            shippingCost: 0,
+            currency: 'HUF',
+            exchangeRate: 1,
+            createdAt: now,
+            vatRatePercent,
+            vatReclaimable,
+          }
+          nextPurchasePrice =
+            costingMethod === 'average'
+              ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, actual, batchUnitCost)
+              : Math.round(batchUnitCost * 100) / 100
+          stockDelta = actual
+        } else {
+          const resultingStock = product.currentStock - actual
+          if (resultingStock < 0 && !opts?.allowNegativeStock) return { ok: false, reason: 'insufficient-stock', resultingStock }
+          if (sourceMovementId) {
+            const lot = lots.find((l) => l.movementId === sourceMovementId && !l.deletedAt)
+            const available = lot?.remainingQuantity ?? 0
+            if (!lot || available < actual) return { ok: false, reason: 'insufficient-lot', available }
+            unitCost = Math.round(lotUnitCost(lot) * 100) / 100
+            lots = lots.map((l) => (l.id === lot.id ? { ...l, remainingQuantity: l.remainingQuantity - actual } : l))
+          } else {
+            const fifo = consumeFifo(lots, movement.productId, actual, product.purchasePrice)
+            unitCost = Math.round((costingMethod === 'fifo' ? fifo.unitCost : product.purchasePrice) * 100) / 100
+            lots = fifo.updatedLots
+          }
+          stockDelta = -actual
+        }
+
+        const isIssue = movement.type === 'out' && !movement.returnOfMovementId && !movement.correctsMovementId
+        const label = `${product.name} (${actual} ${product.unit})`
+        const source = movement.integracioForras ? `Könyvelő, ${movement.integracioForras}` : 'Könyvelő'
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === product.id ? { ...p, currentStock: p.currentStock + stockDelta, purchasePrice: nextPurchasePrice, updatedAt: now } : p,
+          ),
+          lots: newLot ? [...lots, newLot] : lots,
+          movements: state.movements.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  quantity: actual,
+                  orderedQuantity: expected,
+                  ...(unitCost !== undefined ? { unitCost } : {}),
+                  ...(isIssue ? { saleStatus: 'pending' as const, saleStatusChangedAt: now, isPaid: m.customerId ? (m.isPaid ?? false) : undefined } : {}),
+                  ...(m.type === 'in' && !m.returnOfMovementId && !m.correctsMovementId ? { vatRatePercent: undefined } : {}),
+                  approvalStatus: 'approved',
+                  approvedAt: now,
+                  discrepancyNote,
+                }
+              : m,
+          ),
+          dailyClosings: flagClosingModified(state.dailyClosings, movement.locationId, movement.date),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry(
+              'movement',
+              id,
+              label,
+              'update',
+              `${movement.type === 'in' ? 'Beérkezés' : 'Kiadás'} jóváhagyva (${source}) - ${label}${actual !== expected ? ` - eltérés: ${expected} helyett ${actual} (${discrepancyNote})` : ''}`,
+            ),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      rejectIntegrationMovement: (id, reason) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement) return { ok: false, reason: 'not-found' }
+        if (!movement.integracioEsemenyId) return { ok: false, reason: 'not-integration' }
+        if (movement.approvalStatus !== 'pending' || movement.deletedAt) return { ok: false, reason: 'not-pending' }
+        const trimmed = reason.trim()
+        if (!trimmed) return { ok: false, reason: 'reason-required' }
+        const product = get().products.find((p) => p.id === movement.productId)
+        const label = `${product?.name ?? 'Törölt termék'} (${movement.quantity} ${product?.unit ?? 'db'})`
+        const now = new Date().toISOString()
+        set((state) => ({
+          movements: state.movements.map((m) => (m.id === id ? { ...m, approvalStatus: 'rejected', rejectedAt: now, rejectReason: trimmed } : m)),
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', id, label, 'update', `${movement.type === 'in' ? 'Nem érkezett meg' : 'Nem ment ki'} (${movement.integracioForras ? `Könyvelő, ${movement.integracioForras}` : 'Könyvelő'}) - ${label}: ${trimmed}`),
           ],
         }))
         return { ok: true }

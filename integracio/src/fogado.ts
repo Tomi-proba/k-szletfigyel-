@@ -4,7 +4,7 @@ import type pg from "pg";
 import { applyOnce } from "../esemenyek/src/postgres.ts";
 import { INBOUND_PATH, LINK_PATH, registryOf, validateEvent, verifyHubRequest, type InboundResult } from "../esemenyek/src/index.ts";
 import { tranzakcio } from "./db.ts";
-import { FogadoHiba, kezelo, type Kezelok } from "./kezelok.ts";
+import { FogadoHiba, KEZELOK, kezelo, type Kezelok } from "./kezelok.ts";
 import { adoszam } from "./osszeallito.ts";
 
 /**
@@ -59,7 +59,8 @@ function json(raw: string): Record<string, unknown> {
 export type FogadoBeallitas = { pool: pg.Pool; titok: string | null; kezelok?: Kezelok; log?: (msg: string, err?: unknown) => void };
 
 export function fogado(o: FogadoBeallitas): RequestListener {
-  const kezel = kezelo(o.kezelok ?? {});
+  // A tesztek egy-egy kezelőt felülírhatnak; a többi a valódi.
+  const kezel = kezelo({ ...KEZELOK, ...o.kezelok });
   return (req, res) => {
     void (async () => {
       const url = req.url ?? "/";

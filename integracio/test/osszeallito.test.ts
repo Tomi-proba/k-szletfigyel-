@@ -265,7 +265,7 @@ leiras("nem találgat, nem veszít, nem visszhangzik", () => {
     expect(teendok).toEqual([]);
   });
 
-  it("a hibás adószámú partner Teendő; a beérkezett eseményből származó változás arra hivatkozik", async () => {
+  it("a hibás adószámú partner Teendő; csak a fogadó tranzakciójában történt változás hivatkozik a beérkezett eseményre", async () => {
     await ment(pool, ceg.felhasznalo, [szallito(ceg, { name: "Elírt Kft.", tax_number: "1234" })]);
     await osszeallitas(pool);
     const t = await pool.query("SELECT reszletek FROM integracio.teendok WHERE company_id = $1 AND fajta = 'OSSZEALLITAS_HIBA' AND megoldva IS NULL", [ceg.companyId]);
@@ -283,7 +283,9 @@ leiras("nem találgat, nem veszít, nem visszhangzik", () => {
     c.release();
     await osszeallitas(pool);
     const es = await esemenyek(String(m.sor.id));
-    expect(es.map((e) => e.causedBy)).toEqual([oka, oka2]);
+    // A mozgáson tárolt esemény-azonosító önmagában nem visszhang (a jóváhagyás új tény); a fogadó tranzakciójában
+    // történt visszavonás viszont igen.
+    expect(es.map((e) => e.causedBy)).toEqual([undefined, oka2]);
   });
 
   it("két összeállító egyszerre sem készít egy változásból két eseményt", async () => {

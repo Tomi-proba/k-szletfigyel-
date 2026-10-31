@@ -136,15 +136,12 @@ leiras("beérkező események", () => {
     expect(Number((await pool.query("SELECT count(*) FROM integracio.nonces WHERE nonce IN ($1, $2)", [`hatas-${e.id}`, `hatas-${e2.id}`])).rows[0].count)).toBe(2);
   });
 
-  it("a még nem kezelt típus félretéve (semmi nem rögzül, a központ újraküldi); az ismeretlen verzió végleges elutasítás, nem csendes", async () => {
-    const e: EventEnvelope = {
-      id: randomUUID(), type: "konyvelo.idoszak.lezarva", version: 1,
-      source: { module: "konyvelo", companyRef: randomUUID(), recordType: "idoszak", recordId: "I1", sequence: 1 }, occurredAt: "2026-11-02T08:00:00Z",
-      payload: { kind: "PERIOD", startDate: "2026-10-01", endDate: "2026-10-31" },
+  it("az ismeretlen verzió végleges elutasítás (a központban újraküldhető), nem csendes; semmi nem rögzül", async () => {
+    const regi: EventEnvelope = {
+      id: randomUUID(), type: "konyvelo.kiegyenlites.rogzitve", version: 2,
+      source: { module: "konyvelo", companyRef: randomUUID(), recordType: "kiegyenlites", recordId: "S1", sequence: 1 }, occurredAt: "2026-11-02T08:00:00Z",
+      payload: { settlementId: "s", documentId: "d", settledDocumentId: "d0", amount: 1, date: "2026-11-02" },
     };
-    expect((await hivas("POST", INBOUND_PATH, { event: e, targetCompanyRef: ceg.companyId })).body).toEqual({ outcome: "PARKED" });
-    expect((await pool.query("SELECT count(*) FROM integracio.integration_inbox WHERE event_id = $1", [e.id])).rows[0].count).toBe("0");
-    const regi = { ...e, id: randomUUID(), type: "konyvelo.kiegyenlites.rogzitve", version: 2, payload: { settlementId: "s", documentId: "d", settledDocumentId: "d0", amount: 1, date: "2026-11-02" } };
     const r = await hivas("POST", INBOUND_PATH, { event: regi, targetCompanyRef: ceg.companyId });
     expect(r.status).toBe(422);
     expect(r.body).toMatchObject({ code: "UNSUPPORTED_EVENT" });

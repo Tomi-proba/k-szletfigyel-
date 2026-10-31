@@ -922,3 +922,47 @@ Egy kis Node-program a Készlet adatbázisa mellett (lásd `integracio/README.md
   - `integracio_kihagyas` (fő iroda).
 - A szolgáltatás közvetlen adatbázis-kapcsolattal dolgozik.
 - A központ kérései HMAC-aláírással, időbélyeggel és egyszer használható azonosítóval védettek.
+
+## 24. A Könyvelőből érkező tételek és a jóváhagyandó mozgások (2026-10-31, I3 4. lépés)
+
+**Röviden:** a Könyvelőben könyvelt számlák termékei a Készletben **jóváhagyandó mozgásként** jelennek meg. A
+készlet csak akkor változik, amikor a raktáros jóváhagyja, a ténylegesen beérkezett vagy kiadott
+mennyiséggel. Ha ez eltér a számlától, az eltérés eljut a Könyvelőbe, és ott **Teendő** lesz belőle. A
+Könyvelő ilyenkor sem javítja magától a könyvelést.
+
+### 24.1 Mi lesz a beérkező eseményekből (`integracio/src/kezelok.ts`)
+
+| A Könyvelőben | A Készletben |
+|---|---|
+| szállítói számla termékekkel | termékenként „Beérkezésre vár” mozgás a számla árával és áfakulcsával, a termék telephelyén |
+| vevőszámla termékekkel | „Kiadásra vár” mozgás a számla eladási árával. A vevő csak pontos adószám-egyezésnél kerül rá; vevő nélkül sem lesz belőle készpénzes eladás (a napi zárásba nem kerül) |
+| helyesbítő számla termékekkel | vevőszámlához „Visszavételre vár” (az eladáskori egységköltségen), szállítói számlához „Visszaküldésre vár”, legfeljebb a még vissza nem vett mennyiségig |
+| sztornó | a még függő mozgás magától visszavonva; a már jóváhagyotthoz jóváhagyandó visszavétel. Kézzel rögzített mozgáshoz nem nyúl |
+| kiegyenlítés, bontás | a kifizetett állapotot a Könyvelő követi: teljesen kiegyenlítve = fizetve. A sztornó miatti bontás nem „fizetetlen” |
+| időszak zárása, feloldása | a Készlet nyilvántartja (`integracio_lezart_idoszakok()`); a felület figyelmeztet, de nem tilt |
+| partner változott | név frissítése csak pontos adószám-egyezésnél, naplózva; egyébként Teendő |
+
+**Nem találgat:** ha a termék nincs meg, törölt, a mértékegység eltér, vagy a helyesbítőnél nem egyértelmű,
+melyik eredeti mozgásról van szó, **semmi nem lesz rögzítve**, csak Teendő az okkal. Termék nélküli számlánál
+is Teendő lesz, mert a mozgást kézzel kell rögzíteni.
+
+### 24.2 Jóváhagyás a raktárban (`approveIntegrationMovement`, `rejectIntegrationMovement`)
+- **Egy kattintás:** jóváhagyás a számlán szereplő mennyiséggel.
+- **Eltérésnél:** a tényleges mennyiség átírható, de csak megjegyzéssel. A várt mennyiség megmarad
+  (`orderedQuantity`).
+- **„Nem érkezett meg / nem ment ki”:** elutasítás, kötelező indoklással.
+- **Kiadás:** a vevőszámla árával (nem a termék mostani árával), a FIFO vagy átlagár szerinti ELÁBÉ-val.
+  Készlet nélkül nem megy ki, ahogy ma sem.
+- **Szállítói visszaküldés:** az eredeti beszerzési tételből fogy, ugyanazon az áron. Ha abból már nincs
+  elég, nem választ helyette másik tételt.
+- A gombok a felületen az 5. lépésben jelennek meg.
+
+### 24.3 Ami a Könyvelőbe megy
+A Könyvelőből jött mozgás jóváhagyásakor (vagy elutasításakor) **egy** esemény megy:
+`keszlet.mozgas.jovahagyva`. Benne van a várt és a tényleges mennyiség, a megjegyzés, a forrásbizonylat, és
+kiadásnál vagy visszavételnél a bekerülési érték.
+- Ez **nem visszhang:** a raktáros jóváhagyása új tény, ezért el kell jutnia a Könyvelőbe. Csak az hivatkozik
+  a beérkezett eseményre (és nem megy vissza), ami a fogadó saját tranzakciójában történt, pl. egy partner
+  átnevezése.
+- Ezekből a mozgásokból nem megy külön beszerzés- vagy eladásesemény, így a Könyvelőben a számla nem
+  duplázódik.

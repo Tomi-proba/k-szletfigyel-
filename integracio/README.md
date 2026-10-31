@@ -11,7 +11,8 @@ DOCUMENTATION.md 23.). A Készlet nélküle is teljes értékűen működik; csa
   percig nem veszi át, Teendő lesz.
 - `src/fogado.ts`: aláírt végpontok a központnak (kapcsolódás kóddal, bontás, beérkező esemény pontosan
   egyszer), és `GET /egeszseg`.
-- `src/kezelok.ts`: a beérkező események kezelői (az I3 4. lépésében készülnek).
+- `src/kezelok.ts`: a beérkező események kezelői (a Könyvelő számláiból jóváhagyandó mozgás, sztornó,
+  kiegyenlítés, időszakzárás, partner). Nem találgat: ami nem egyértelmű, abból Teendő lesz (DOCUMENTATION.md 24.).
 - `esemenyek/`: a modulok közös eseményformátumának **változatlan másolata** (forrás: AWEBOLDAL
   `packages/esemenyek`, lásd `esemenyek/FORRAS.json`). Ne itt módosítsd: a forrásban változtass, majd másold
   újra az AWEBOLDAL repóból: `npm run masol -w @aweboldal/esemenyek -- ../k-szletfigyel-/integracio/esemenyek`.

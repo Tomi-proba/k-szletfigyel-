@@ -13,4 +13,8 @@ describe('séma', () => {
   it('a schema.sql szó szerint tartalmazza a 2026-10-29-i (integrációs) migrációt', () => {
     expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-29_integracio.sql'))
   })
+
+  it('a schema.sql szó szerint tartalmazza a 2026-10-31-i (Könyvelőből érkező tételek) migrációt', () => {
+    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-31_integracio_bejovo.sql'))
+  })
 })

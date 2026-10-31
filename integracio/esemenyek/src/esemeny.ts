@@ -449,6 +449,44 @@ export const EVENT_TYPES: readonly EventTypeDefinition[] = [
     payload: z.object({ movementKind: z.enum(["PURCHASE", "SALE", "INVENTORY", "RETURN"]), movementId: z.string(), date: isoDate, reason: z.string().max(500) }),
   },
   {
+    type: "keszlet.mozgas.jovahagyva",
+    version: 1,
+    description:
+      "A Készletben jóváhagytak (vagy „nem érkezett meg / nem ment ki” jelöléssel elutasítottak) egy, a Könyvelő bizonylatából jött mozgást (F15.4). A várt és a tényleges mennyiséggel: az eltérésből a Könyvelőben Teendő lesz, a könyvelés magától nem változik. Forrásrekordja: konyvelo_mozgas (visszárunál és visszavételnél az eredeti mozgásé).",
+    consumers: ["konyvelo"],
+    payload: z
+      .object({
+        movementId: z.string(),
+        /**
+         * RECEIPT: szállítói számla beérkezése; ISSUE: vevőszámla kiadása; CUSTOMER_RETURN / SUPPLIER_RETURN:
+         * helyesbítő számla visszárúja; REVERSAL: a Könyvelőben sztornózott számla már jóváhagyott mozgásának
+         * visszavétele.
+         */
+        purpose: z.enum(["RECEIPT", "ISSUE", "CUSTOMER_RETURN", "SUPPLIER_RETURN", "REVERSAL"]),
+        /** A Könyvelő bizonylata és eseménye, amelyből a mozgás lett. */
+        sourceDocument: z.object({ documentId: z.string(), serialNumber: z.string().nullable(), eventId: uuid }),
+        /** Visszárunál és visszavételnél az eredeti mozgás. */
+        originalMovementId: z.string().nullable(),
+        date: isoDate,
+        productId: z.string().min(1),
+        productName: z.string().min(1).max(300),
+        unit: z.string().max(30).nullable(),
+        expectedQuantity: z.number().positive(),
+        /** 0: nem érkezett meg / nem ment ki (a raktáros elutasította). */
+        actualQuantity: z.number().nonnegative(),
+        note: z.string().max(500).nullable(),
+        /**
+         * Bekerülési érték a Készlet költségszámítása szerint: kiadásnál az ELÁBÉ, vevői visszárunál és a
+         * kiadás visszavételénél a készletbe visszakerülő érték; egyébként null.
+         */
+        costOfGoods: filler.nonnegative().nullable(),
+      })
+      .refine((p) => (p.purpose === "RECEIPT" || p.purpose === "ISSUE") === (p.originalMovementId === null), {
+        message: "Visszárunál és visszavételnél az eredeti mozgás kell, beérkezésnél és kiadásnál nincs.",
+        path: ["originalMovementId"],
+      }),
+  },
+  {
     type: "konyvelo.kiegyenlites.rogzitve",
     version: 3,
     description:

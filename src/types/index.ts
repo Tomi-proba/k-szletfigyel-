@@ -120,6 +120,8 @@ export interface PurchaseLot extends SoftDeletable {
    * in which case its amount folds into the lot's unit cost instead (see
    * lotUnitCost in lib/costing.ts) since it's then a real, unrecoverable cost. */
   vatReclaimable?: boolean
+  /** A fizetési állapotot a Könyvelő követi (a kiegyenlítésből); a felületen nem állítható kézzel. */
+  fizetesKonyvelobol?: boolean
 }
 
 /** Fulfillment state of an outgoing sale, manually advanced by the user.
@@ -230,7 +232,24 @@ export interface Movement extends SoftDeletable {
   approvedAt?: string
   rejectedAt?: string
   rejectReason?: string
+  /** Az ok (közvetlen mozgásnál, csak az iroda választhatja): leltári hiány/többlet vagy selejt. Üres = normál. */
+  ok?: MovementReason
+  /** Visszáru: az eredeti eladás (vevői visszavétel, 'in') vagy beszerzés (szállítói visszaküldés, 'out'). */
+  returnOfMovementId?: string
+  /** A számla száma (beszerzésnél a szállítóé, eladásnál a vevőszámláé), ha ismert. */
+  invoiceNumber?: string
+  /** 'in': a szállítási díj a szállító számláján van-e (igen / nem / undefined = nem tudni). */
+  shippingOnInvoice?: boolean
+  /** Ha a mozgás a Könyvelő egy bizonylatából lett (jóváhagyandóként): a beérkezett esemény, a bizonylat
+   * és a bizonylat sorszáma („Könyvelő, SZSZ-2026-00042”). Ezeket csak az integrációs szolgáltatás írja. */
+  integracioEsemenyId?: string
+  integracioDokumentumId?: string
+  integracioForras?: string
+  /** A fizetési állapotot a Könyvelő követi (a kiegyenlítésből); a felületen nem állítható kézzel. */
+  fizetesKonyvelobol?: boolean
 }
+
+export type MovementReason = 'normal' | 'leltar_hiany' | 'leltar_tobblet' | 'selejt'
 
 export type LedgerEntryType = 'income' | 'expense'
 

@@ -143,7 +143,11 @@ export const keszletAnswerSchema = z.object({
   stockValue: filler,
   /** Az időszak eladásainak bekerülési értéke, mínusz a vevői visszavételeké és a visszavont eladásoké. */
   cogs: filler,
-  /** A jóváhagyásra váró (Könyvelőből jött) mozgások: hány db, és mennyivel változtatják majd a készletértéket. */
+  /**
+   * A Könyvelőből jött, jóváhagyásra váró mozgások: hány db és mióta vár. `inventory`: azoké a hatása a
+   * készletértékre, amelyeket a Könyvelő a számlával már könyvelt, a Készletben viszont még nincsenek bent
+   * (beérkezés +, szállítói visszaküldés −). A kiadás nem számít: az ELÁBÉ-ja a jóváhagyással megy át.
+   */
   pending: z.object({ count, inventory: filler, oldest: isoDateTime.nullable() }),
   /** A kért rekordok: él-e (`effective`), és ki van-e fizetve (`paid`); ismeretlen vagy nem követett: null. */
   records: z.array(recordKey.extend({ effective: z.boolean().nullable(), paid: z.boolean().nullable() })).max(40_000),

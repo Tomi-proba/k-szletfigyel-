@@ -1088,3 +1088,7 @@ fogadják el.
 
 Meglévő projektben a `supabase/migrations/2026-10-31_egyeztetes.sql` fájlt kell lefuttatni (friss
 projektben a `schema.sql` végén szerepel).
+
+A közös próba (AWEBOLDAL, `integracio:proba`) 8. lépése a három valódi programmal végigjátssza: az első kör
+nyitó különbséget mutat, a Könyvelőben indoklással elfogadják, a Készlet is megkapja a frissített
+eredményt; egy szándékos kézi könyvelés a készletszámlára a következő körben Teendő lesz itt is.

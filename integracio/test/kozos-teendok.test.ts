@@ -38,6 +38,12 @@ class AlKozpont implements HubClient {
     if (this.le) throw new Error("Az integrációs központ most nem érhető el.");
     return this.valasz;
   }
+  async mirrorOpenItems(): Promise<never> {
+    throw new Error("nem kell");
+  }
+  async openItems(): Promise<never> {
+    throw new Error("nem kell");
+  }
 }
 
 beforeAll(async () => {

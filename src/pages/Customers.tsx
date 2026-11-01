@@ -105,6 +105,7 @@ export function Customers() {
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
             Összesen {formatCurrency(alerts.unpaidSales.reduce((sum, s) => sum + s.amount, 0))} tartozás {alerts.unpaidSales.length}{' '}
             tételből.
+            {alerts.egyIgazsag && ' A Könyvelő nyitott vevői tételeivel együtt (egy igazság) a Riasztások oldalon, a „Kifizetetlen eladás” szűrőben látszik.'}
           </p>
           <div className="divide-y divide-[var(--color-border)]">
             {alerts.unpaidSales.map((sale) => (

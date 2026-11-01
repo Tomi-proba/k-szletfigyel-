@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { integracioFrissites, useStore } from '../store/useStore'
 import type { Movement } from '../types'
+import type { KonyveloNyitott } from './egyIgazsag'
 
 export type IntegracioTeendo = {
   id: string
@@ -86,6 +87,27 @@ export function modulHivatkozas(h: ModulHivatkozas | null | undefined, cimek: Pa
   const alap = cimek[h.module]?.trim().replace(/\/+$/, '')
   if (!alap) return null
   return `${alap}${h.path.startsWith('#') ? '/' : ''}${h.path}`
+}
+
+/** A Könyvelő nyitott tételei (TERV.md F19): szerveres módban, percenként frissítve; hiba vagy helyi mód esetén null. */
+export function useKonyveloNyitott(enabled: boolean): KonyveloNyitott | null {
+  const remote = useStore((s) => s.dataMode === 'remote')
+  const [adat, setAdat] = useState<KonyveloNyitott | null>(null)
+  useEffect(() => {
+    if (!remote || !enabled) return
+    let el = false
+    const betolt = () =>
+      rpc<KonyveloNyitott>('integracio_konyvelo_nyitott')
+        .then((a) => !el && setAdat(a))
+        .catch(() => undefined)
+    void betolt()
+    const t = setInterval(betolt, 60_000)
+    return () => {
+      el = true
+      clearInterval(t)
+    }
+  }, [remote, enabled])
+  return remote && enabled ? adat : null
 }
 
 export const kozosTeendokLekerese = () => rpc<KozosTeendok>('integracio_kozos_teendok')

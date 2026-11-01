@@ -71,8 +71,9 @@ export function Dashboard() {
     .sort((a, b) => (a.insight.daysUntilStockout ?? Infinity) - (b.insight.daysUntilStockout ?? Infinity))
     .slice(0, 5)
 
-  const totalUnpaid = alerts.unpaidSales.reduce((sum, s) => sum + s.amount, 0)
-  const totalPayable = alerts.urgentPayables.reduce((sum, p) => sum + p.amount, 0)
+  // Ha van Könyvelő, a Könyvelő nyitott tételeiből és a Készlet saját tételeiből (egy igazság, F19).
+  const totalUnpaid = alerts.kintlevoseg.osszeg
+  const totalPayable = alerts.fizetendoRiaszt.osszeg
 
   return (
     <div>
@@ -95,8 +96,8 @@ export function Dashboard() {
               <SummaryCard
                 to="/riasztasok?szuro=kifizetetlen"
                 icon={CircleDollarSign}
-                label={alerts.unpaidSales.length === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
-                count={alerts.unpaidSales.length}
+                label={alerts.kintlevoseg.db === 0 ? 'Kifizetetlen eladás' : `Kifizetetlen: ${formatCurrency(totalUnpaid)}`}
+                count={alerts.kintlevoseg.db}
                 tone="danger"
               />
             )}
@@ -104,8 +105,8 @@ export function Dashboard() {
               <SummaryCard
                 to="/riasztasok?szuro=fizetesi"
                 icon={CalendarClock}
-                label={alerts.urgentPayables.length === 0 ? 'Fizetési kötelezettség' : `Fizetendő: ${formatCurrency(totalPayable)}`}
-                count={alerts.urgentPayables.length}
+                label={alerts.fizetendoRiaszt.db === 0 ? 'Fizetési kötelezettség' : `Fizetendő: ${formatCurrency(totalPayable)}`}
+                count={alerts.fizetendoRiaszt.db}
                 tone="warning"
               />
             )}

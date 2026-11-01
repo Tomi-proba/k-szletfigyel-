@@ -301,8 +301,8 @@ export function Layout() {
     alerts.needsReorder.length +
     alerts.slowMoving.length +
     alerts.transferSuggestions.length +
-    alerts.unpaidSales.length +
-    alerts.urgentPayables.length +
+    alerts.kintlevoseg.db +
+    alerts.fizetendoRiaszt.db +
     alerts.openSales.length +
     // A raktáros elsősorban a saját beadott/rá váró jóváhagyásait látja itt
     // (lásd DOCUMENTATION.md 15. fejezet); iroda/fő iroda az irodát terhelő

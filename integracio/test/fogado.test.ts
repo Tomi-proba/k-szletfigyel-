@@ -186,6 +186,12 @@ class AlKozpont implements HubClient {
   async sharedTodos(): Promise<never> {
     throw new Error("a közös Teendőket a kozos-teendok.test.ts próbálja ki");
   }
+  async mirrorOpenItems(): Promise<never> {
+    throw new Error("a Készlet nem küld nyitott tételeket");
+  }
+  async openItems(): Promise<never> {
+    throw new Error("a nyitott tételeket a nyitott-tetelek.test.ts próbálja ki");
+  }
 }
 
 leiras("átadás és önállóság", () => {

@@ -17,6 +17,7 @@ import { atadas } from "./atado.ts";
 import { ujPool } from "./db.ts";
 import { fogado } from "./fogado.ts";
 import { kozosTeendokKor } from "./kozos-teendok.ts";
+import { nyitottTetelekKor } from "./nyitott-tetelek.ts";
 import { osszeallitas } from "./osszeallito.ts";
 
 const env = process.env;
@@ -60,6 +61,9 @@ const kor = async () => {
         utolsoKozos = Date.now();
         const k = await kozosTeendokKor(pool, hub);
         if (k.hibas) log(`Integráció: a közös Teendők frissítése ${k.hibas} esetben nem sikerült; a következő körben újra.`);
+        // A Könyvelő nyitott tételei (F19), ugyanebben a ritmusban.
+        const n = await nyitottTetelekKor(pool, hub);
+        if (n.hibas) log(`Integráció: a Könyvelő nyitott tételeinek letöltése ${n.hibas} esetben nem sikerült; a legutóbbi lista marad.`);
       }
     }
   } catch (e) {

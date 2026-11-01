@@ -1137,3 +1137,34 @@ böngésző a központot közvetlenül nem éri el.
   szöveg.
 - Meglévő projektben a `supabase/migrations/2026-11-01_kozos_teendok.sql` fájlt kell lefuttatni.
 - Az integrációs szolgáltatás köre `INTEGRACIO_TEENDO_KOR_MS` (alapból 30 000 ms).
+
+## 30. Egy igazság: a Könyvelő nyitott tételei (2026-11-01, I6b, KK10)
+
+Ha a cégnek van Könyvelője (és a Könyvelő → Készlet kapcsolat be van kapcsolva), a **fizetési
+kötelezettségek** és a **kifizetetlen eladások (kintlévőség)** a Könyvelő nyitott tételeiből jönnek, hogy
+mindkét oldalon egy igazság legyen. Az integrációs szolgáltatás félpercenként letölti a listát; a felület
+percenként frissít.
+
+A Riasztások oldalon mindkét lista három csoportban jelenik meg:
+
+1. **A Könyvelő nyitott tételei:** „A Könyvelő követi”, itt nincs „Kifizetve” gomb, mert a fizetést a
+   Könyvelőben rögzítik (KK6). A bizonylat neve a Könyvelő bizonylatára hivatkozik.
+2. **Könyvelésre vár:** a Készlet tétele, amelyről a Könyvelő tud, de még nincs könyvelve.
+   - beszerzésnél a szállítói számla még piszkozat;
+   - eladásnál még nincs könyvelt vevőszámla.
+3. **Csak a Készletben rögzítve:** a Könyvelő legutóbbi listájában nem szerepel. Ilyen például az
+   összekapcsolás előtti tétel, vagy ami még átadás alatt van; ide kerülnek a pénzügyi napló határidős
+   kiadásai is. Ha a Könyvelőben is könyvelték, ott is szerepel.
+
+A 2. és a 3. csoport a riasztásban is számít, és a „Kifizetve” jelölés a mai módon működik.
+
+- **Nincs kitalált határidő.** A határidő nélküli Könyvelő-tétel „nincs határidő” jelzéssel a csoport végén
+  áll, és nem riaszt. A Készlet-eladásnak sincs határideje (mint eddig, a kifizetetlen eladás riaszt).
+- **Elavulás.** Ha a lista 24 óránál régebbi, figyelmeztetés jelenik meg; a lista ilyenkor is látszik. Ha a
+  központ épp nem érhető el, a legutóbbi lista látszik, és ezt jelezzük.
+- **Ki látja:** aki eddig is a fizetési kötelezettségeket és a kintlévőséget (iroda, fő iroda, tulajdonos);
+  a raktáros nem.
+- **Könyvelő nélkül** (vagy kikapcsolt kapcsolat, bontás után) a Készlet a saját számítását mutatja, mint
+  eddig.
+- **Meglévő projektben** a `supabase/migrations/2026-11-01_konyvelo_nyitott_tetelek.sql` fájlt kell
+  lefuttatni.

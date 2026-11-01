@@ -18,7 +18,8 @@ import {
   type UnpaidSale,
 } from '../lib/alerts'
 import { computePayableObligations, type PayableObligation } from '../lib/payables'
-import { jovahagyandoIntegracios } from '../lib/integracio'
+import { jovahagyandoIntegracios, useKonyveloNyitott } from '../lib/integracio'
+import { egyIgazsag, type EgyIgazsag } from '../lib/egyIgazsag'
 import { computeMissingClosings, type MissingClosingAlert } from '../lib/dailyClosing'
 import { todayISO } from '../lib/dates'
 import type { Movement, Product } from '../types'
@@ -56,6 +57,15 @@ export interface AlertsData {
   /** A Könyvelőből jött és a visszáru-mozgások, amelyek jóváhagyásra várnak (F15.4, F15.8). */
   pendingIntegrationApprovals: Movement[]
   rejectedSales: Movement[]
+  /**
+   * Egy igazság (TERV.md F19, KK10): ha a cégnek van Könyvelője, a fizetési kötelezettségek és a kintlévőség a
+   * Könyvelő nyitott tételeiből és a Készlet három csoportba sorolt saját tételeiből; null, ha nincs Könyvelő
+   * (ekkor a fenti saját számítás él, mint eddig).
+   */
+  egyIgazsag: EgyIgazsag | null
+  /** A jelvényekhez: a riasztásban számító fizetendő és kintlévő tételek száma és összege (forint). */
+  fizetendoRiaszt: { db: number; osszeg: number }
+  kintlevoseg: { db: number; osszeg: number }
 }
 
 /** Recomputes every alert/insight derived value whenever the underlying data changes. */
@@ -77,6 +87,7 @@ export function useAlerts(): AlertsData {
   // eszköz saját, helyi (jellemzően demó-)állapota - kiszámolásuk raktáros
   // nézetben félrevezető, nem valós adatot mutatna.
   const { isWarehouseUser } = useAuth()
+  const konyveloNyitott = useKonyveloNyitott(!isWarehouseUser)
 
   return useMemo(() => {
     const now = new Date()
@@ -109,7 +120,18 @@ export function useAlerts(): AlertsData {
     const pendingIntegrationApprovals = activeMovements.filter(jovahagyandoIntegracios)
     const rejectedSales = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'rejected')
 
+    const reminderWindowDays = settings.paymentReminderDaysBefore.length ? Math.max(...settings.paymentReminderDaysBefore) : 0
+    const egy = isWarehouseUser ? null : egyIgazsag(konyveloNyitott, payables, unpaidSales, lots, reminderWindowDays, now)
+    const osszeg = (l: Array<{ osszeg: number }>) => l.reduce((s, x) => s + x.osszeg, 0)
+    const fizetendoRiaszt = egy
+      ? { db: egy.fizetendo.filter((x) => x.riaszt).length, osszeg: osszeg(egy.fizetendo.filter((x) => x.riaszt)) }
+      : { db: urgentPayables.length, osszeg: urgentPayables.reduce((s, p) => s + p.amount, 0) }
+    const kintlevoseg = egy ? { db: egy.kintlevoseg.length, osszeg: osszeg(egy.kintlevoseg) } : { db: unpaidSales.length, osszeg: unpaidSales.reduce((s, x) => s + x.amount, 0) }
+
     return {
+      egyIgazsag: egy,
+      fizetendoRiaszt,
+      kintlevoseg,
       byProductId,
       all,
       lowStock,
@@ -127,5 +149,5 @@ export function useAlerts(): AlertsData {
       pendingIntegrationApprovals,
       rejectedSales,
     }
-  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser])
+  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser, konyveloNyitott])
 }

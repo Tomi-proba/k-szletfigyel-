@@ -33,4 +33,8 @@ describe('séma', () => {
   it('a schema.sql szó szerint tartalmazza a 2026-11-01-i (közös Teendők) migrációt', () => {
     expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-01_kozos_teendok.sql'))
   })
+
+  it('a schema.sql szó szerint tartalmazza a 2026-11-01-i (a Könyvelő nyitott tételei) migrációt', () => {
+    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-01_konyvelo_nyitott_tetelek.sql'))
+  })
 })

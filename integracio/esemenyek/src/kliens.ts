@@ -1,6 +1,7 @@
 import { signedHeaders, verifySignature, type SignatureCheck } from "./alairas.ts";
 import type { BaselineAccept, ReconcileReport } from "./egyeztetes.ts";
 import { inboundResultSchema, type EventEnvelope, type InboundDelivery, type InboundResult, type Module } from "./esemeny.ts";
+import { OPEN_ITEMS_PATH, openItemsAnswerSchema, type OpenItemsAnswer, type OpenItemsMirror } from "./nyitott.ts";
 import { MODULE_TODOS_PATH, sharedTodosAnswerSchema, type ModuleTodo, type SharedTodosAnswer } from "./teendok.ts";
 
 /**
@@ -42,6 +43,10 @@ export type HubClient = {
   mirrorTodos(companyRef: string, todos: ModuleTodo[]): Promise<{ stored: number }>;
   /** A cég többi programjának (és a központnak) nyitott Teendői. */
   sharedTodos(companyRef: string): Promise<SharedTodosAnswer>;
+  /** A Könyvelő nyitott tételeinek tükre (TERV.md F19): csak a Könyvelő küldi. */
+  mirrorOpenItems(mirror: OpenItemsMirror): Promise<{ stored: number }>;
+  /** A Könyvelő nyitott tételei: csak a Készlet kérdezi, bekapcsolt Könyvelő → Készlet párral. */
+  openItems(companyRef: string): Promise<OpenItemsAnswer>;
 };
 
 export function createHubClient(config: { url: string; module: Module; secret: string; timeoutMs?: number }): HubClient {
@@ -75,6 +80,8 @@ export function createHubClient(config: { url: string; module: Module; secret: s
     reconcileNow: (companyRef) => call("POST", "api/v1/modul/egyeztetes", { companyRef }),
     acceptBaseline: (input) => call("POST", "api/v1/modul/egyeztetes/nyito", input),
     mirrorTodos: (companyRef, todos) => call("PUT", MODULE_TODOS_PATH, { companyRef, todos }),
+    mirrorOpenItems: (mirror) => call("PUT", OPEN_ITEMS_PATH, mirror),
+    openItems: async (companyRef) => openItemsAnswerSchema.parse(await call("GET", `${OPEN_ITEMS_PATH}?companyRef=${encodeURIComponent(companyRef)}`)),
     sharedTodos: async (companyRef) => sharedTodosAnswerSchema.parse(await call("GET", `${MODULE_TODOS_PATH}?companyRef=${encodeURIComponent(companyRef)}`)),
   };
 }

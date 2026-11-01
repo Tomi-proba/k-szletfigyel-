@@ -7,6 +7,8 @@ import { useStore } from '../store/useStore'
 import type { SaleStatus } from '../types'
 import { Button, Card, EmptyState, PageHeader, Select } from '../components/ui'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { EgyIgazsagAllapot, EgyIgazsagLista } from '../components/EgyIgazsagLista'
+import type { EgyIgazsagSor } from '../lib/egyIgazsag'
 
 type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott' | 'hianyzo-zaras'
 
@@ -65,6 +67,21 @@ export function Alerts() {
     return alerts.payables.filter((p) => p.daysUntilDue <= payableWindow)
   }, [alerts.payables, alerts.urgentPayables, payableWindow])
 
+  // Egy igazság (F19): ha van Könyvelő, a két lista a Könyvelő nyitott tételeiből és a Készlet csoportosított tételeiből.
+  const egy = alerts.egyIgazsag
+  function egyKifizetve(s: EgyIgazsagSor) {
+    if (!s.helyi) return
+    if ('fizetendo' in s.helyi) markPayablePaid(s.helyi.fizetendo)
+    else setMovementPaid(s.helyi.eladas.movementId, true)
+  }
+  const egyJelolheto = (s: EgyIgazsagSor) =>
+    !isReadOnlyViewer && Boolean(s.helyi) && !konyvelobolKovetett.has(s.helyi && 'fizetendo' in s.helyi ? s.helyi.fizetendo.id : (s.helyi?.eladas.movementId ?? ''))
+  const egyFizetendo = useMemo(() => {
+    if (!egy) return []
+    if (payableWindow === -1 || payableWindow === 0) return egy.fizetendo
+    return egy.fizetendo.filter((s) => s.napHataridoig !== null && s.napHataridoig <= payableWindow)
+  }, [egy, payableWindow])
+
   const visibleOpenSales = useMemo(
     () => (openSaleStatusFilter ? alerts.openSales.filter((s) => s.status === openSaleStatusFilter) : alerts.openSales),
     [alerts.openSales, openSaleStatusFilter],
@@ -76,8 +93,8 @@ export function Alerts() {
     alerts.needsReorder.length +
     alerts.slowMoving.length +
     alerts.transferSuggestions.length +
-    alerts.unpaidSales.length +
-    alerts.urgentPayables.length +
+    alerts.kintlevoseg.db +
+    alerts.fizetendoRiaszt.db +
     alerts.openSales.length +
     alerts.missingClosings.length
 
@@ -214,7 +231,12 @@ export function Alerts() {
         {(showAll || active === 'kifizetetlen') && (
           <section>
             <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Kifizetetlen eladások</h2>
-            {alerts.unpaidSales.length === 0 ? (
+            {egy ? (
+              <>
+                <EgyIgazsagAllapot e={egy} />
+                <EgyIgazsagLista sorok={egy.kintlevoseg} ures="Nincs kifizetetlen eladás és nyitott vevői tétel." onKifizetve={egyKifizetve} jelolheto={egyJelolheto} />
+              </>
+            ) : alerts.unpaidSales.length === 0 ? (
               <EmptyState>Nincs kifizetetlen eladás.</EmptyState>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -257,7 +279,12 @@ export function Alerts() {
                 </Select>
               </label>
             </div>
-            {visiblePayables.length === 0 ? (
+            {egy ? (
+              <>
+                <EgyIgazsagAllapot e={egy} />
+                <EgyIgazsagLista sorok={egyFizetendo} csakRiaszto={payableWindow === 0} ures="Nincs a szűrésnek megfelelő fizetési kötelezettség." onKifizetve={egyKifizetve} jelolheto={egyJelolheto} />
+              </>
+            ) : visiblePayables.length === 0 ? (
               <EmptyState>Nincs a szűrésnek megfelelő fizetési kötelezettség.</EmptyState>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

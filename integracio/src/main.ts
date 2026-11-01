@@ -16,6 +16,7 @@ import { createHubClient, MIN_SECRET_LENGTH } from "../esemenyek/src/index.ts";
 import { atadas } from "./atado.ts";
 import { ujPool } from "./db.ts";
 import { fogado } from "./fogado.ts";
+import { kozosTeendokKor } from "./kozos-teendok.ts";
 import { osszeallitas } from "./osszeallito.ts";
 
 const env = process.env;
@@ -43,6 +44,8 @@ const host = env.HOST ?? "127.0.0.1";
 server.listen(port, host, () => console.log(`Készlet integrációs szolgáltatás: http://${host}:${port}${hub ? "" : " (központ nincs beállítva)"}`));
 
 let fut = false;
+let utolsoKozos = 0;
+const kozosKozott = Number(env.INTEGRACIO_TEENDO_KOR_MS ?? 30_000);
 const kor = async () => {
   if (fut) return;
   fut = true;
@@ -52,6 +55,12 @@ const kor = async () => {
     if (hub) {
       const a = await atadas(pool, hub);
       if (a.hiba) log(`Integráció: az átadás nem sikerült (${a.hiba}); a következő körben újra.`);
+      // Közös Teendők (F18): ritkábban, mint az átadás.
+      if (Date.now() - utolsoKozos >= kozosKozott) {
+        utolsoKozos = Date.now();
+        const k = await kozosTeendokKor(pool, hub);
+        if (k.hibas) log(`Integráció: a közös Teendők frissítése ${k.hibas} esetben nem sikerült; a következő körben újra.`);
+      }
     }
   } catch (e) {
     log("Integráció: hiba a körben; a következő körben újra.", e);

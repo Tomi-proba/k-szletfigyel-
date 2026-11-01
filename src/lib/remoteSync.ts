@@ -213,6 +213,7 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     integracioEsemenyId: (row.integracio_esemeny_id as string | null) ?? undefined,
     integracioDokumentumId: (row.integracio_dokumentum_id as string | null) ?? undefined,
     integracioForras: (row.integracio_forras as string | null) ?? undefined,
+    integracioForrasUtvonal: (row.integracio_forras_utvonal as string | null) ?? undefined,
     fizetesKonyvelobol: Boolean(row.fizetes_konyvelobol) || undefined,
   }
 }

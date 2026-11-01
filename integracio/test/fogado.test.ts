@@ -180,6 +180,12 @@ class AlKozpont implements HubClient {
   async acceptBaseline(): Promise<never> {
     throw new Error("a nyitó különbséget a Könyvelőben fogadják el");
   }
+  async mirrorTodos() {
+    return { stored: 0 };
+  }
+  async sharedTodos(): Promise<never> {
+    throw new Error("a közös Teendőket a kozos-teendok.test.ts próbálja ki");
+  }
 }
 
 leiras("átadás és önállóság", () => {

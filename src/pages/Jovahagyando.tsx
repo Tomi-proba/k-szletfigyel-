@@ -14,6 +14,7 @@ import { jovahagyandoIntegracios, useIntegracioFrissites } from '../lib/integrac
 import { formatDate, formatNumber } from '../lib/format'
 import type { Movement, Product } from '../types'
 import { fajtaja, jovahagyhatja, SZOVEG } from '../lib/jovahagyando'
+import { KonyveloForras } from '../components/KozosTeendok'
 
 const HIBA: Record<Exclude<ApproveIntegrationResult, { ok: true }>['reason'], string> = {
   'not-found': 'Ez a tétel már nincs meg (közben törölték?). Frissítsd a listát.',
@@ -113,7 +114,7 @@ function Kartya({
             {termek?.name ?? 'Törölt termék'}
           </h3>
           <p className="muted text-sm">
-            {forras} · {formatDate(m.date)}
+            {m.integracioForras ? <KonyveloForras forras={forras} utvonal={m.integracioForrasUtvonal} /> : forras} · {formatDate(m.date)}
             {telephely ? ` · ${telephely}` : ''}
           </p>
         </div>

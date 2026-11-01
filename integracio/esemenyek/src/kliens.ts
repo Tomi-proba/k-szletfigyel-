@@ -1,6 +1,7 @@
 import { signedHeaders, verifySignature, type SignatureCheck } from "./alairas.ts";
 import type { BaselineAccept, ReconcileReport } from "./egyeztetes.ts";
 import { inboundResultSchema, type EventEnvelope, type InboundDelivery, type InboundResult, type Module } from "./esemeny.ts";
+import { MODULE_TODOS_PATH, sharedTodosAnswerSchema, type ModuleTodo, type SharedTodosAnswer } from "./teendok.ts";
 
 /**
  * A modulok oldala: kliens a központ felé, és a központtól érkező kérések ellenőrzése.
@@ -37,11 +38,15 @@ export type HubClient = {
   reconcileNow(companyRef: string): Promise<ReconcileReport>;
   /** A nyitó különbség elfogadása (csak a Könyvelő); válaszként a frissített eredmény. */
   acceptBaseline(input: BaselineAccept): Promise<ReconcileReport>;
+  /** A cég nyitott Teendőinek teljes listája (TERV.md F18): felülírja az előzőt. */
+  mirrorTodos(companyRef: string, todos: ModuleTodo[]): Promise<{ stored: number }>;
+  /** A cég többi programjának (és a központnak) nyitott Teendői. */
+  sharedTodos(companyRef: string): Promise<SharedTodosAnswer>;
 };
 
 export function createHubClient(config: { url: string; module: Module; secret: string; timeoutMs?: number }): HubClient {
   const base = new URL(config.url.endsWith("/") ? config.url : config.url + "/");
-  async function call<T>(method: "GET" | "POST", relative: string, payload?: unknown): Promise<T> {
+  async function call<T>(method: "GET" | "POST" | "PUT", relative: string, payload?: unknown): Promise<T> {
     const url = new URL(relative, base);
     const body = payload === undefined ? "" : JSON.stringify(payload);
     const headers: Record<string, string> = { Accept: "application/json", ...signedHeaders(config.secret, config.module, method, url.pathname + url.search, body) };
@@ -69,6 +74,8 @@ export function createHubClient(config: { url: string; module: Module; secret: s
       call("GET", `api/v1/modul/kapcsolatok?companyRef=${encodeURIComponent(companyRef)}&recordType=${encodeURIComponent(recordType)}&recordId=${encodeURIComponent(recordId)}`),
     reconcileNow: (companyRef) => call("POST", "api/v1/modul/egyeztetes", { companyRef }),
     acceptBaseline: (input) => call("POST", "api/v1/modul/egyeztetes/nyito", input),
+    mirrorTodos: (companyRef, todos) => call("PUT", MODULE_TODOS_PATH, { companyRef, todos }),
+    sharedTodos: async (companyRef) => sharedTodosAnswerSchema.parse(await call("GET", `${MODULE_TODOS_PATH}?companyRef=${encodeURIComponent(companyRef)}`)),
   };
 }
 

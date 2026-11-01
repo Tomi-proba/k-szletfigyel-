@@ -15,6 +15,7 @@ import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { MovementForm } from '../components/MovementForm'
+import { KozosTeendokKartya } from '../components/KozosTeendok'
 import { Card, PageHeader } from '../components/ui'
 import { formatCurrency, formatNumber } from '../lib/format'
 
@@ -187,6 +188,8 @@ export function Dashboard() {
               </p>
             </Card>
           )}
+
+          <KozosTeendokKartya />
 
           <Card>
             <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Legsürgősebb rendelések</h2>

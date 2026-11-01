@@ -248,6 +248,8 @@ export interface Movement extends SoftDeletable {
   integracioEsemenyId?: string
   integracioDokumentumId?: string
   integracioForras?: string
+  /** A forrásbizonylat útvonala a Könyvelő felületén („honnan jött?” hivatkozás, F18). */
+  integracioForrasUtvonal?: string
   /** A fizetési állapotot a Könyvelő követi (a kiegyenlítésből); a felületen nem állítható kézzel. */
   fizetesKonyvelobol?: boolean
 }

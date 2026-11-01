@@ -20,6 +20,7 @@ import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { lotUnitCost } from '../lib/costing'
 import type { Movement, MovementReason, Product, PurchaseLot, SaleStatus } from '../types'
+import { KonyveloForras } from '../components/KozosTeendok'
 
 const OK_FELIRAT: Record<MovementReason, string> = { normal: '', leltar_hiany: 'Leltári hiány', leltar_tobblet: 'Leltári többlet', selejt: 'Selejt' }
 
@@ -328,7 +329,11 @@ export function Movements() {
                       {m.correctsMovementId && (
                         <div className="text-xs font-medium text-[var(--color-warning)]">Korrekció - #{m.correctsMovementId.slice(0, 8)}</div>
                       )}
-                      {m.integracioForras && <div className="text-xs text-[var(--color-text-muted)]">Könyvelő, {m.integracioForras}</div>}
+                      {m.integracioForras && (
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          <KonyveloForras forras={`Könyvelő, ${m.integracioForras}`} utvonal={m.integracioForrasUtvonal} />
+                        </div>
+                      )}
                       {m.returnOfMovementId && (
                         <div className="text-xs font-medium text-[var(--color-warning)]">
                           {m.type === 'in' ? 'Visszavétel' : 'Visszaküldés'} - #{m.returnOfMovementId.slice(0, 8)}

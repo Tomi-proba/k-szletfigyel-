@@ -59,6 +59,58 @@ async function rpc<T>(nev: string, args?: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
+/** Programfüggetlen hivatkozás (TERV.md F18): melyik program, és azon belül melyik útvonal. */
+export type ModulHivatkozas = { module: 'konyvelo' | 'keszlet' | 'eafa'; path: string }
+
+/** A cég többi programjának Teendői (csak a cím és a hivatkozás), ahogy az integrációs szolgáltatás legutóbb letöltötte. */
+export type KozosTeendok = {
+  allapot: 'OK' | 'KOZPONT_NEM_ERHETO_EL' | 'NINCS_JOGOSULTSAG' | 'NINCS_OSSZEKAPCSOLVA' | 'MEG_NINCS_ADAT'
+  teendok: Array<{ modul: string; modulNev: string; cim: string; hivatkozas: ModulHivatkozas | null; ota: string | null }>
+  modulok: Array<{ modulNev: string; kuldve: string | null }>
+  lekerve?: string
+}
+
+const MODUL_CIMEK: Record<ModulHivatkozas['module'], string | undefined> = {
+  konyvelo: import.meta.env.VITE_KONYVELO_URL,
+  eafa: import.meta.env.VITE_EAFA_URL,
+  keszlet: undefined,
+}
+
+/**
+ * A hivatkozás webcíme: a program beállított címe + az útvonal (ugyanabban a fülben nyílik). A Készlet saját
+ * útvonala a saját felületén belül marad; ha a másik program címe nincs beállítva, null (csak szöveg).
+ */
+export function modulHivatkozas(h: ModulHivatkozas | null | undefined, cimek: Partial<Record<ModulHivatkozas['module'], string | undefined>> = MODUL_CIMEK): string | null {
+  if (!h || !/^(\/|#\/)/.test(h.path) || h.path.startsWith('//')) return null
+  if (h.module === 'keszlet') return h.path.startsWith('#') ? h.path : `#${h.path}`
+  const alap = cimek[h.module]?.trim().replace(/\/+$/, '')
+  if (!alap) return null
+  return `${alap}${h.path.startsWith('#') ? '/' : ''}${h.path}`
+}
+
+export const kozosTeendokLekerese = () => rpc<KozosTeendok>('integracio_kozos_teendok')
+
+/** A többi program Teendői (szerveres módban, percenként frissítve); hiba esetén null. */
+export function useKozosTeendok(enabled: boolean): KozosTeendok | null {
+  const remote = useStore((s) => s.dataMode === 'remote')
+  const [adat, setAdat] = useState<KozosTeendok | null>(null)
+  useEffect(() => {
+    if (!remote || !enabled) return
+    let el = false
+    const betolt = () =>
+      kozosTeendokLekerese()
+        .then((a) => !el && setAdat(a))
+        .catch(() => undefined)
+    void betolt()
+    const t = setInterval(betolt, 60_000)
+    return () => {
+      el = true
+      clearInterval(t)
+    }
+  }, [remote, enabled])
+  return adat
+}
+
 export const integracioAllapot = () => rpc<IntegracioAllapot>('integracio_allapot')
 export const kapcsolodasiKodKeszitese = (adoszam: string) => rpc<{ kod: string; lejar: string }>('integracio_kod_keszites', { p_adoszam: adoszam })
 export const valtozasKihagyasa = (valtozasId: number, indok: string) => rpc<void>('integracio_kihagyas', { p_valtozas_id: valtozasId, p_indok: indok })

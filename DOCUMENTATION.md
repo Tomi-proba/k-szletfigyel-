@@ -1104,3 +1104,36 @@ beküldték… ha áfás, a könyvelőnél önellenőrzés lehet szükséges”.
 - **A döntés máshol születik.** Az önellenőrzésről az eÁFA-ban ember dönt; a beküldött bevallás magától
   soha nem változik.
 - **Meglévő projektben** a `supabase/migrations/2026-10-31_afa_idoszak.sql` fájlt kell lefuttatni.
+
+## 29. Közös Teendők és hivatkozások (2026-11-01, I6 3. lépés)
+
+A cég programjai (Könyvelő, Készlet, eÁFA) látják egymás Teendőit, és a hivatkozások egységesen működnek.
+
+**A Készlet saját Teendői.** Az integrációs szolgáltatás félpercenként összeállítja a Készlet nyitott
+Teendőit, és elküldi a központnak. Csak akkor küld, ha a lista változott, de legalább 10 percenként. A lista
+tartalma:
+
+- az integrációs Teendők;
+- a raktárban beérkezésre vagy kiadásra váró tételek;
+- a fő iroda jóváhagyására váró mozgások;
+- a minimum alatti készlet.
+
+Az egyeztetés eredménye nem kerül bele, mert az a többi programban saját Teendőként él.
+
+**A többi program Teendői.** A szolgáltatás letölti a többi program Teendőit, és az adatbázisba teszi. A
+böngésző a központot közvetlenül nem éri el.
+
+- A Kezdőlapon „A többi program teendői” kártya mutatja őket.
+- A közös belépésig csak a **fő iroda és a tulajdonos** látja (döntés 2026-11-01), és csak a címet.
+- A hivatkozás ugyanabban a fülben nyílik. A másik program addig kérheti a belépést.
+- Ha a központ nem érhető el, a kártya ezt jelzi, és a legutóbbi listát mutatja.
+
+**„Honnan jött?”** A Könyvelőből jött mozgásnál a mozgásnaplóban és a jóváhagyási listán a forrásbizonylat
+(„Könyvelő, SZSZ-…”) hivatkozás. A Könyvelő a jó cégnél nyitja meg.
+
+**Beállítás:**
+
+- `VITE_KONYVELO_URL` és `VITE_EAFA_URL` (`.env.example`): a többi program címe. Üresen a hivatkozás csak
+  szöveg.
+- Meglévő projektben a `supabase/migrations/2026-11-01_kozos_teendok.sql` fájlt kell lefuttatni.
+- Az integrációs szolgáltatás köre `INTEGRACIO_TEENDO_KOR_MS` (alapból 30 000 ms).

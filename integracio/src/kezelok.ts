@@ -90,12 +90,14 @@ async function jovahagyandoMozgas(client: pg.PoolClient, d: InboundDelivery, m: 
   await client.query(
     `INSERT INTO public.movements (id, company_id, product_id, location_id, date, type, quantity, ordered_quantity, note, created_at,
        unit_price, unit_cost, sale_unit_price, vat_rate_percent, customer_id, invoice_number, return_of_movement_id, corrects_movement_id,
-       approval_status, integracio_esemeny_id, integracio_dokumentum_id, integracio_forras)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, now(), $9, $10, $11, $12, $13, $14, $15, $16, 'pending', $17, $18, $19)`,
+       approval_status, integracio_esemeny_id, integracio_dokumentum_id, integracio_forras, integracio_forras_utvonal)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, now(), $9, $10, $11, $12, $13, $14, $15, $16, 'pending', $17, $18, $19, $20)`,
     [
       id, d.targetCompanyRef, m.productId, m.locationId, m.date, m.type, m.quantity, m.note.slice(0, 500),
       m.unitPrice ?? null, m.unitCost ?? null, m.saleUnitPrice ?? null, m.vatRate ?? null, m.customerId ?? null, m.invoiceNumber ?? null,
       m.returnOf ?? null, m.corrects ?? null, d.event.id, m.dokumentum, m.forras,
+      // „Honnan jött?” (F18): a forrásbizonylat útvonala a Könyvelő felületén, ha a forrás megadta.
+      d.event.source.module === "konyvelo" && d.event.source.url && /^(\/|#\/)/.test(d.event.source.url) ? d.event.source.url : null,
     ],
   );
   return id;

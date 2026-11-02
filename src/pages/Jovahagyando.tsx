@@ -11,11 +11,11 @@
 // komponensekből vannak (src/kozos/kozos.css: .btn, .card, .badge).
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronUp, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
 import { useIntegracioFrissites } from '../lib/integracio'
-import { formatDate, formatNumber } from '../lib/format'
+import { formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
 import type { Movement, Product } from '../types'
 import { bejelentesCimke, fajtaja, forrasa, SZOVEG } from '../lib/jovahagyando'
 import { allapota, ALLAPOT_SZOVEG, teendoje, varakozo, type Szerep, type Teendo } from '../lib/raktariBejelentes'
@@ -45,6 +45,8 @@ function Kartya({
   termek,
   telephely,
   vevo,
+  bekuldo,
+  arLathato,
   teendo,
   panel,
   setPanel,
@@ -55,6 +57,10 @@ function Kartya({
   termek: Product | undefined
   telephely: string | null
   vevo: string | null
+  /** Ki rögzítette (a naplóból; csak szerveres módban ismert). */
+  bekuldo: string | null
+  /** A raktáros árat nem lát (DOCUMENTATION.md 14. fejezet). */
+  arLathato: boolean
   teendo: Teendo
   panel: Panel
   setPanel: (p: Panel) => void
@@ -75,6 +81,7 @@ function Kartya({
   const [megjegyzes, setMegjegyzes] = useState('')
   const [hiba, setHiba] = useState<string | null>(null)
   const [keszletHiany, setKeszletHiany] = useState(false)
+  const [reszletek, setReszletek] = useState(false)
   const allapot = allapota(m)
   const cimke = bejelentesCimke(m)
   // A Könyvelőből jött és a visszáru-tételt itt, egy koppintással lehet elfogadni; az irodai rendelésnél
@@ -182,6 +189,46 @@ function Kartya({
         </p>
       )}
       {allapot === 'elutasitva' && m.rejectReason && <p className="alert alert-danger text-sm">A fő iroda elutasította: {m.rejectReason}</p>}
+
+      <button
+        type="button"
+        className="btn btn-small self-start"
+        aria-expanded={reszletek}
+        aria-controls={`reszletek-${m.id}`}
+        onClick={() => setReszletek((r) => !r)}
+      >
+        {reszletek ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+        {reszletek ? 'Részletek elrejtése' : 'Részletek megtekintése'}
+      </button>
+      {reszletek && (
+        // Minden mező látszik; ami nincs rögzítve, ott „–” áll.
+        <dl id={`reszletek-${m.id}`} className="card card-muted grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
+          {(
+            [
+              ['Fajta', cimke ?? t.cim],
+              ['Forrás', forrasa(m)],
+              ['Rögzítette', bekuldo],
+              ['Rögzítve', formatDateTime(m.createdAt)],
+              ['Dátum', formatDate(m.date)],
+              ['Telephely', telephely],
+              ['Mennyiség', `${formatNumber(vart)} ${egyseg}`],
+              ['A raktár szerint', raktarSzerint === null ? null : raktarSzerint === 0 ? 'nem történt meg' : `${formatNumber(raktarSzerint)} ${egyseg}`],
+              ['Raktári visszaigazolás', m.raktarVisszaigazolva ? formatDateTime(m.raktarVisszaigazolva) : null],
+              ['Megjegyzés', m.note],
+              ['A raktár megjegyzése', m.raktarMegjegyzes],
+              ['Vevő', vevo],
+              ['Számlaszám', m.invoiceNumber],
+              ...(arLathato ? [['Várható egységár', m.unitPrice !== undefined ? formatMoney(m.unitPrice, m.currency ?? 'HUF') : null] as const] : []),
+              ...(m.rejectReason ? [['Elutasítás oka', m.rejectReason] as const] : []),
+            ] as ReadonlyArray<readonly [string, string | null | undefined]>
+          ).map(([cim, ertek]) => (
+            <div key={cim} className="contents">
+              <dt className="muted">{cim}</dt>
+              <dd className="mb-1 break-words font-medium sm:mb-0">{ertek || '–'}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {teendo === null ? (
         allapot === 'elutasitva' ? (
@@ -312,6 +359,7 @@ export function Jovahagyando() {
   const locations = useStore((s) => s.locations)
   const customers = useStore((s) => s.customers)
   const dataMode = useStore((s) => s.dataMode)
+  const auditLog = useStore((s) => s.auditLog)
   const { isWarehouseUser, isReadOnlyViewer, effectiveRole } = useAuth()
   const { remote, utolso, hiba, fut, frissit } = useIntegracioFrissites()
   const [panel, setPanel] = useState<Panel>(null)
@@ -321,6 +369,14 @@ export function Jovahagyando() {
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations])
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c.name])), [customers])
+  // Ki rögzítette a tételt: a mozgás létrehozásának naplóbejegyzéséből.
+  const bekuldoById = useMemo(() => {
+    const t = new Map<string, string>()
+    for (const e of auditLog) {
+      if (e.entityType === 'movement' && e.action === 'create' && (e.performedByName || e.performedByEmail)) t.set(e.entityId, (e.performedByName || e.performedByEmail)!)
+    }
+    return t
+  }, [auditLog])
   const szerep: Szerep = {
     raktaros: isWarehouseUser,
     foIroda: effectiveRole === 'fo_iroda',
@@ -405,8 +461,10 @@ export function Jovahagyando() {
                   key={m.id}
                   m={m}
                   termek={productById.get(m.productId)}
-                  telephely={locations.length > 1 ? (locationById.get(m.locationId) ?? null) : null}
+                  telephely={locationById.get(m.locationId) ?? null}
                   vevo={m.customerId ? (customerById.get(m.customerId) ?? null) : null}
+                  bekuldo={bekuldoById.get(m.id) ?? null}
+                  arLathato={!isWarehouseUser}
                   teendo={teendoMap.get(m.id) ?? null}
                   panel={panel}
                   setPanel={setPanel}

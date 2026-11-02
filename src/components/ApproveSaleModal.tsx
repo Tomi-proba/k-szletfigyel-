@@ -1,5 +1,5 @@
-// Az iroda itt hagyja jóvá (vagy utasítja el) a raktáros által előkészített
-// kiszállítást - csak jóváhagyáskor csökken ténylegesen a készlet, snapshotolódik
+// A fő iroda itt hagyja jóvá (vagy utasítja el) a raktáros által előkészített
+// kiszállítást vagy kiadási bejelentést (leltári hiány, selejt: ott nincs áfa, vevő, számla) - csak jóváhagyáskor csökken ténylegesen a készlet, snapshotolódik
 // az eladási ár, és generálódik az automatikus ÁFA-tétel (lásd
 // DOCUMENTATION.md 15. fejezet).
 import { useState } from 'react'
@@ -26,6 +26,9 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
 
   const vatRateNumber = vatRate.trim() === '' ? undefined : Number(vatRate.replace(',', '.'))
+  // Leltári hiány / selejt: nem eladás.
+  const eladas = !movement.ok
+  const okFelirat = movement.ok === 'selejt' ? 'Selejt' : movement.ok === 'leltar_hiany' ? 'Leltári hiány' : null
 
   function doApprove(allowNegativeStock = false) {
     setError(null)
@@ -42,40 +45,47 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
       setPendingNegative({ resultingStock: result.resultingStock ?? 0 })
       return
     }
-    setError('A jóváhagyás nem sikerült.')
+    setError(result.reason === 'forbidden' ? 'Ezt csak a fő iroda fogadhatja el.' : 'A jóváhagyás nem sikerült.')
   }
 
   function doReject() {
     setError(null)
     if (!rejectReason.trim()) return setError('Add meg az elutasítás indokát.')
     const result = rejectSalePrep(movement.id, rejectReason)
-    if (!result.ok) return setError('Az elutasítás nem sikerült.')
+    if (!result.ok) return setError(result.reason === 'forbidden' ? 'Ezt csak a fő iroda utasíthatja el.' : 'Az elutasítás nem sikerült.')
     onClose()
   }
 
   return (
-    <Modal title="Kiszállítás jóváhagyása" onClose={onClose}>
+    <Modal title={eladas ? 'Kiszállítás jóváhagyása' : `${okFelirat ?? 'Kiadás'} jóváhagyása`} onClose={onClose}>
       <div className="mb-4 rounded-lg bg-black/5 p-3 text-sm">
         <div className="font-medium text-[var(--color-text)]">{product?.name ?? 'Törölt termék'}</div>
         <div className="text-xs text-[var(--color-text-muted)]">
-          Mennyiség: {formatNumber(movement.quantity)} {product?.unit} · Eladási ár: {formatCurrency(product?.salePrice ?? 0)}
+          Mennyiség: {formatNumber(movement.quantity)} {product?.unit}
+          {eladas && <> · Eladási ár: {formatCurrency(product?.salePrice ?? 0)}</>}
+          {okFelirat && <> · {okFelirat}</>}
           {customer && <> · Vevő: {customer.name}</>}
         </div>
         {movement.note && <div className="mt-1 text-xs text-[var(--color-text-muted)]">Megjegyzés: {movement.note}</div>}
+        {movement.raktarMegjegyzes && <div className="mt-1 text-xs text-[var(--color-text-muted)]">A raktár megjegyzése: {movement.raktarMegjegyzes}</div>}
       </div>
 
       {view === 'approve' ? (
         <>
-          <Field label="ÁFA kulcs (%, opcionális)">
-            <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
-          </Field>
+          {eladas && (
+            <>
+              <Field label="ÁFA kulcs (%, opcionális)">
+                <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
+              </Field>
 
-          <Field label="Vevőszámla száma (opcionális)">
-            <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="ha már elkészült a számla" />
-            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Összekapcsolt cégnél a Könyvelő ezzel párosítja a vevőszámlához.</span>
-          </Field>
+              <Field label="Vevőszámla száma (opcionális)">
+                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="ha már elkészült a számla" />
+                <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Összekapcsolt cégnél a Könyvelő ezzel párosítja a vevőszámlához.</span>
+              </Field>
+            </>
+          )}
 
-          {movement.customerId && (
+          {eladas && movement.customerId && (
             <div className="mb-4">
               <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
               <div className="grid grid-cols-2 gap-2">

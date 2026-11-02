@@ -119,7 +119,8 @@ leiras("beszerzés", () => {
     await ment(pool, ceg.felhasznalo, [m]);
     expect(await osszeallitas(pool)).toMatchObject({ keszult: 0 });
     const jovahagyva = { ...m.sor, quantity: 8, approval_status: "approved", approved_at: "2026-11-03T08:00:00Z", discrepancy_note: "2 db sérült", version: 1 };
-    await ment(pool, raktaros, [{ tabla: "movements", sor: jovahagyva }, tetel(ceg, termekId, String(m.sor.id), { quantity: 8, remaining_quantity: 8, unit_price: 1000, vat_rate_percent: 27 })]);
+    // Véglegesíteni csak a fő iroda tud (2026-11-02, DOCUMENTATION.md 31. fejezet).
+    await ment(pool, ceg.felhasznalo, [{ tabla: "movements", sor: jovahagyva }, tetel(ceg, termekId, String(m.sor.id), { quantity: 8, remaining_quantity: 8, unit_price: 1000, vat_rate_percent: 27 })]);
     await osszeallitas(pool);
     const es = await esemenyek(String(m.sor.id));
     expect(tipusok(es)).toEqual(["keszlet.beszerzes.veglegesitve@3#1"]);
@@ -238,7 +239,8 @@ leiras("napi zárás", () => {
     });
 
     const utolag = mozgas(ceg, termekId, { type: "out", date: nap, quantity: 1, sale_unit_price: 100, unit_cost: 1, vat_rate_percent: 27 });
-    await ment(pool, raktaros, [utolag]);
+    // Érvényes mozgást a raktáros nem rögzíthet (csak bejelentést); az utólagos tételt az iroda viszi fel.
+    await ment(pool, ceg.felhasznalo, [utolag]);
     await osszeallitas(pool);
     const es = await esemenyek(String(zaras.sor.id));
     expect(tipusok(es)).toEqual(["keszlet.napi_zaras.elkuldve@1#1", "keszlet.napi_zaras.modosult@1#2"]);

@@ -8,7 +8,6 @@ import {
   PackageMinus,
   Truck,
   TrendingDown,
-  XCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAlerts } from '../hooks/useAlerts'
@@ -122,57 +121,21 @@ export function Dashboard() {
             />
           </div>
 
-          {alerts.pendingIntegrationApprovals.length > 0 && (
+          {alerts.jovahagyasraVar.length > 0 && (
             <Link to="/jovahagyasra-var" className="card kozos flex items-center justify-between gap-3 no-underline">
               <span className="flex items-center gap-2">
                 <ClipboardCheck size={22} aria-hidden="true" className="text-[var(--szin-figyelmeztetes)]" />
                 <span>
-                  <span className="block font-semibold">{alerts.pendingIntegrationApprovals.length} tétel jóváhagyásra vár</span>
-                  <span className="muted block text-sm">A Könyvelő számláiból jött áru és a visszáruk</span>
+                  <span className="block font-semibold">{alerts.jovahagyasraVar.length} tétel vár rád</span>
+                  <span className="muted block text-sm">
+                    {isWarehouseUser
+                      ? 'Igazold vissza, mi érkezett vagy ment ki; az elutasított bejelentéseidet javítsd'
+                      : 'A raktár bejelentései: elfogadásukkor változik a készlet'}
+                  </span>
                 </span>
               </span>
               <span className="btn btn-primary">Megnyitás</span>
             </Link>
-          )}
-
-          {(isWarehouseUser ? alerts.pendingPurchaseApprovals.length + alerts.rejectedSales.length : alerts.pendingSaleApprovals.length) > 0 && (
-            <Card>
-              <div className="mb-2 flex items-center gap-2 text-[var(--color-text)]">
-                <ClipboardCheck size={18} className="text-[var(--color-warning)]" />
-                <h2 className="text-base font-semibold">Jóváhagyásra váró tételek</h2>
-              </div>
-              <ul className="divide-y divide-[var(--color-border)] text-sm">
-                {isWarehouseUser ? (
-                  <>
-                    {alerts.pendingPurchaseApprovals.length > 0 && (
-                      <li className="flex items-center justify-between py-2">
-                        <span>{alerts.pendingPurchaseApprovals.length} beérkezésre váró rendelés</span>
-                        <Link to="/mozgasnaplo?tipus=in" className="font-medium text-[var(--color-primary)] hover:underline">
-                          Megnyitás
-                        </Link>
-                      </li>
-                    )}
-                    {alerts.rejectedSales.length > 0 && (
-                      <li className="flex items-center justify-between py-2">
-                        <span className="flex items-center gap-1.5 text-[var(--color-danger)]">
-                          <XCircle size={14} /> {alerts.rejectedSales.length} elutasított kiszállítás javításra vár
-                        </span>
-                        <Link to="/mozgasnaplo?tipus=out" className="font-medium text-[var(--color-primary)] hover:underline">
-                          Megnyitás
-                        </Link>
-                      </li>
-                    )}
-                  </>
-                ) : (
-                  <li className="flex items-center justify-between py-2">
-                    <span>{alerts.pendingSaleApprovals.length} jóváhagyásra váró kiszállítás</span>
-                    <Link to="/mozgasnaplo?tipus=out" className="font-medium text-[var(--color-primary)] hover:underline">
-                      Megnyitás
-                    </Link>
-                  </li>
-                )}
-              </ul>
-            </Card>
           )}
 
           {alerts.transferSuggestions.length > 0 && (

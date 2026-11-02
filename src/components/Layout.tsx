@@ -193,15 +193,14 @@ function buildNavGroups(
   integrationApprovalCount: number,
 ): NavGroup[] {
   let baseGroups = isWarehouseUser ? RAKTAROS_NAV_GROUPS : NAV_GROUPS
-  // „Jóváhagyásra vár”: a Könyvelő számláiból jött áru és a visszáruk (F15.4, F15.8) - minden szerepkörnek,
-  // saját számlálóval. Csak akkor látszik, ha van ilyen tétel (összekapcsolatlan cégnél soha).
-  if (integrationApprovalCount > 0) {
-    baseGroups = baseGroups.map((g) =>
-      g.key === 'attekintes'
-        ? { ...g, items: [g.items[0]!, { to: '/jovahagyasra-var', label: 'Jóváhagyásra vár', badge: integrationApprovalCount }, ...g.items.slice(1)] }
-        : g,
-    )
-  }
+  // „Jóváhagyásra vár”: a raktár bejelentései, visszaigazolásai és a Könyvelőből jött tételek (DOCUMENTATION.md
+  // 31. fejezet) - minden szerepkörnek, mindig (a raktáros itt látja a saját bejelentései állapotát is); a
+  // számláló csak azt mutatja, ami a bejelentkezett felhasználóra vár.
+  baseGroups = baseGroups.map((g) =>
+    g.key === 'attekintes'
+      ? { ...g, items: [g.items[0]!, { to: '/jovahagyasra-var', label: 'Jóváhagyásra vár', badge: integrationApprovalCount }, ...g.items.slice(1)] }
+      : g,
+  )
   // "Beérkezett napi jelentések" saját badge-e: hány napi zárás vár még
   // megtekintésre/jóváhagyásra (status !== 'approved') - eddig ennek a
   // menüpontnak egyáltalán nem volt badge-e (csak a "Riasztások"-nak és a
@@ -295,7 +294,7 @@ export function Layout() {
     pendingChangeCount,
     pendingClosingCount,
     !!profile?.isPlatformAdmin,
-    alerts.pendingIntegrationApprovals.length,
+    alerts.jovahagyasraVar.length,
   )
   const alertCount =
     alerts.needsReorder.length +
@@ -304,12 +303,9 @@ export function Layout() {
     alerts.kintlevoseg.db +
     alerts.fizetendoRiaszt.db +
     alerts.openSales.length +
-    // A raktáros elsősorban a saját beadott/rá váró jóváhagyásait látja itt
-    // (lásd DOCUMENTATION.md 15. fejezet); iroda/fő iroda az irodát terhelő
-    // kiszállítás-jóváhagyásokat is beleszámolja.
-    alerts.pendingPurchaseApprovals.length +
-    alerts.pendingSaleApprovals.length +
-    alerts.rejectedSales.length +
+    // Ami a bejelentkezett felhasználóra vár a jóváhagyásban (DOCUMENTATION.md 31. fejezet): raktárosnál a
+    // visszaigazolandók és az elutasított bejelentései, a fő irodánál az elfogadandók.
+    alerts.jovahagyasraVar.length +
     // Fő iroda számára a rá váró törzsadat-jóváhagyási kérések is
     // riasztásnak számítanak (lásd pages/Approvals.tsx) - ez az ÁLTALÁNOS
     // Riasztások-összegbe megy bele, a Jóváhagyások saját, külön badge-e

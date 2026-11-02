@@ -1,9 +1,8 @@
-import { CheckCircle2, CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { isReturnable, useStore } from '../store/useStore'
-import { jovahagyandoIntegracios } from '../lib/integracio'
 import { VisszaruModal } from '../components/VisszaruModal'
 import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
@@ -11,8 +10,6 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Modal } from '../components/Modal'
 import { PurchaseOrderForm } from '../components/PurchaseOrderForm'
 import { SalePrepForm } from '../components/SalePrepForm'
-import { ApprovePurchaseOrderModal } from '../components/ApprovePurchaseOrderModal'
-import { ApproveSaleModal } from '../components/ApproveSaleModal'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
 import { Button, Card, Checkbox, EmptyState, Field, FieldGroup, Input, PageHeader, Select, Textarea } from '../components/ui'
 import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
@@ -100,8 +97,6 @@ export function Movements() {
   // jóvá/utasítja el.
   const [creatingOrder, setCreatingOrder] = useState(false)
   const [creatingSalePrep, setCreatingSalePrep] = useState(false)
-  const [approvingPurchase, setApprovingPurchase] = useState<Movement | null>(null)
-  const [approvingSale, setApprovingSale] = useState<Movement | null>(null)
   const [resubmitting, setResubmitting] = useState<Movement | null>(null)
   const [deletingPending, setDeletingPending] = useState<Movement | null>(null)
 
@@ -471,9 +466,11 @@ export function Movements() {
                         >
                           <RotateCcw size={16} />
                         </button>
-                      ) : jovahagyandoIntegracios(m) ? (
+                      ) : m.approvalStatus === 'pending' ? (
                         <>
-                          <Link to="/jovahagyasra-var" className="btn btn-small" title="A Könyvelőből jött és a visszáru-tételek külön listában hagyhatók jóvá">
+                          {/* Minden várakozó tétel egy helyen hagyható jóvá (DOCUMENTATION.md 31. fejezet): a raktár ott igazolja
+                              vissza, a fő iroda ott fogadja el. */}
+                          <Link to="/jovahagyasra-var" className="btn btn-small" title="Jóváhagyásra vár">
                             Jóváhagyás
                           </Link>
                           {/* A Könyvelőből jött tételt csak a Könyvelő vonhatja vissza (sztornóval); a kézi visszárut a rögzítője törölheti. */}
@@ -487,26 +484,6 @@ export function Movements() {
                               <Trash2 size={16} />
                             </button>
                           )}
-                        </>
-                      ) : m.approvalStatus === 'pending' ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => (m.type === 'in' ? setApprovingPurchase(m) : setApprovingSale(m))}
-                            aria-label={m.type === 'in' ? 'Beérkezés jóváhagyása' : 'Kiszállítás jóváhagyása'}
-                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
-                            title={m.type === 'in' ? 'Beérkezés jóváhagyása' : 'Jóváhagyás / elutasítás'}
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingPending(m)}
-                            aria-label="Tétel törlése"
-                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
-                          >
-                            <Trash2 size={16} />
-                          </button>
                         </>
                       ) : m.approvalStatus === 'rejected' ? (
                         <>
@@ -530,6 +507,7 @@ export function Movements() {
                         </>
                       ) : isCancelled ? null : (
                         <>
+                          {/* A raktáros érvényes mozgást nem vonhat vissza és nem törölhet: bejelentést tesz, az iroda javít. */}
                           {isReturnable(m) && (m.type === 'out' ? !isWarehouseUser : true) && (
                             <button
                               type="button"
@@ -541,7 +519,7 @@ export function Movements() {
                               <Undo2 size={16} />
                             </button>
                           )}
-                          {m.type === 'out' && (
+                          {m.type === 'out' && !isWarehouseUser && (
                             <button
                               type="button"
                               onClick={() => setCancelling(m)}
@@ -562,14 +540,16 @@ export function Movements() {
                               <Pencil size={16} />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(m)}
-                            aria-label="Mozgás törlése"
-                            className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!isWarehouseUser && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleting(m)}
+                              aria-label="Mozgás törlése"
+                              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-danger)]"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
@@ -619,10 +599,6 @@ export function Movements() {
           <SalePrepForm onDone={() => setCreatingSalePrep(false)} />
         </Modal>
       )}
-
-      {approvingPurchase && <ApprovePurchaseOrderModal movement={approvingPurchase} onClose={() => setApprovingPurchase(null)} />}
-
-      {approvingSale && <ApproveSaleModal movement={approvingSale} onClose={() => setApprovingSale(null)} />}
 
       {resubmitting && <ResubmitSaleModal movement={resubmitting} onClose={() => setResubmitting(null)} />}
 

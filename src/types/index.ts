@@ -252,6 +252,13 @@ export interface Movement extends SoftDeletable {
   integracioForrasUtvonal?: string
   /** A fizetési állapotot a Könyvelő követi (a kiegyenlítésből); a felületen nem állítható kézzel. */
   fizetesKonyvelobol?: boolean
+  /** Raktári visszaigazolás (2026-11-02): mikor igazolta a raktár, mi történt ténylegesen, és miért.
+   * A raktáros saját bejelentésénél a rögzítéskor töltődik ki; az irodától vagy a Könyvelőből jött tételnél
+   * akkor, amikor a raktáros jelzi, mennyi érkezett/ment ki (0 = semmi). A készlet ettől még nem változik:
+   * a tétel csak a fő iroda elfogadásakor lesz érvényes (DOCUMENTATION.md 31. fejezet). */
+  raktarVisszaigazolva?: string
+  raktarMennyiseg?: number
+  raktarMegjegyzes?: string
 }
 
 export type MovementReason = 'normal' | 'leltar_hiany' | 'leltar_tobblet' | 'selejt'

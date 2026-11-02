@@ -607,6 +607,8 @@ Mivel a Supabase önkiszolgáló regisztrációja (`signUp`) csak új céget tud
 
 ## 15. Kétlépcsős jóváhagyási munkafolyamat (beszerzés/eladás, iroda ↔ raktár)
 
+> **2026-11-02-től a 31. fejezet érvényes:** minden raktári rögzítés bejelentés, és csak a fő iroda fogadhatja el. Az alábbi leírás a korábbi állapotot rögzíti.
+
 > Ez a fejezet a 14. fejezetre épül (raktáros/iroda szerepkör, megosztott Supabase-adat) - additív hozzá: a mozgás-rögzítés normál útja mostantól két lépésben történik, iroda és raktár között megosztva, ahelyett hogy bárki azonnal, egy lépésben rögzítené a végleges mozgást.
 
 ### 15.1 A két irány
@@ -1173,3 +1175,58 @@ A 2. és a 3. csoport a riasztásban is számít, és a „Kifizetve” jelölé
   eddig.
 - **Meglévő projektben** a `supabase/migrations/2026-11-01_konyvelo_nyitott_tetelek.sql` fájlt kell
   lefuttatni.
+
+## 31. Raktári bejelentés → fő irodai elfogadás (2026-11-02)
+
+A cél, hogy a raktáros semmit ne tudjon önállóan érvényessé tenni, és ugyanazt az eseményt ne rögzítsék kétszer.
+Amit a raktáros rögzít, az **bejelentés**. A készlet, a pénzügy és a Könyvelőnek küldött adat csak a
+**fő iroda** elfogadásakor változik. Elfogadáskor nem jön létre új tétel: a bejelentés maga válik
+érvényessé, így egy esemény mindig egyszer szerepel. Ez a 15. fejezet kétlépcsős jóváhagyását váltja fel.
+
+**A két lépés**
+
+| Lépés | Ki | Mit csinál | Hol |
+|---|---|---|---|
+| 1. Bejelentés / visszaigazolás | raktáros | Saját bejelentés: beérkezett áru, kiadott áru, leltári hiány/többlet, selejt (a Kezdőlap és a „Mozgás” gomb űrlapja raktárosnál **Bejelentés küldése**). Irodai rendelésnél, Könyvelőből jött tételnél és vevői visszavételnél: visszaigazolja, mennyi érkezett/ment ki (0 = nem történt meg), eltérésnél megjegyzéssel. | `Jóváhagyásra vár` |
+| 2. Elfogadás / elutasítás | **csak a fő iroda** | Elfogadja (kiegészítve az irodai adatokkal: ár, áfa, vevő, számla; szükség esetén más mennyiséggel) vagy indoklással elutasítja. | `Jóváhagyásra vár` |
+
+- Az **iroda** és a **tulajdonos** a listát látja, de nem fogadhat el. Az iroda saját, közvetlen rögzítése
+  ugyanúgy azonnal érvényes, mint eddig.
+- Ha a raktár még nem igazolta vissza a tételt (pl. olyan cégnél, ahol nincs raktáros), a fő iroda
+  figyelmeztetés mellett ettől függetlenül is elfogadhatja.
+- Az **elutasított** bejelentést a raktáros javítja és újraküldi, vagy visszavonja.
+- Helyi (bejelentkezés nélküli) módban egy felhasználó van, ő végez mindent.
+
+**Szabad készlet (foglalás).** A még el nem fogadott kiadások lefoglalják a készletet: a raktáros a
+szabad készletet látja (elfogadott készlet mínusz a várakozó kiadások), és többet csak kifejezett
+megerősítéssel („Megszámoltam”) jelenthet be. A termékkártyán a szabad készlet is látszik, ha van foglalás.
+
+**Kettős rögzítés kiszűrése.** Ha az iroda olyan mozgást rögzítene, amelyre ugyanannál a terméknél és
+iránynál legfeljebb egy nap eltéréssel már van várakozó tétel, a program szól, és felajánlja, hogy inkább
+azt fogadja el (`kettosRogzites`, `src/lib/raktariBejelentes.ts`).
+
+**Napi zárás.** A nap még el nem fogadott bejelentései külön listában látszanak a Napi zárás oldalon. A
+zárás számaiba csak elfogadás után számítanak bele.
+
+**A raktáros nem** törölhet, nem vonhat vissza és nem javíthat érvényes mozgást (a gombok sincsenek meg).
+Ilyenkor bejelentést tesz, vagy szól az irodának.
+
+**Adatmodell.** `movements.raktar_visszaigazolva`, `raktar_mennyiseg`, `raktar_megjegyzes`. A raktáros saját
+bejelentésénél a rögzítéskor töltődnek ki.
+
+**Az adatbázis a valódi határ** (`supabase/migrations/2026-11-02_raktari_bejelentes.sql`, `movements_jovahagyas_vedelem` trigger):
+- a raktáros csak `pending` mozgást szúrhat be, és csak a `pending`/`rejected` mozgást módosíthatja;
+- `pending` → `approved`/`rejected` állapotváltást csak a fő iroda végezhet;
+- a raktáros nem írhatja a termék készletét és a beszerzési tételeket. A „Raktáros … frissítheti /
+  létrehozhat” szabályok törölve, ezzel a 14.7 két korlátja (sor-szintű termék- és tételírás) is megszűnt.
+- A szerveroldali szolgáltatásokra (integrációs szolgáltatás, üzemeltető: `auth.uid()` üres) nem vonatkozik.
+
+**Könyvelő.** A Könyvelő eddig is csak az érvényes mozgásokat kapta meg (a várakozót nem), így ott nem
+kellett változtatni. Az átadás most a fő irodai elfogadáskor történik.
+
+**Kód.** `src/lib/raktariBejelentes.ts` (tiszta szabályok); store: `createWarehouseReport`,
+`confirmByWarehouse`, `rejectPendingMovement`, és minden véglegesítő művelet `forbidden`-t ad vissza, ha
+nem a fő iroda hívja; felület: `pages/Jovahagyando.tsx`. Tesztek: `tests/raktariBejelentes.test.ts`,
+`tests/db/raktariBejelentes.test.ts`.
+
+**Meglévő projektben** a `supabase/migrations/2026-11-02_raktari_bejelentes.sql` fájlt kell lefuttatni.

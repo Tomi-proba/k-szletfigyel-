@@ -215,6 +215,9 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     integracioForras: (row.integracio_forras as string | null) ?? undefined,
     integracioForrasUtvonal: (row.integracio_forras_utvonal as string | null) ?? undefined,
     fizetesKonyvelobol: Boolean(row.fizetes_konyvelobol) || undefined,
+    raktarVisszaigazolva: (row.raktar_visszaigazolva as string | null) ?? undefined,
+    raktarMennyiseg: row.raktar_mennyiseg === null || row.raktar_mennyiseg === undefined ? undefined : Number(row.raktar_mennyiseg),
+    raktarMegjegyzes: (row.raktar_megjegyzes as string | null) ?? undefined,
   }
 }
 // Az integracio_* és a fizetes_konyvelobol mezőt csak az integrációs szolgáltatás írja: a böngésző nem küldi.
@@ -257,6 +260,9 @@ function movementToRow(companyId: string, m: Movement) {
     invoice_date: m.invoiceDate ?? null,
     fulfillment_date: m.fulfillmentDate ?? null,
     shipping_on_invoice: m.shippingOnInvoice ?? null,
+    raktar_visszaigazolva: m.raktarVisszaigazolva ?? null,
+    raktar_mennyiseg: m.raktarMennyiseg ?? null,
+    raktar_megjegyzes: m.raktarMegjegyzes ?? null,
   }
 }
 

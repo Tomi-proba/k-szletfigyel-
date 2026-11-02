@@ -1,5 +1,5 @@
-// A raktáros itt javítja ki és küldi újra jóváhagyásra az iroda által
-// elutasított kiszállítást (lásd DOCUMENTATION.md 15. fejezet) - ugyanaz a
+// A raktáros itt javítja ki és küldi újra jóváhagyásra a fő iroda által
+// elutasított bejelentést vagy kiszállítást (lásd DOCUMENTATION.md 15. fejezet) - ugyanaz a
 // mozgás marad, csak a mennyiség/vevő/megjegyzés módosítható, és az
 // állapot visszaáll "jóváhagyásra vár"-ra.
 import { useState } from 'react'
@@ -18,27 +18,39 @@ export function ResubmitSaleModal({ movement, onClose }: { movement: Movement; o
   const [customerId, setCustomerId] = useState(movement.customerId ?? '')
   const [note, setNote] = useState(movement.note ?? '')
   const [error, setError] = useState<string | null>(null)
+  const [hiany, setHiany] = useState(false)
+  const vevoKell = movement.type === 'out' && !movement.ok
 
   function submit() {
     setError(null)
     const qtyNumber = Number(quantity.replace(',', '.'))
     if (!Number.isFinite(qtyNumber) || qtyNumber <= 0) return setError('A mennyiségnek pozitív számnak kell lennie.')
-    const result = resubmitPendingMovement(movement.id, { quantity: qtyNumber, customerId: customerId || undefined, note })
-    if (!result.ok) return setError('A javítás nem sikerült.')
+    const result = resubmitPendingMovement(
+      movement.id,
+      { quantity: qtyNumber, customerId: vevoKell ? customerId || undefined : undefined, note },
+      { allowNegativeStock: hiany },
+    )
+    if (!result.ok) {
+      if (result.reason === 'insufficient-stock') {
+        setHiany(true)
+        return setError(`Nincs ennyi szabad készlet (szabad: ${result.available ?? 0} ${product?.unit ?? ''}). Ha megszámoltad, nyomd meg újra.`)
+      }
+      return setError('A javítás nem sikerült.')
+    }
     onClose()
   }
 
   return (
-    <Modal title="Kiszállítás javítása és újraküldése" onClose={onClose}>
+    <Modal title="Javítás és újraküldés" onClose={onClose}>
       {movement.rejectReason && (
         <p className="mb-4 rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
-          Az iroda elutasította: {movement.rejectReason}
+          A fő iroda elutasította: {movement.rejectReason}
         </p>
       )}
       <Field label={`Mennyiség${product ? ` (${product.unit})` : ''}`}>
         <Input inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} autoFocus />
       </Field>
-      {customers.length > 0 && (
+      {vevoKell && customers.length > 0 && (
         <Field label="Vevő (opcionális)">
           <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
             <option value="">Nincs (sima eladás)</option>

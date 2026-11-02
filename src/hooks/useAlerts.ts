@@ -18,7 +18,8 @@ import {
   type UnpaidSale,
 } from '../lib/alerts'
 import { computePayableObligations, type PayableObligation } from '../lib/payables'
-import { jovahagyandoIntegracios, useKonyveloNyitott } from '../lib/integracio'
+import { useKonyveloNyitott } from '../lib/integracio'
+import { allapota, teendoje, varakozo } from '../lib/raktariBejelentes'
 import { egyIgazsag, type EgyIgazsag } from '../lib/egyIgazsag'
 import { computeMissingClosings, type MissingClosingAlert } from '../lib/dailyClosing'
 import { todayISO } from '../lib/dates'
@@ -49,14 +50,12 @@ export interface AlertsData {
   /** Locations that had movement activity on a day but never submitted a
    * napi zárás for it - see computeMissingClosings. */
   missingClosings: MissingClosingAlert[]
-  /** Kétlépcsős jóváhagyás (lásd DOCUMENTATION.md 15. fejezet) - ezek NEM
-   * irodai-only adatok, szándékosan mindkét szerepkörnek látszanak (a
-   * raktáros pont ezekre vár/ezeket küldte be, nem elrejteni kell előle). */
-  pendingPurchaseApprovals: Movement[]
-  pendingSaleApprovals: Movement[]
-  /** A Könyvelőből jött és a visszáru-mozgások, amelyek jóváhagyásra várnak (F15.4, F15.8). */
-  pendingIntegrationApprovals: Movement[]
-  rejectedSales: Movement[]
+  /** Raktári bejelentés → fő irodai elfogadás (DOCUMENTATION.md 31. fejezet): ami a bejelentkezett
+   * felhasználóra vár. Raktárosnál a visszaigazolandók és az elutasított saját bejelentései, a fő irodánál
+   * (és helyi módban) minden el nem fogadott tétel; az irodánál és a tulajdonosnál üres. */
+  jovahagyasraVar: Movement[]
+  /** Az összes még el nem fogadott tétel (tájékoztatásul, szereptől függetlenül). */
+  varakozoTetelek: Movement[]
   /**
    * Egy igazság (TERV.md F19, KK10): ha a cégnek van Könyvelője, a fizetési kötelezettségek és a kintlévőség a
    * Könyvelő nyitott tételeiből és a Készlet három csoportba sorolt saját tételeiből; null, ha nincs Könyvelő
@@ -86,7 +85,8 @@ export function useAlerts(): AlertsData {
   // böngészőjében NEM a cég valódi (megosztott) adata, hanem az adott
   // eszköz saját, helyi (jellemzően demó-)állapota - kiszámolásuk raktáros
   // nézetben félrevezető, nem valós adatot mutatna.
-  const { isWarehouseUser } = useAuth()
+  const { isWarehouseUser, isReadOnlyViewer, effectiveRole } = useAuth()
+  const dataMode = useStore((s) => s.dataMode)
   const konyveloNyitott = useKonyveloNyitott(!isWarehouseUser)
 
   return useMemo(() => {
@@ -113,12 +113,16 @@ export function useAlerts(): AlertsData {
     const openSales = isWarehouseUser ? [] : computeOpenSales(movements, products, customers)
     const missingClosings = computeMissingClosings(locations, movements, dailyClosings, settings.missingClosingGraceDays, todayISO())
 
-    const activeMovements = movements.filter((m) => !m.deletedAt)
-    // A Könyvelőből jött és a visszáru-mozgásoknak saját jóváhagyási listájuk van (pages/Jovahagyando.tsx).
-    const pendingPurchaseApprovals = activeMovements.filter((m) => m.type === 'in' && m.approvalStatus === 'pending' && !jovahagyandoIntegracios(m))
-    const pendingSaleApprovals = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'pending' && !jovahagyandoIntegracios(m))
-    const pendingIntegrationApprovals = activeMovements.filter(jovahagyandoIntegracios)
-    const rejectedSales = activeMovements.filter((m) => m.type === 'out' && m.approvalStatus === 'rejected')
+    const szerep = {
+      raktaros: isWarehouseUser,
+      foIroda: effectiveRole === 'fo_iroda',
+      csakOlvas: isReadOnlyViewer,
+      helyi: dataMode !== 'remote' || !effectiveRole,
+    }
+    const varakozoTetelek = movements.filter(varakozo)
+    const jovahagyasraVar = movements.filter(
+      (m) => teendoje(m, szerep) !== null || (isWarehouseUser && allapota(m) === 'elutasitva' && Boolean(m.raktarVisszaigazolva)),
+    )
 
     const reminderWindowDays = settings.paymentReminderDaysBefore.length ? Math.max(...settings.paymentReminderDaysBefore) : 0
     const egy = isWarehouseUser ? null : egyIgazsag(konyveloNyitott, payables, unpaidSales, lots, reminderWindowDays, now)
@@ -144,10 +148,23 @@ export function useAlerts(): AlertsData {
       urgentPayables,
       openSales,
       missingClosings,
-      pendingPurchaseApprovals,
-      pendingSaleApprovals,
-      pendingIntegrationApprovals,
-      rejectedSales,
+      jovahagyasraVar,
+      varakozoTetelek,
     }
-  }, [products, movements, suppliers, customers, locations, lots, ledgerEntries, dailyClosings, settings, isWarehouseUser, konyveloNyitott])
+  }, [
+    products,
+    movements,
+    suppliers,
+    customers,
+    locations,
+    lots,
+    ledgerEntries,
+    dailyClosings,
+    settings,
+    isWarehouseUser,
+    isReadOnlyViewer,
+    effectiveRole,
+    dataMode,
+    konyveloNyitott,
+  ])
 }

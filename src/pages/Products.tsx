@@ -12,6 +12,7 @@ import { Button, Card, Checkbox, EmptyState, Input, PageHeader, Select } from '.
 import { formatCurrency, formatNumber } from '../lib/format'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { getStockStatus, type StockStatus } from '../lib/alerts'
+import { lefoglalt } from '../lib/raktariBejelentes'
 
 interface InventoryRow {
   name: string
@@ -31,6 +32,7 @@ const STATUS_LABEL: Record<StockStatus, string> = { low: 'Alacsony', 'slow-movin
 
 export function Products() {
   const products = useStore((s) => s.products)
+  const movements = useStore((s) => s.movements)
   const suppliers = useStore((s) => s.suppliers)
   const locations = useStore((s) => s.locations)
   const deleteProduct = useStore((s) => s.deleteProduct)
@@ -213,6 +215,13 @@ export function Products() {
                     {formatNumber(product.currentStock)} {product.unit}
                   </span>
                 </div>
+                {/* A még el nem fogadott kiadások lefoglalják a készletet (DOCUMENTATION.md 31. fejezet). */}
+                {lefoglalt(movements, product.id) > 0 && (
+                  <div className="text-xs text-[var(--color-text-muted)]">
+                    Szabad: {formatNumber(product.currentStock - lefoglalt(movements, product.id))} {product.unit} (
+                    {formatNumber(lefoglalt(movements, product.id))} {product.unit} jóváhagyásra váró kiadás)
+                  </div>
+                )}
                 <div className="flex justify-between text-xs text-[var(--color-text-muted)]">
                   <span>Min. szint: {formatNumber(product.minStock)} {product.unit}</span>
                   <span>Beszállító: {supplierName(product.supplierId)}</span>

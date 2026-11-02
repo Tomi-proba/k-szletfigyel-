@@ -202,15 +202,14 @@ leiras('jogosultságok', () => {
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [ujVevo]))).toBe('42501')
   })
 
-  it('a raktáros a saját telephelye termékének készletét frissítheti (pl. beérkezés jóváhagyásakor), más telephelyét nem', async () => {
+  it('a raktáros a termék készletét nem írhatja közvetlenül (2026-11-02: csak a fő iroda elfogadása változtatja)', async () => {
     const t = termek(ceg.companyId, ceg.locationId!)
     await ment(pool, ceg.id, randomUUID(), [t])
     const raktaros = await ujCsapattag(pool, ceg, 'raktaros')
-    const [eredmeny] = await ment(pool, raktaros.id, randomUUID(), [
-      { tabla: 'products', sor: { ...t.sor, current_stock: 8, version: 1 } },
-      naplo(ceg.companyId, 'Raktáros: beérkezés jóváhagyva'),
-    ])
-    expect(eredmeny.version).toBe(2)
+    expect(
+      await hibakod(ment(pool, raktaros.id, randomUUID(), [{ tabla: 'products', sor: { ...t.sor, current_stock: 8, version: 1 } }, naplo(ceg.companyId, 'Raktáros: beérkezés')])),
+    ).toBe('42501')
+    expect(Number((await pool.query('select current_stock from public.products where id = $1', [t.sor.id])).rows[0].current_stock)).toBe(0)
 
     const masikHely = (await pool.query("insert into public.locations (company_id, name) values ($1, 'Másik telephely') returning id", [ceg.companyId])).rows[0].id
     const m = termek(ceg.companyId, masikHely)
@@ -219,7 +218,7 @@ leiras('jogosultságok', () => {
     expect(Number((await pool.query('select current_stock from public.products where id = $1', [m.sor.id])).rows[0].current_stock)).toBe(0)
   })
 
-  it('a raktáros lezárt napra is rögzíthet mozgást (a zárás „utólag módosítva” jelzést kap), de a zárást nem hagyhatja jóvá', async () => {
+  it('a raktáros lezárt napra is tehet bejelentést (a zárás „utólag módosítva” jelzést kap), de a zárást nem hagyhatja jóvá', async () => {
     const raktaros = await ujCsapattag(pool, ceg, 'raktaros')
     const t = termek(ceg.companyId, ceg.locationId!)
     await ment(pool, ceg.id, randomUUID(), [t])
@@ -243,7 +242,17 @@ leiras('jogosultságok', () => {
     await ment(pool, raktaros.id, randomUUID(), [zaras])
     const mozgas: Valtozas = {
       tabla: 'movements',
-      sor: { id: randomUUID(), company_id: ceg.companyId, product_id: t.sor.id, location_id: ceg.locationId, date: '2026-10-21', type: 'in', quantity: 1, version: null },
+      sor: {
+        id: randomUUID(),
+        company_id: ceg.companyId,
+        product_id: t.sor.id,
+        location_id: ceg.locationId,
+        date: '2026-10-21',
+        type: 'in',
+        quantity: 1,
+        approval_status: 'pending',
+        version: null,
+      },
     }
     const jelzes: Valtozas = { tabla: 'daily_closings', sor: { ...zaras.sor, modified_after_submission: true, last_modified_at: '2026-10-21T19:00:00Z', version: 1 } }
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [mozgas, jelzes]))).toBeNull()

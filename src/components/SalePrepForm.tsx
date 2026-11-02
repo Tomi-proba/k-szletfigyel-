@@ -19,6 +19,7 @@ export function SalePrepForm({ onDone }: { onDone?: () => void }) {
   const [customerId, setCustomerId] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [hiany, setHiany] = useState(false)
   const [successTick, setSuccessTick] = useState(0)
 
   const qtyNumber = Number(quantity.replace(',', '.'))
@@ -29,9 +30,17 @@ export function SalePrepForm({ onDone }: { onDone?: () => void }) {
     if (!productId) return setError('Válassz terméket.')
     if (!quantity || !Number.isFinite(qtyNumber) || qtyNumber <= 0) return setError('A mennyiségnek pozitív számnak kell lennie.')
 
-    const result = createPendingSalePrep({ productId, quantity: qtyNumber, date, customerId: customerId || undefined, note })
-    if (!result.ok) return setError('A kiszállítás nem rögzíthető.')
+    const result = createPendingSalePrep({ productId, quantity: qtyNumber, date, customerId: customerId || undefined, note }, { allowNegativeStock: hiany })
+    if (!result.ok) {
+      // A még el nem fogadott kiadások lefoglalják a készletet (DOCUMENTATION.md 31. fejezet).
+      if (result.reason === 'insufficient-stock') {
+        setHiany(true)
+        return setError('Nincs ennyi szabad készlet (a még el nem fogadott kiadások lefoglalták). Ha megszámoltad és tényleg van, nyomd meg újra.')
+      }
+      return setError('A kiszállítás nem rögzíthető.')
+    }
 
+    setHiany(false)
     setProductId(null)
     setQuantity('')
     setCustomerId('')

@@ -1,17 +1,20 @@
 import { Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementReason, MovementType } from '../types'
 import { bekuldottAfaIdoszakban, lezartIdoszakban, useLezartIdoszakok } from '../lib/integracio'
 import { todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
-import { formatCurrency } from '../lib/format'
+import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { kettosRogzites, szabadKeszlet } from '../lib/raktariBejelentes'
 import { ProductPicker } from './ProductPicker'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
-/** Az „Ok” (csak az iroda választhatja): a leltári hiány és a selejt kimenő, a többlet bejövő (F15.5). */
+/** Az „Ok”: a leltári hiány és a selejt kimenő, a többlet bejövő (F15.5). A raktáros is választhatja:
+ * nála ez is csak bejelentés, a fő iroda fogadja el (DOCUMENTATION.md 31. fejezet). */
 const OK_VALASZTEK: Record<MovementType, { value: MovementReason; label: string }[]> = {
   out: [
     { value: 'normal', label: 'Normál (eladás)' },
@@ -39,6 +42,8 @@ interface MovementFormProps {
 
 export function MovementForm({ onDone, defaultProductId = null }: MovementFormProps) {
   const recordMovement = useStore((s) => s.recordMovement)
+  const createWarehouseReport = useStore((s) => s.createWarehouseReport)
+  const movements = useStore((s) => s.movements)
   const products = useStore((s) => s.products)
   const customers = useStore((s) => s.customers)
   // A raktáros leegyszerűsített nézete csak a mennyiséget/típust/dátumot
@@ -80,8 +85,13 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
+  // Raktáros: nincs elég szabad készlet (a várakozó kiadások már lefoglalták).
+  const [szabadHiany, setSzabadHiany] = useState<number | null>(null)
+  // Iroda: ugyanerre már van el nem fogadott raktári bejelentés (kettős rögzítés gyanúja).
+  const [kettos, setKettos] = useState<ReturnType<typeof kettosRogzites> | null>(null)
 
   const product = products.find((p) => p.id === productId) ?? null
+  const szabad = product ? szabadKeszlet(product, movements) : null
   const qtyNumber = Number(quantity.replace(',', '.'))
   const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
   const shippingCostNumber = shippingCost.trim() === '' ? undefined : Number(shippingCost.replace(',', '.'))
@@ -124,7 +134,30 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     setInvoicePaid(false)
   }
 
-  function trySubmit(allowNegativeStock = false) {
+  function urit() {
+    setPendingNegative(null)
+    setSzabadHiany(null)
+    setKettos(null)
+    setQuantity('')
+    setUnitPrice('')
+    setShippingCost('')
+    setCurrency('HUF')
+    setExchangeRate('')
+    setNote('')
+    resetCustomerSection()
+    resetDueDateSection()
+    setVatRate(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
+    setVatReclaimable(true)
+    setOk('normal')
+    setInvoiceNumber('')
+    setSzamlanVan('nemtudom')
+    setInvoiceDate('')
+    setFulfillmentDate('')
+    setSuccessTick((t) => t + 1)
+    onDone?.()
+  }
+
+  function trySubmit(allowNegativeStock = false, kettosEllenorzesNelkul = false) {
     setError(null)
     if (!productId) {
       setError('Válassz terméket.')
@@ -163,6 +196,29 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       return
     }
 
+    if (isWarehouseUser) {
+      // A raktáros bejelentést tesz: a készlet csak a fő iroda elfogadásakor változik.
+      const r = createWarehouseReport({ productId, type, quantity: qtyNumber, date, note, ok: leltar ? ok : undefined }, { allowNegativeStock })
+      if (r.ok) return urit()
+      if (r.reason === 'insufficient-stock') return setSzabadHiany(r.available ?? 0)
+      setError(
+        r.reason === 'note-required'
+          ? 'Írd be a megjegyzésbe, mi történt (leltári eltérésnél és selejtnél kötelező).'
+          : r.reason === 'invalid-reason'
+            ? 'Ez az ok ehhez az irányhoz nem választható.'
+            : 'A bejelentés nem küldhető el.',
+      )
+      return
+    }
+
+    if (!kettosEllenorzesNelkul) {
+      const gyanus = kettosRogzites(movements, { productId, type, date })
+      if (gyanus.length) {
+        setKettos(gyanus)
+        return
+      }
+    }
+
     const result = recordMovement(
       {
         productId,
@@ -188,33 +244,19 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       },
       { allowNegativeStock },
     )
-    if (result.ok) {
-      setPendingNegative(null)
-      setQuantity('')
-      setUnitPrice('')
-      setShippingCost('')
-      setCurrency('HUF')
-      setExchangeRate('')
-      setNote('')
-      resetCustomerSection()
-      resetDueDateSection()
-      setVatRate(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
-      setVatReclaimable(true)
-      setOk('normal')
-      setInvoiceNumber('')
-      setSzamlanVan('nemtudom')
-      setInvoiceDate('')
-      setFulfillmentDate('')
-      setSuccessTick((t) => t + 1)
-      onDone?.()
-      return
-    }
+    if (result.ok) return urit()
 
     if (result.reason === 'insufficient-stock') {
       setPendingNegative({ resultingStock: result.resultingStock ?? 0 })
       return
     }
-    setError(result.reason === 'invalid-reason' ? 'Ez az ok ehhez az irányhoz nem választható.' : 'A mozgás nem menthető.')
+    setError(
+      result.reason === 'invalid-reason'
+        ? 'Ez az ok ehhez az irányhoz nem választható.'
+        : result.reason === 'forbidden'
+          ? 'Raktárosként bejelentést tehetsz; a mozgást a fő iroda fogadja el.'
+          : 'A mozgás nem menthető.',
+    )
   }
 
   return (
@@ -261,24 +303,25 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         </div>
       </FieldGroup>
 
-      {!isWarehouseUser && (
-        <Field label="Ok">
-          <Select value={ok} onChange={(e) => setOk(e.target.value as MovementReason)}>
-            {OK_VALASZTEK[type].map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          {leltar && (
-            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-              {type === 'out'
-                ? 'Nem eladás: nincs vevő, eladási ár és áfa. A bekerülési értéken (FIFO/átlagár) csökken a készlet; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'
-                : 'Nem beszerzés: nincs szállító és áfa. A megadott egységáron kerül a készletbe; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'}
-            </span>
-          )}
-        </Field>
-      )}
+      <Field label={isWarehouseUser ? 'Mi történt?' : 'Ok'}>
+        <Select value={ok} onChange={(e) => setOk(e.target.value as MovementReason)}>
+          {OK_VALASZTEK[type].map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+        {leltar && isWarehouseUser && (
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Írd be a megjegyzésbe, mi történt. A fő iroda fogadja el.</span>
+        )}
+        {leltar && !isWarehouseUser && (
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            {type === 'out'
+              ? 'Nem eladás: nincs vevő, eladási ár és áfa. A bekerülési értéken (FIFO/átlagár) csökken a készlet; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'
+              : 'Nem beszerzés: nincs szállító és áfa. A megadott egységáron kerül a készletbe; összekapcsolt cégnél a Könyvelőbe leltáreltérésként megy, jóváhagyással.'}
+          </span>
+        )}
+      </Field>
 
       <FieldGroup label={`Mennyiség${product ? ` (${product.unit})` : ''}`}>
         <div className="flex items-center gap-2">
@@ -596,12 +639,57 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. leltári korrekció, sérült áru…" />
       </Field>
 
+      {isWarehouseUser && type === 'out' && product && szabad !== null && szabad !== product.currentStock && (
+        <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+          Szabad készlet: {formatNumber(szabad)} {product.unit} (a még el nem fogadott kiadások lefoglaltak {formatNumber(product.currentStock - szabad)}{' '}
+          {product.unit}-t).
+        </p>
+      )}
+
+      {kettos && (
+        <div className="kozos alert alert-warning mb-3 text-sm" role="alert">
+          <p className="mb-2 font-medium">Erre már van el nem fogadott bejelentés vagy várakozó tétel:</p>
+          <ul className="mb-2 list-disc pl-5">
+            {kettos.map((m) => (
+              <li key={m.id}>
+                {formatDate(m.date)}: {formatNumber(m.raktarMennyiseg ?? m.quantity)} {product?.unit ?? ''}
+                {m.note ? ` – ${m.note}` : ''}
+              </li>
+            ))}
+          </ul>
+          <p className="mb-2">Ha ugyanarról van szó, ne rögzítsd újra: fogadd el a bejelentést, így egyszer szerepel.</p>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/jovahagyasra-var" className="btn btn-small btn-primary" onClick={() => onDone?.()}>
+              Megnyitom a jóváhagyandókat
+            </Link>
+            <button type="button" className="btn btn-small" onClick={() => trySubmit(false, true)}>
+              Ez egy másik tétel, rögzítem
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
-      {successTick > 0 && !error && <p className="mb-3 text-sm text-[var(--color-success)]">Mozgás rögzítve.</p>}
+      {successTick > 0 && !error && (
+        <p className="mb-3 text-sm text-[var(--color-success)]">
+          {isWarehouseUser ? 'Bejelentés elküldve – a fő iroda elfogadása után számít bele a készletbe.' : 'Mozgás rögzítve.'}
+        </p>
+      )}
 
       <Button type="submit" className="w-full py-3 text-base">
-        Mentés
+        {isWarehouseUser ? 'Bejelentés küldése' : 'Mentés'}
       </Button>
+
+      {szabadHiany !== null && (
+        <ConfirmDialog
+          title="Nincs elég szabad készlet"
+          message={`A szabad készlet ${formatNumber(szabadHiany)} ${product?.unit ?? ''} (a még el nem fogadott kiadások már lefoglalták a többit). Ha megszámoltad és tényleg van, elküldheted így is; a fő iroda dönt.`}
+          confirmLabel="Megszámoltam, elküldöm"
+          danger
+          onConfirm={() => trySubmit(true)}
+          onCancel={() => setSzabadHiany(null)}
+        />
+      )}
 
       {pendingNegative && (
         <ConfirmDialog

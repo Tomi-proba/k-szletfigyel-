@@ -58,9 +58,9 @@ interface AuthContextValue {
    * policy tulajdonosnak semmilyen táblán). */
   isReadOnlyViewer: boolean
   /** Igaz, ha ez a szerepkör jóváhagyhatja/elutasíthatja a raktáros
-   * beérkezés/kiszállítás-kéréseit (movements.approval_status) - fő iroda
-   * ÉS iroda is (2026-10-01-től, korábban csak "iroda" volt). Tulajdonos és
-   * raktáros soha. */
+   * bejelentéseit (movements.approval_status) - 2026-11-02-től csak a fő
+   * iroda (helyi módban az egyetlen felhasználó). Iroda, tulajdonos és
+   * raktáros nem. */
   canApproveWarehouseRequests: boolean
   /** companyName is only used for a brand-new company (no inviteToken).
    * When inviteToken is set, the account joins that invite's existing
@@ -306,7 +306,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isWarehouseUser = effectiveRole === 'raktaros'
   const canWriteDirectly = !effectiveRole || effectiveRole === 'fo_iroda'
   const isReadOnlyViewer = effectiveRole === 'tulajdonos'
-  const canApproveWarehouseRequests = effectiveRole === 'fo_iroda' || effectiveRole === 'iroda'
+  // 2026-11-02-től a raktár bejelentéseit csak a fő iroda fogadhatja el (DOCUMENTATION.md 31. fejezet).
+  const canApproveWarehouseRequests = !effectiveRole || effectiveRole === 'fo_iroda'
 
   const value: AuthContextValue = {
     loading,

@@ -16,6 +16,7 @@ import { Button, Card, EmptyState, PageHeader, Select, Input } from '../componen
 import { formatDate, formatDateTime, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
+import { allapota, ALLAPOT_SZOVEG, varakozo } from '../lib/raktariBejelentes'
 
 const STATUS_LABELS: Record<DailyClosingStatus, string> = {
   submitted: 'Beküldve, még nem tekintve meg',
@@ -107,6 +108,10 @@ export function DailyClosingPage() {
   ]
 
   const locationName = activeLocations.find((l) => l.id === locationId)?.name ?? ''
+  // A nap még el nem fogadott bejelentései: a zárásba csak elfogadás után számítanak bele, de itt látszanak,
+  // hogy a nap végén semmi ne vesszen el (DOCUMENTATION.md 31. fejezet).
+  const varakozok = movements.filter((m) => varakozo(m) && m.locationId === locationId && m.date === date)
+  const productName = (id: string) => products.find((p) => p.id === id)
 
   return (
     <div>
@@ -136,6 +141,29 @@ export function DailyClosingPage() {
           </label>
         </div>
       </Card>
+
+      {varakozok.length > 0 && (
+        <Card className="mb-5">
+          <h2 className="mb-1 text-base font-semibold text-[var(--color-text)]">Jóváhagyásra váró tételek ezen a napon ({varakozok.length})</h2>
+          <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+            Ezek még nem számítanak bele a készletbe és a zárás számaiba; a fő iroda elfogadása után igen.
+          </p>
+          <ul className="divide-y divide-[var(--color-border)] text-sm">
+            {varakozok.map((m) => {
+              const p = productName(m.productId)
+              const allapot = allapota(m)
+              return (
+                <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    {m.type === 'in' ? 'Be' : 'Ki'}: {p?.name ?? 'Törölt termék'} – {formatNumber(m.raktarMennyiseg ?? m.quantity)} {p?.unit ?? 'db'}
+                  </span>
+                  <span className="text-xs text-[var(--color-text-muted)]">{allapot ? ALLAPOT_SZOVEG[allapot] : ''}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </Card>
+      )}
 
       {existingClosing ? (
         <Card className="mb-5">

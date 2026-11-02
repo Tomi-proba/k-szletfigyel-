@@ -11,7 +11,8 @@ vi.mock('../src/lib/remoteSync', async (eredeti) => ({
 }))
 
 import { integracioFrissites, returnableQuantity, useStore } from '../src/store/useStore'
-import { fajtaja, jovahagyhatja, SZOVEG } from '../src/lib/jovahagyando'
+import { fajtaja, SZOVEG } from '../src/lib/jovahagyando'
+import { teendoje } from '../src/lib/raktariBejelentes'
 import { bekuldottAfaIdoszakban, lezartIdoszakban } from '../src/lib/integracio'
 import { DEFAULT_SETTINGS, type Movement } from '../src/types'
 
@@ -135,8 +136,9 @@ describe('a Könyvelő által követett fizetés (KK6) és a szerveren keletkeze
 
 describe('jóváhagyási lista: szavak és szerepkörök', () => {
   const m = (over: Partial<Movement>): Movement => ({ id: 'x', productId: 'p', locationId: 'l', date: '2026-11-02', type: 'in', quantity: 1, createdAt: '', approvalStatus: 'pending', ...over })
-  const raktaros = { raktaros: true, iroda: false, csakOlvas: false, helyi: false }
-  const iroda = { raktaros: false, iroda: true, csakOlvas: false, helyi: false }
+  const raktaros = { raktaros: true, foIroda: false, csakOlvas: false, helyi: false }
+  const iroda = { raktaros: false, foIroda: false, csakOlvas: false, helyi: false }
+  const foIroda = { raktaros: false, foIroda: true, csakOlvas: false, helyi: false }
 
   it('egyszerű, a helyzethez illő feliratok', () => {
     expect(SZOVEG[fajtaja(m({ integracioEsemenyId: 'e' }))]).toMatchObject({ rendben: 'Beérkezett', kevesebb: 'Kevesebb jött', nem: 'Nem érkezett meg' })
@@ -145,13 +147,16 @@ describe('jóváhagyási lista: szavak és szerepkörök', () => {
     expect(SZOVEG[fajtaja(m({ type: 'out', returnOfMovementId: 'o' }))].rendben).toBe('Visszaküldve')
   })
 
-  it('a Könyvelőből jöttet bárki jóváhagyhatja (a tulajdonos nem); a kézi visszárut a másik fél', () => {
-    expect(jovahagyhatja(m({ integracioEsemenyId: 'e' }), raktaros)).toBe(true)
-    expect(jovahagyhatja(m({ integracioEsemenyId: 'e' }), { ...iroda, csakOlvas: true })).toBe(false)
-    expect(jovahagyhatja(m({ returnOfMovementId: 'o' }), raktaros)).toBe(true)
-    expect(jovahagyhatja(m({ returnOfMovementId: 'o' }), iroda)).toBe(false)
-    expect(jovahagyhatja(m({ type: 'out', returnOfMovementId: 'o' }), raktaros)).toBe(false)
-    expect(jovahagyhatja(m({ type: 'out', returnOfMovementId: 'o' }), iroda)).toBe(true)
+  it('a raktár visszaigazol, csak a fő iroda véglegesít; az iroda és a tulajdonos csak lát (2026-11-02)', () => {
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), raktaros)).toBe('visszaigazol')
+    expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't' }), raktaros)).toBeNull()
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), foIroda)).toBe('veglegesit')
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), iroda)).toBeNull()
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...foIroda, csakOlvas: true })).toBeNull()
+    expect(teendoje(m({ type: 'out', returnOfMovementId: 'o' }), iroda)).toBeNull()
+    expect(teendoje(m({ approvalStatus: 'approved' }), foIroda)).toBeNull()
+    // Helyi módban egy felhasználó van: ő véglegesít.
+    expect(teendoje(m({}), { ...iroda, helyi: true })).toBe('veglegesit')
   })
 
   it('lezárt időszak: figyelmeztetés a napra', () => {

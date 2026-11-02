@@ -54,10 +54,18 @@ export const SZOVEG: Record<Fajta, { cim: string; rendben: string; kevesebb: str
   },
 }
 
-/** Ki hagyhatja jóvá: a Könyvelőből jöttet a raktár (és az iroda); a kézi visszárunál a rögzítő NEM
- * hagyhatja jóvá a sajátját: a vevői visszavételt a raktár, a szállítói visszaküldést az iroda (F15.8). */
-export function jovahagyhatja(m: Movement, szerep: { raktaros: boolean; iroda: boolean; csakOlvas: boolean; helyi: boolean }): boolean {
-  if (szerep.csakOlvas) return false
-  if (szerep.helyi || m.integracioEsemenyId) return true
-  return m.type === 'in' ? szerep.raktaros : szerep.iroda
+/** Rövid címke a kártyára: a raktár saját bejelentésénél a bejelentés fajtája. */
+export function bejelentesCimke(m: Movement): string | null {
+  if (m.ok === 'selejt') return 'Selejt'
+  if (m.ok === 'leltar_hiany') return 'Leltári hiány'
+  if (m.ok === 'leltar_tobblet') return 'Leltári többlet'
+  return null
+}
+
+/** Honnan jött a tétel (a kártya alcíme). */
+export function forrasa(m: Movement): string {
+  if (m.integracioEsemenyId) return m.integracioForras ? `Könyvelő, ${m.integracioForras}` : 'Könyvelő'
+  if (m.returnOfMovementId) return 'Visszáru'
+  if (m.raktarVisszaigazolva && m.createdAt === m.raktarVisszaigazolva) return 'Raktári bejelentés'
+  return m.type === 'in' ? 'Irodai rendelés' : 'Kiszállítás'
 }

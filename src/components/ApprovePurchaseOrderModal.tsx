@@ -1,7 +1,8 @@
-// A raktáros (vagy iroda) itt hagyja jóvá egy függőben lévő rendelés
-// tényleges beérkezését - csak ez a lépés hozza létre a valódi
-// PurchaseLot-ot és növeli a készletet, a ténylegesen beérkezett
-// mennyiséggel (ami eltérhet a rendelttől - hiánycikk, sérült áru stb.).
+// A fő iroda itt fogadja el egy függőben lévő beérkezést (irodai rendelés, raktári bejelentés vagy
+// leltári többlet) - csak ez a lépés hozza létre a valódi PurchaseLot-ot és növeli a készletet, a
+// ténylegesen beérkezett mennyiséggel. Ha a raktár már visszaigazolta, az ő mennyisége és megjegyzése
+// az alapértelmezés (DOCUMENTATION.md 31. fejezet). A raktáros ezt a lépést nem végzi: ő a
+// „Jóváhagyásra vár” oldalon igazolja vissza, mi érkezett.
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
@@ -19,8 +20,12 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
   // mennyiség kell, az árat nem kell megmutatni neki.
   const { isWarehouseUser } = useAuth()
 
-  const [actualQuantity, setActualQuantity] = useState(String(movement.quantity))
-  const [note, setNote] = useState('')
+  const vart = movement.orderedQuantity ?? movement.quantity
+  const [actualQuantity, setActualQuantity] = useState(String(movement.raktarMennyiseg || movement.quantity))
+  const [note, setNote] = useState(movement.raktarMegjegyzes ?? '')
+  // Raktári bejelentésnél nincs várható ár: a fő iroda itt adhatja meg (alapból a jelenlegi beszerzési ár).
+  const kellAr = movement.unitPrice === undefined && !movement.ok && !isWarehouseUser
+  const [unitPrice, setUnitPrice] = useState(product ? String(product.purchasePrice) : '')
   // A számlaszám és a szállítási díj kérdése az irodai adat (F15.3, F15.7/2): a raktáros nem látja.
   const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
   const [szamlanVan, setSzamlanVan] = useState<'igen' | 'nem' | 'nemtudom'>(
@@ -32,12 +37,16 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
   const [error, setError] = useState<string | null>(null)
 
   const actualQtyNumber = Number(actualQuantity.replace(',', '.'))
-  const mismatch = Number.isFinite(actualQtyNumber) && actualQtyNumber !== movement.quantity
+  const mismatch = Number.isFinite(actualQtyNumber) && actualQtyNumber !== vart
 
   function approve() {
     setError(null)
     if (!Number.isFinite(actualQtyNumber) || actualQtyNumber <= 0) {
       return setError('A tényleges mennyiségnek pozitív számnak kell lennie.')
+    }
+    const unitPriceNumber = kellAr && unitPrice.trim() !== '' ? Number(unitPrice.replace(',', '.')) : undefined
+    if (unitPriceNumber !== undefined && (!Number.isFinite(unitPriceNumber) || unitPriceNumber < 0)) {
+      return setError('Az egységár nem lehet negatív.')
     }
     const result = approvePurchaseOrder(
       movement.id,
@@ -50,18 +59,20 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
             shippingOnInvoice: vanSzallitas && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined,
             invoiceDate: invoiceDate || undefined,
             fulfillmentDate: fulfillmentDate || undefined,
+            unitPrice: unitPriceNumber,
           },
     )
-    if (!result.ok) return setError('A jóváhagyás nem sikerült.')
+    if (!result.ok) return setError(result.reason === 'forbidden' ? 'Ezt csak a fő iroda fogadhatja el.' : 'A jóváhagyás nem sikerült.')
     onClose()
   }
 
   return (
-    <Modal title="Beérkezés jóváhagyása" onClose={onClose}>
+    <Modal title={movement.ok === 'leltar_tobblet' ? 'Leltári többlet elfogadása' : 'Beérkezés elfogadása'} onClose={onClose}>
       <div className="mb-4 rounded-lg bg-black/5 p-3 text-sm">
         <div className="font-medium text-[var(--color-text)]">{product?.name ?? 'Törölt termék'}</div>
         <div className="text-xs text-[var(--color-text-muted)]">
-          Rendelve: {movement.quantity} {product?.unit} · Rendelés dátuma: {formatDate(movement.date)}
+          {movement.raktarVisszaigazolva && movement.unitPrice === undefined ? 'Bejelentve' : 'Rendelve'}: {vart} {product?.unit} · Dátum:{' '}
+          {formatDate(movement.date)}
           {!isWarehouseUser && movement.unitPrice !== undefined && (
             <>
               {' '}
@@ -71,14 +82,19 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
         </div>
       </div>
 
+      <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+        {movement.raktarVisszaigazolva
+          ? `A raktár szerint ${movement.raktarMennyiseg ?? movement.quantity} ${product?.unit ?? ''} érkezett${movement.raktarMegjegyzes ? ` (${movement.raktarMegjegyzes})` : ''}.`
+          : 'A raktár még nem igazolta vissza, mennyi érkezett. Csak akkor fogadd el, ha biztosan tudod.'}
+      </p>
+
       <Field label={`Ténylegesen beérkezett mennyiség${product ? ` (${product.unit})` : ''}`}>
         <Input inputMode="decimal" value={actualQuantity} onChange={(e) => setActualQuantity(e.target.value)} autoFocus />
       </Field>
 
       {mismatch && (
         <p className="mb-3 rounded-lg bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning)]">
-          Ez eltér a rendelt {movement.quantity} {product?.unit}-tól - az eltérés automatikusan bekerül a megjegyzésbe, és az iroda látni
-          fogja.
+          Ez eltér a várt {vart} {product?.unit} mennyiségtől - az eltérés bekerül a megjegyzésbe.
         </p>
       )}
 
@@ -86,13 +102,20 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. sérült volt 2 db, ezért kevesebb…" />
       </Field>
 
-      {!isWarehouseUser && (
+      {kellAr && (
+        <Field label="Beszerzési egységár (Ft, nettó)">
+          <Input inputMode="decimal" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">A raktár árat nem lát; alapból a jelenlegi beszerzési ár.</span>
+        </Field>
+      )}
+
+      {!isWarehouseUser && !movement.ok && (
         <Field label="Szállítói számla száma (opcionális)">
           <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="pl. SZ-2026-0042" />
         </Field>
       )}
 
-      {!isWarehouseUser && (
+      {!isWarehouseUser && !movement.ok && (
         <div className="mb-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm">
@@ -129,7 +152,7 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
         <Button variant="secondary" onClick={onClose}>
           Mégse
         </Button>
-        <Button onClick={approve}>Jóváhagyás - készletbe vétel</Button>
+        <Button onClick={approve}>Elfogadás - készletbe vétel</Button>
       </div>
     </Modal>
   )

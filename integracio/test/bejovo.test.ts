@@ -102,9 +102,10 @@ const docOf = (e: EventEnvelope) => e.payload as { documentId: string; serialNum
 const mozgasokDb = async (documentId: string) =>
   (await pool.query("SELECT *, date::text AS date FROM public.movements WHERE integracio_dokumentum_id = $1 ORDER BY created_at, quantity DESC, id", [documentId])).rows as Array<Record<string, unknown>>;
 
-/** A raktáros jóváhagyása a valódi keszlet_mentes-sel (ahogy a böngésző menti a store változását). */
+/** A jóváhagyás a valódi keszlet_mentes-sel (ahogy a böngésző menti a store változását). 2026-11-02-től
+ * véglegesíteni csak a fő iroda tud (a raktáros visszaigazol, DOCUMENTATION.md 31. fejezet). */
 async function jovahagy(m: Record<string, unknown>, over: Record<string, unknown>) {
-  await ment(pool, raktaros, [{ tabla: "movements", sor: { id: m.id, company_id: ceg.companyId, product_id: m.product_id, location_id: m.location_id, approval_status: "approved", approved_at: "2026-11-03T08:00:00Z", version: m.version, ...over } }]);
+  await ment(pool, ceg.felhasznalo, [{ tabla: "movements", sor: { id: m.id, company_id: ceg.companyId, product_id: m.product_id, location_id: m.location_id, approval_status: "approved", approved_at: "2026-11-03T08:00:00Z", version: m.version, ...over } }]);
 }
 
 async function esemenyek(recordId: string): Promise<EventEnvelope[]> {
@@ -203,7 +204,7 @@ leiras("vevőszámla → jóváhagyandó kiadás", () => {
     const e = bizonylat("VSZ", [{ productId: ajto, quantity: 1, netAmount: 100_000 }]);
     await kuld(e);
     const [m] = await mozgasokDb(docOf(e).documentId);
-    await ment(pool, raktaros, [{ tabla: "movements", sor: { id: m!.id, company_id: ceg.companyId, approval_status: "rejected", rejected_at: "2026-11-03T08:00:00Z", reject_reason: "A vevő nem vitte el", version: m!.version } }]);
+    await ment(pool, ceg.felhasznalo, [{ tabla: "movements", sor: { id: m!.id, company_id: ceg.companyId, approval_status: "rejected", rejected_at: "2026-11-03T08:00:00Z", reject_reason: "A vevő nem vitte el", version: m!.version } }]);
     expect((await esemenyek(String(m!.id)))[0]).toMatchObject({ payload: { purpose: "ISSUE", expectedQuantity: 1, actualQuantity: 0, note: "A vevő nem vitte el", costOfGoods: 0 } });
   });
 });

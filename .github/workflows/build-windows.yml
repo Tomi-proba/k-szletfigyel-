@@ -2,6 +2,15 @@ name: Build Windows desktop app
 
 on:
   workflow_dispatch:
+    inputs:
+      supabase_url:
+        description: "Opcionális: a Supabase-projekt címe (https://<projekt>.supabase.co). Megadva a telepített program bejelentkezéssel, ehhez a projekthez kapcsolódik; a beállítófájl felülírja."
+        required: false
+        default: ""
+      supabase_anon_key:
+        description: "Opcionális: a projekt NYILVÁNOS (anon / publishable) kulcsa. Soha ne a service_role / secret kulcs!"
+        required: false
+        default: ""
   push:
     branches:
       - claude/inventory-management-app-yjc3v5
@@ -28,6 +37,10 @@ jobs:
 
       - name: Build web app
         run: npm run build
+        env:
+          # Csak kézi indításnál, ha megadták: a nyilvános cím és kulcs (a böngészőbe is bekerülnek).
+          VITE_SUPABASE_URL: ${{ github.event.inputs.supabase_url }}
+          VITE_SUPABASE_ANON_KEY: ${{ github.event.inputs.supabase_anon_key }}
 
       - name: Copy build output into electron/dist
         run: Copy-Item -Path dist -Destination electron/dist -Recurse

@@ -415,6 +415,11 @@ lefuttatja a teszteket, a buildet és a lintet.
 A `claude/inventory-management-app-yjc3v5` branch-re történő push automatikusan új Vercel deploy-t indít (statikus SPA build, `npm run build` kimenete).
 
 ### 10.4 Windows asztali alkalmazás
+Kézi indításnál (*Actions → Build Windows desktop app → Run workflow*) megadható a Supabase-projekt címe és
+**nyilvános** (anon / publishable) kulcsa. Ekkor a telepített program bejelentkezéssel, ehhez a projekthez
+kapcsolódik; a felhasználói mappa `keszletfigyelo-beallitas.json` fájlja ezt felülírja. Üresen hagyva a
+program a megszokott, helyi módban fut.
+
 A `.github/workflows/build-windows.yml` GitHub Actions workflow (Windows runner-en) lebuildeli a webes alkalmazást, becsomagolja az `electron/` mappában lévő Electron shell-be (`electron/main.js`), és `electron-builder`-rel `.exe` telepítőt készít, amit GitHub Actions artifact-ként tölt fel. A működését a 21. fejezet írja le.
 
 > **Megjegyzés a fejlesztési folyamatról**: a felhasználó explicit kérésére a Windows build futtatása/figyelése átmenetileg szüneteltetve volt a fejlesztés alatt (hogy ne fusson feleslegesen minden apró változtatásnál), amíg az alkalmazás el nem készül.

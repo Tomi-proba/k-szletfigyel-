@@ -50,8 +50,8 @@ create table if not exists public.companies (
   created_at timestamptz not null default now(),
   subscription_status text not null default 'trial'
     check (subscription_status in ('trial', 'active', 'expired', 'cancelled')),
-  -- Alapértelmezett próbaidőszak: 14 nap. Ha máshogy szeretnéd (pl. 30 nap),
-  -- itt és a handle_new_user() függvényben is módosítsd az intervallumot.
+  -- Alapértelmezett próbaidőszak: 14 nap volt; a 2026-11-04-i migráció (a fájl végén) 30 napra
+  -- állítja az új cégeknél. Az árak a portál árlistájából jönnek (plan_price_huf már nem használt).
   trial_ends_at timestamptz not null default (now() + interval '14 days'),
   plan text not null default 'havi_elofizetes',
   plan_price_huf integer not null default 9990,
@@ -2097,3 +2097,17 @@ create trigger movements_jovahagyas_vedelem
 drop policy if exists "Raktáros a saját telephelye termékeit frissítheti" on public.products;
 drop policy if exists "Raktáros tételt létrehozhat a saját telephelyén" on public.purchase_lots;
 drop policy if exists "Raktáros tételt frissíthet a saját telephelyén" on public.purchase_lots;
+
+-- ---------------------------------------------------------------------------
+-- 2026-11-04: 30 napos próbaidő és árak egy helyen (AWEBOLDAL TERV.md F20)
+-- ---------------------------------------------------------------------------
+-- * Az ÚJONNAN regisztráló cégek próbaideje 30 nap (eddig 14). Csak az alapértelmezett érték változik:
+--   a MEGLÉVŐ cégek próbaideje, állapota és adatai NEM változnak (egyetlen meglévő sort sem írunk át).
+-- * A beégetett 9 990 Ft-os alapár megszűnik: az árak egyetlen forrása a portál árlistája
+--   (/api/v1/arak). A plan_price_huf oszlop megmarad (a meglévő értékekkel együtt), csak már nem használjuk,
+--   és új cégnél üres marad.
+-- Ismételten futtatható. Az élő projekten csak külön jóváhagyás után fut (ELESITES.md).
+
+alter table public.companies alter column trial_ends_at set default (now() + interval '30 days');
+alter table public.companies alter column plan_price_huf drop default;
+alter table public.companies alter column plan_price_huf drop not null;

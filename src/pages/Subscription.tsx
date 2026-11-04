@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { PAYMENT_FAILED_GRACE_DAYS, trialDaysRemaining } from '../lib/subscription'
 import { Button, Card, PageHeader } from '../components/ui'
 import { formatCurrency, formatDate } from '../lib/format'
+import { PORTAL_URL, keszletCsomag, useArlista } from '../lib/arak'
 
 const STATUS_LABELS: Record<string, string> = {
   trial: 'Próbaidőszak',
@@ -22,6 +23,9 @@ export function Subscription() {
   const { company, isReadOnly, demoActivateSubscription, demoCancelSubscription } = useAuth()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  // Az ár a portál árlistájából jön (egy helyen tárolva); itt nincs beégetett ár.
+  const { arlista, betolt } = useArlista()
+  const csomag = keszletCsomag(arlista)
 
   if (!company) return null
 
@@ -56,6 +60,14 @@ export function Subscription() {
         </p>
       </Card>
 
+      <Card className="mb-5 text-sm">
+        A csomagodat (Könyvelő, eÁFA, Készletkezelő és ezek kedvezményes együttesei) a portálon kezeled; ott látod az összes csomag árát és a
+        megtakarítást is.{' '}
+        <a className="font-medium text-[var(--color-primary)] underline" href={`${PORTAL_URL}/elofizetes`}>
+          Előfizetés a portálon
+        </a>
+      </Card>
+
       <Card className="mb-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -78,7 +90,12 @@ export function Subscription() {
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <div className="text-sm text-[var(--color-text-muted)]">Havidíj</div>
-            <div className="text-xl font-bold text-[var(--color-text)]">{formatCurrency(company.planPriceHuf)}</div>
+            <div className="text-xl font-bold text-[var(--color-text)]" data-havidij>
+              {csomag ? formatCurrency(csomag.havidijNetto) : betolt ? '…' : '–'}
+            </div>
+            <div className="text-xs text-[var(--color-text-muted)]">
+              {csomag ? `nettó, + ${arlista!.afaKulcs}% áfa (Készletkezelő)` : betolt ? '' : 'Az árlista most nem érhető el.'}
+            </div>
           </div>
           {company.subscriptionStatus === 'trial' && (
             <div>

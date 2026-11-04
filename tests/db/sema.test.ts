@@ -41,4 +41,8 @@ describe('séma', () => {
   it('a schema.sql szó szerint tartalmazza a 2026-11-02-i (raktári bejelentés) migrációt', () => {
     expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-02_raktari_bejelentes.sql'))
   })
+
+  it('a schema.sql szó szerint tartalmazza a 2026-11-04-i (30 napos próba) migrációt', () => {
+    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-04_proba_30_nap.sql'))
+  })
 })

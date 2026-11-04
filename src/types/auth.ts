@@ -11,7 +11,6 @@ export interface Company {
   subscriptionStatus: SubscriptionStatus
   trialEndsAt: string
   plan: string
-  planPriceHuf: number
   currentPeriodEnd: string | null
   paymentFailedAt: string | null
   cancelledAt: string | null
@@ -110,7 +109,6 @@ export function mapCompanyRow(row: Record<string, unknown>): Company {
     subscriptionStatus: row.subscription_status as SubscriptionStatus,
     trialEndsAt: row.trial_ends_at as string,
     plan: row.plan as string,
-    planPriceHuf: row.plan_price_huf as number,
     currentPeriodEnd: (row.current_period_end as string | null) ?? null,
     paymentFailedAt: (row.payment_failed_at as string | null) ?? null,
     cancelledAt: (row.cancelled_at as string | null) ?? null,

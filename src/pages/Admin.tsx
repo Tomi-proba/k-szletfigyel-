@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase'
 import { mapCompanyRow, type Company } from '../types/auth'
 import { Card, EmptyState, PageHeader } from '../components/ui'
 import { formatCurrency, formatDate } from '../lib/format'
+import { keszletCsomag, useArlista } from '../lib/arak'
 
 const STATUS_LABELS: Record<string, string> = {
   trial: 'Próbaidőszak',
@@ -30,6 +31,7 @@ const STATUS_CLASSES: Record<string, string> = {
 export function Admin() {
   const { profile } = useAuth()
   const [companies, setCompanies] = useState<Company[] | null>(null)
+  const { arlista } = useArlista()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,7 +61,9 @@ export function Admin() {
   }
 
   const activeCompanies = companies?.filter((c) => c.subscriptionStatus === 'active') ?? []
-  const monthlyRevenueHuf = activeCompanies.reduce((sum, c) => sum + c.planPriceHuf, 0)
+  // Becslés a portál árlistája szerint (Készletkezelő önálló csomag); a valós csomagot a portál tartja nyilván.
+  const keszletAr = keszletCsomag(arlista)?.havidijNetto ?? null
+  const monthlyRevenueHuf = keszletAr === null ? null : activeCompanies.length * keszletAr
 
   return (
     <div>
@@ -76,7 +80,7 @@ export function Admin() {
         </Card>
         <Card>
           <div className="text-sm text-[var(--color-text-muted)]">Havi bevétel (demó)</div>
-          <div className="text-2xl font-bold text-[var(--color-text)]">{formatCurrency(monthlyRevenueHuf)}</div>
+          <div className="text-2xl font-bold text-[var(--color-text)]">{monthlyRevenueHuf === null ? '–' : formatCurrency(monthlyRevenueHuf)}</div>
         </Card>
       </div>
 
@@ -111,7 +115,7 @@ export function Admin() {
                   <td className="whitespace-nowrap px-4 py-3 text-[var(--color-text-muted)]">
                     {c.subscriptionStatus === 'trial' ? formatDate(c.trialEndsAt) : c.currentPeriodEnd ? formatDate(c.currentPeriodEnd) : '—'}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{formatCurrency(c.planPriceHuf)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">{keszletAr === null ? '–' : formatCurrency(keszletAr)}</td>
                 </tr>
               ))}
             </tbody>

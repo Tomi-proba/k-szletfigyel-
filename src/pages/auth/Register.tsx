@@ -48,7 +48,7 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
   return (
     <AuthLayout
       title={isInvite ? 'Csatlakozás meghívóval' : 'Regisztráció'}
-      subtitle={isInvite ? 'Hozz létre egy jelszót a fiókodhoz - a meghívó már tartalmazza, melyik céghez és milyen szerepkörrel csatlakozol.' : '14 napos próbaidőszak, kártyaadat megadása nélkül.'}
+      subtitle={isInvite ? 'Hozz létre egy jelszót a fiókodhoz - a meghívó már tartalmazza, melyik céghez és milyen szerepkörrel csatlakozol.' : 'Ingyenes próbaidőszak, kártyaadat megadása nélkül.'}
     >
       <form onSubmit={handleSubmit}>
         {!isInvite && (

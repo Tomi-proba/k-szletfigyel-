@@ -70,7 +70,6 @@ describe('előfizetés állapota', () => {
     subscriptionStatus: 'trial',
     trialEndsAt: '2026-10-31T00:00:00Z',
     plan: 'havi_elofizetes',
-    planPriceHuf: 2990,
     currentPeriodEnd: null,
     paymentFailedAt: null,
     cancelledAt: null,

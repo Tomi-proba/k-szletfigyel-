@@ -1230,3 +1230,15 @@ nem a fő iroda hívja; felület: `pages/Jovahagyando.tsx`. Tesztek: `tests/rakt
 `tests/db/raktariBejelentes.test.ts`.
 
 **Meglévő projektben** a `supabase/migrations/2026-11-02_raktari_bejelentes.sql` fájlt kell lefuttatni.
+
+## 32. Árak a portálról, 30 napos próba (2026-11-04)
+
+- **Az árak egyetlen forrása** az AWEBOLDAL `packages/arak` csomagja, a portál `/api/v1/arak` végpontján
+  (`src/lib/arak.ts`, `useArlista`). A Készletkezelőben sehol nincs beégetett ár (teszt ellenőrzi): ha az árlista nem
+  érhető el, az ár helyén „–” áll. A portál címe: `VITE_PORTAL_URL` (alapból `http://localhost:3400`).
+- Az **Előfizetés** oldal a Készletkezelő önálló csomagjának árát mutatja, és a portálra visz, ahol a csomag (1, 2
+  vagy 3 modul, kedvezménnyel) kezelhető. Az **Admin** becsült bevétele is az árlistából számol.
+- A `companies.plan_price_huf` oszlop megmarad, de már nem használt; a 9 990 Ft-os alapértéke megszűnik.
+- **30 napos próba az új cégeknek:** `supabase/migrations/2026-11-04_proba_30_nap.sql`. A meglévő cégek
+  próbaideje és adatai nem változnak (csak az alapértelmezés módosul). **Az élő projekten még nem futott le**;
+  futtatása: AWEBOLDAL `ELESITES.md` 4b.

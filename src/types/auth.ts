@@ -16,6 +16,8 @@ export interface Company {
   cancelledAt: string | null
   stripeCustomerId: string | null
   stripeSubscriptionId: string | null
+  /** A raktáros tétlenségi ideje percben (30–720); null, amíg a 2026-11-05-i migráció nem futott. */
+  raktarosTetlensegPerc: number | null
 }
 
 /** Négy szerepkör:
@@ -114,6 +116,7 @@ export function mapCompanyRow(row: Record<string, unknown>): Company {
     cancelledAt: (row.cancelled_at as string | null) ?? null,
     stripeCustomerId: (row.stripe_customer_id as string | null) ?? null,
     stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
+    raktarosTetlensegPerc: typeof row.raktaros_tetlenseg_perc === 'number' ? row.raktaros_tetlenseg_perc : null,
   }
 }
 

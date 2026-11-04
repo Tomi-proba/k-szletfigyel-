@@ -1242,3 +1242,29 @@ nem a fő iroda hívja; felület: `pages/Jovahagyando.tsx`. Tesztek: `tests/rakt
 - **30 napos próba az új cégeknek:** `supabase/migrations/2026-11-04_proba_30_nap.sql`. A meglévő cégek
   próbaideje és adatai nem változnak (csak az alapértelmezés módosul). **Az élő projekten még nem futott le**;
   futtatása: AWEBOLDAL `ELESITES.md` 4b.
+
+## 33. Kötelező kétlépcsős azonosítás és közös belépés (2026-11-05, AWEBOLDAL TERV.md F21)
+
+- **Kétlépcsős azonosítás mindenkinek kötelező** (Supabase MFA, TOTP). A jelszó után a program kéri a
+  hitelesítő alkalmazás kódját; akinek még nincs beállítva, azt a belépéskor végigvezeti a beállításon
+  (QR-kód) – `pages/auth/Ketlepcsos.tsx`. Amíg a munkamenet nem aal2, **semmilyen adat nem töltődik be**
+  (`hooks/useAuth.tsx`). Elveszett telefonnál az üzemeltető a Supabase felületén (Authentication → Users →
+  a felhasználó → MFA factors) törli a régi tényezőt; a következő belépéskor újra beállítható.
+- **Átállási lista:** a Csapat oldalon a fő iroda és a tulajdonos látja, ki nem állította még be
+  (`public.ketlepcsos_allapot()`).
+- **Adatbázis-szabály (kapcsolóval, előkészítve):** `supabase/migrations/2026-11-05_ketlepcsos_kozos_belepes.sql`.
+  Bekapcsolva aal2 nélkül semmilyen cégadat nem érhető el (a `my_company_id()`, `my_role()`,
+  `my_assigned_location_id()`, `is_platform_admin()` és a cég-policyk is figyelik). A migráció a szabályt
+  **kikapcsolva** hozza létre; bekapcsolni csak az SQL-szerkesztőből lehet (`select public.ketlepcsos_kotelezove_tetel();`),
+  és ez **megtagadja a bekapcsolást, amíg bárkinek hiányzik** a kétlépcsős tényezője – így senki nem zárhatja
+  ki magát. **Az élő projekten még nem futott le**; a sorrend: AWEBOLDAL `ELESITES.md` „Közös belépés”.
+- **Közös belépés a portálról:** `#/sso?jegy=…&at=…&rt=…`. A Készlet csak kétlépcsős (aal2) Supabase-munkamenetet
+  és ennek a modulnak szóló, érvényes jegyet fogad el (`lib/kozosBelepes.ts`, `components/AuthGate.tsx`);
+  utána a jegy és a tokenek eltűnnek a címsorból. Ez a közös Supabase-projekttel működik (a portál
+  `PORTAL_AUTH=supabase` módja).
+- **Kijelentkezés egy helyen:** közös belépésnél a Kijelentkezés globális (minden eszközön visszavonja a
+  frissítő tokeneket), és a portál kilépési oldalára visz. A Készlet percenként ellenőrzi, hogy a munkamenete a
+  szerveren él-e még: ha a portálon jelentkeztek ki, itt is kilép (hálózati hiba nem léptet ki).
+- **Tétlenség:** alapból 30 perc. A raktárosnál a fő iroda a Beállítások oldalon hosszabbra állíthatja
+  (legfeljebb 12 óra; `companies.raktaros_tetlenseg_perc`, a migráció után). Közös belépésnél a portál jegyében
+  kapott idő érvényes. Tétlenségtől függetlenül egy munkamenet legfeljebb 12 óráig él.

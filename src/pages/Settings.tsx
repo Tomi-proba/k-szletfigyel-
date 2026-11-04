@@ -5,6 +5,7 @@ import { useStore } from '../store/useStore'
 import { DEFAULT_SETTINGS } from '../types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button, Card, Field, Input, PageHeader } from '../components/ui'
+import { RaktarosTetlensegBeallitas } from '../components/KozosBelepesBeallitasok'
 import { AsztaliAdatMento } from '../components/AsztaliAdatMento'
 import { asztali } from '../lib/asztali'
 
@@ -163,6 +164,8 @@ export function Settings() {
           {nameError && <p className="mt-2 text-sm text-[var(--color-danger)]">{nameError}</p>}
         </Card>
       )}
+
+      <RaktarosTetlensegBeallitas />
 
       {isReadOnlyViewer && (
         <Card className="mb-5 border-[var(--color-primary)]/30 bg-[var(--color-info-bg)]">

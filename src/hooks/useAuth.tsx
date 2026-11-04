@@ -12,6 +12,8 @@ import { fetchBusinessData } from '../lib/remoteSync'
 import { mentesiSor } from '../lib/mentes'
 import { allapotUzenet } from '../lib/mentesiSor'
 import { hydrateFromRemote, resetToLocalMode, useStore } from '../store/useStore'
+import { belepesIdeje, belepesIdejeMentes, kozosBelepes, kozosBelepesTorles, mfaAllapot, type MfaAllapot } from '../lib/kozosBelepes'
+import { PORTAL_URL } from '../lib/arak'
 
 /** TEMP DEMO HOOK - a Supabase nélküli, ideiglenes szerepkör-szimulációhoz
  * (két böngészőfül, ugyanaz a localStorage, más-más "?demo_szerepkor="
@@ -33,6 +35,10 @@ interface AuthResult {
 interface AuthContextValue {
   loading: boolean
   session: Session | null
+  /** A kétlépcsős azonosítás állapota (kötelező): 'ok' csak aal2 munkamenetnél; addig semmilyen adat nem töltődik be. */
+  mfa: MfaAllapot | null
+  /** A kétlépcsős állapot újraellenőrzése (a kód megadása után). */
+  mfaUjraellenorzes: () => Promise<void>
   profile: Profile | null
   company: Company | null
   isReadOnly: boolean
@@ -121,9 +127,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
   const [dataLoadError, setDataLoadError] = useState<string | null>(null)
+  const [mfa, setMfa] = useState<MfaAllapot | null>(null)
 
   const loadProfileAndCompany = useCallback(async (userId: string) => {
     if (!supabase) return
+    // Kétlépcsős azonosítás nélkül (aal1) semmilyen adatot nem töltünk be: előbb a kód, illetve első
+    // alkalommal a beállítás (lásd pages/auth/Ketlepcsos.tsx). AWEBOLDAL TERV.md F21.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    const allapot = mfaAllapot({ currentLevel: aal?.currentLevel ?? null, nextLevel: aal?.nextLevel ?? null })
+    setMfa(allapot)
+    if (allapot !== 'ok') return
+    if (belepesIdeje() === null) belepesIdejeMentes(Date.now())
     const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
     if (!profileRow) {
       // Élő session, de nincs hozzá profil (pl. a felhasználót törölték az
@@ -198,6 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null)
         setCompany(null)
+        setMfa(null)
+        kozosBelepesTorles()
         setDataLoadError(null)
         mentesiSor.leallit()
         resetToLocalMode()
@@ -228,8 +244,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!supabase) return
-    await supabase.auth.signOut()
+    // Közös belépésnél a kijelentkezés mindenhonnan szól (a frissítő tokenek visszavonva), és a portálon
+    // folytatódik: onnan a többi modul is kilépési jelzést kap.
+    const kozos = kozosBelepes() !== null
+    await supabase.auth.signOut({ scope: kozos ? 'global' : 'local' })
+    kozosBelepesTorles()
+    if (kozos) window.location.assign(`${PORTAL_URL}/kilepes`)
   }, [])
+
+  const mfaUjraellenorzes = useCallback(async () => {
+    if (!supabase) return
+    const { data } = await supabase.auth.getSession()
+    if (data.session) await loadProfileAndCompany(data.session.user.id)
+  }, [loadProfileAndCompany])
 
   const requestPasswordReset = useCallback(async (email: string): Promise<AuthResult> => {
     if (!supabase) return { error: 'A Supabase nincs beállítva.' }
@@ -312,6 +339,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextValue = {
     loading,
     session,
+    mfa,
+    mfaUjraellenorzes,
     profile,
     company,
     isReadOnly,

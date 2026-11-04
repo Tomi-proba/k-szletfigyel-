@@ -75,6 +75,7 @@ describe('előfizetés állapota', () => {
     cancelledAt: null,
     stripeCustomerId: null,
     stripeSubscriptionId: null,
+    raktarosTetlensegPerc: null,
     ...overrides,
   })
 

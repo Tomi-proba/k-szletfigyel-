@@ -16,6 +16,19 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
 
+-- A JWT többi mezője (pl. „aal”: kétlépcsős azonosítás után aal2), a Supabase auth.jwt() függvényének mintájára.
+create or replace function auth.jwt() returns jsonb language sql stable as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+$$;
+
+-- A kétlépcsős tényezők (Supabase MFA): az átállási lista és a bekapcsolási feltétel ebből dolgozik.
+create table if not exists auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  factor_type text not null default 'totp',
+  status text not null default 'unverified'
+);
+
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
@@ -24,6 +37,7 @@ end;
 $$;
 grant usage on schema public, auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+grant execute on function auth.jwt() to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
 alter default privileges in schema public grant all on sequences to anon, authenticated;
 alter default privileges in schema public grant execute on functions to anon, authenticated;

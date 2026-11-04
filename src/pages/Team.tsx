@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import type { UserRole } from '../types/auth'
 import { Button, Card, EmptyState, Field, Input, PageHeader, Select } from '../components/ui'
+import { KetlepcsosAtallasLista } from '../components/KozosBelepesBeallitasok'
 import { Check, Copy, Pencil, UserPlus, X } from 'lucide-react'
 
 interface CompanyUserRow {
@@ -309,6 +310,7 @@ export function Team() {
           </div>
         )}
       </Card>
+      <KetlepcsosAtallasLista />
     </div>
   )
 }

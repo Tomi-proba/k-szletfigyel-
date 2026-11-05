@@ -20,17 +20,17 @@ describe('futási mód', () => {
     expect(ut('/')).toBe('/')
   })
 
-  it('a keretben a /keszlet előtag alá kerülnek, kétszer nem', () => {
+  it('a keretben a /keszlet előtag alá kerülnek (a Termékek saját útvonala, a /keszlet is)', () => {
     keretModBeallitas('/keszlet')
     expect(keretben()).toBe(true)
     expect(ut('/')).toBe('/keszlet')
     expect(ut('/mozgasnaplo')).toBe('/keszlet/mozgasnaplo')
-    expect(ut('/keszlet')).toBe('/keszlet')
-    expect(ut('/keszlet/mozgasnaplo')).toBe('/keszlet/mozgasnaplo')
+    expect(ut('/keszlet')).toBe('/keszlet/keszlet')
     expect(ut('/riasztasok?szuro=fizetesi')).toBe('/keszlet/riasztasok?szuro=fizetesi')
     expect(ut('relativ')).toBe('relativ')
     expect(sajatUtvonal('/keszlet/mozgasnaplo')).toBe('/mozgasnaplo')
     expect(sajatUtvonal('/keszlet')).toBe('/')
+    expect(sajatUtvonal('/keszlet/keszlet')).toBe('/keszlet')
   })
 
   it('a felület a react-router-dom hivatkozásait csak a keret/router.tsx-en át használja', () => {

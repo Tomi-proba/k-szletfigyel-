@@ -10,6 +10,8 @@
   --color-text-muted: var(--szin-halvany);
   --color-primary: var(--szin-elsodleges);
   --color-primary-hover: var(--szin-elsodleges-sotet);
+  --color-on-primary: var(--szin-elsodlegesen);
+  --color-on-danger: var(--szin-elsodlegesen);
   --color-danger: var(--szin-hiba);
   --color-danger-bg: color-mix(in srgb, var(--szin-hiba) 12%, var(--szin-hatter));
   --color-warning: var(--szin-figyelmeztetes);

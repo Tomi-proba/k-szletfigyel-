@@ -3,9 +3,9 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, LabelHTMLAttributes, Re
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]',
+  primary: 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]',
   secondary: 'bg-black/5 text-[var(--color-text)] hover:bg-black/10',
-  danger: 'bg-[var(--color-danger)] text-white hover:opacity-90',
+  danger: 'bg-[var(--color-danger)] text-[var(--color-on-danger)] hover:opacity-90',
   ghost: 'text-[var(--color-text)] hover:bg-black/5',
 }
 

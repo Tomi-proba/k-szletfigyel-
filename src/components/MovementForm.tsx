@@ -338,7 +338,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             placeholder="0"
-            className="text-center text-lg"
+            className="w-0 min-w-0 flex-1 text-center text-lg"
           />
           <button
             type="button"

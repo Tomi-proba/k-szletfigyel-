@@ -127,7 +127,7 @@ function KeretCegOsszerendeles() {
             type="button"
             disabled={fut}
             onClick={() => void futtat(() => ujCeg(k.ceg.nev, k.ceg.id))}
-            className="min-h-11 rounded-lg bg-[var(--color-primary)] px-4 py-2 font-semibold text-white disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-[var(--color-primary)] px-4 py-2 font-semibold text-[var(--color-on-primary)] disabled:opacity-50"
           >
             Készletkezelő-cég létrehozása
           </button>
@@ -236,7 +236,7 @@ function KeretLayout() {
           aria-label="Új mozgás rögzítése"
           title={`Új mozgás rögzítése – ${feliratok(ujTetel, gy.mac)}`}
           aria-keyshortcuts={ariaFelirat(ujTetel)}
-          className="keszlet-keret__plusz fixed bottom-6 right-5 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-primary)] text-white shadow-lg"
+          className="keszlet-keret__plusz fixed bottom-6 right-5 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg"
         >
           <Plus size={28} />
         </button>

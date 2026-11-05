@@ -85,7 +85,7 @@ function ConfiguredAuthGate({
           <h1 className="mb-2 text-lg font-semibold">Az adatok most nem tölthetők be</h1>
           <p className="mb-4 text-[var(--color-text-muted)]">{dataLoadError}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void reloadData()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 font-medium text-white">
+            <button type="button" onClick={() => void reloadData()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 font-medium text-[var(--color-on-primary)]">
               Újrapróbálás
             </button>
             <button type="button" onClick={() => void signOut()} className="rounded-lg bg-black/5 px-4 py-2.5 font-medium">
@@ -164,7 +164,7 @@ function SsoAtvetel({ onKesz }: { onKesz: () => void }) {
       {hiba ? (
         <div role="alert" className="max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
           <p className="mb-4">{hiba}</p>
-          <button type="button" onClick={onKesz} className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 font-medium text-white">
+          <button type="button" onClick={onKesz} className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 font-medium text-[var(--color-on-primary)]">
             Tovább a belépéshez
           </button>
         </div>
@@ -251,7 +251,7 @@ function NincsCeg() {
           required
         />
         <div className="flex gap-2">
-          <button type="submit" disabled={fut || !nev.trim()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button type="submit" disabled={fut || !nev.trim()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 font-semibold text-[var(--color-on-primary)] disabled:opacity-50">
             Cég létrehozása
           </button>
           <button type="button" onClick={() => void signOut()} className="rounded-lg px-4 py-2 text-[var(--color-text-muted)]">

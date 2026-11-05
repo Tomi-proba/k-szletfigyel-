@@ -108,7 +108,7 @@ export function Alerts() {
           type="button"
           onClick={() => setFilter(null)}
           className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-            showAll ? 'bg-[var(--color-primary)] text-white' : 'bg-black/5 text-[var(--color-text)] hover:bg-black/10'
+            showAll ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-black/5 text-[var(--color-text)] hover:bg-black/10'
           }`}
         >
           Összes
@@ -119,7 +119,7 @@ export function Alerts() {
             type="button"
             onClick={() => setFilter(f.key)}
             className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              active === f.key ? 'bg-[var(--color-primary)] text-white' : 'bg-black/5 text-[var(--color-text)] hover:bg-black/10'
+              active === f.key ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-black/5 text-[var(--color-text)] hover:bg-black/10'
             }`}
           >
             {f.label}

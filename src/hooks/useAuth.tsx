@@ -191,6 +191,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // AuthGate örökre a "fiókod előkészítése" képernyőn ragadna, hiszen
       // `profile` sosem töltődne be. A kijelentkezés újra előhozza a
       // bejelentkező/regisztrációs képernyőt.
+      // A keretben nincs saját munkamenet, amiből ki lehetne lépni: érthető hibaüzenet.
+      if (keretTok) {
+        setDataLoadError('A felhasználói profil nem tölthető be. Lépj be újra a portálon.')
+        return
+      }
       await supabase.auth.signOut()
       return
     }

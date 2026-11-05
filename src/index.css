@@ -9,6 +9,8 @@
   --color-text-muted: #6b7280;
   --color-primary: #1d4ed8;
   --color-primary-hover: #1e40af;
+  --color-on-primary: #ffffff;
+  --color-on-danger: #ffffff;
   --color-danger: #dc2626;
   --color-danger-bg: #fef2f2;
   --color-warning: #d97706;

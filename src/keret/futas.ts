@@ -11,10 +11,12 @@ export function keretModBeallitas(utvonal: string) {
 export const keretben = () => utvonalElotag !== ''
 export const alapUtvonal = () => utvonalElotag
 
-/** Egy Készleten belüli abszolút útvonal (pl. /mozgasnaplo) a futási módnak megfelelően. */
+/**
+ * Egy Készleten belüli abszolút útvonal (pl. /mozgasnaplo) a futási módnak megfelelően. Mindig előtagol: a
+ * Készlet saját útvonalai között van /keszlet is (Termékek), ami a keret előtagjával egyezik.
+ */
 export function ut(utvonal: string): string {
   if (!utvonalElotag || !utvonal.startsWith('/')) return utvonal
-  if (utvonal === utvonalElotag || utvonal.startsWith(`${utvonalElotag}/`) || utvonal.startsWith(`${utvonalElotag}?`)) return utvonal
   if (utvonal === '/') return utvonalElotag
   if (utvonal.startsWith('/?') || utvonal.startsWith('/#')) return `${utvonalElotag}${utvonal.slice(1)}`
   return `${utvonalElotag}${utvonal}`

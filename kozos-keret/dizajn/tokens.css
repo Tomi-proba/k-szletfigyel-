@@ -1,0 +1,93 @@
+/*
+ * Közös dizájn-tokenek: a weboldal, a portál és (fokozatosan) a három modul
+ * ezekből a CSS-változókból dolgozik. Világos és sötét mód; a sötét a
+ * rendszerbeállítást követi, vagy kézzel: <html data-theme="dark">.
+ */
+:root {
+  --szin-hatter: #ffffff;
+  --szin-felulet: #f5f7fa;
+  --szin-felulet-2: #e9eef5;
+  --szin-szoveg: #141a23;
+  --szin-halvany: #4a5565;
+  --szin-keret: #d3dae4;
+  --szin-elsodleges: #1d4ed8;
+  --szin-elsodleges-sotet: #1e3a8a;
+  --szin-elsodleges-halvany: #e6edfd;
+  --szin-elsodlegesen: #ffffff;
+  --szin-kiemelo: #0f766e;
+  --szin-kiemelo-halvany: #e2f4f1;
+  --szin-siker: #166534;
+  --szin-siker-halvany: #e3f3e7;
+  --szin-figyelmeztetes: #8a5a00;
+  --szin-figyelmeztetes-halvany: #fff4d6;
+  --szin-hiba: #b91c1c;
+
+  --betu: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --betu-meret: 1rem;
+  --sorkoz: 1.6;
+
+  --kerekites: 12px;
+  --kerekites-kicsi: 8px;
+  --arnyek: 0 1px 2px rgb(16 24 40 / 6%), 0 2px 8px rgb(16 24 40 / 6%);
+  --arnyek-nagy: 0 12px 32px rgb(16 24 40 / 12%);
+
+  --tav-1: 0.25rem;
+  --tav-2: 0.5rem;
+  --tav-3: 0.75rem;
+  --tav-4: 1rem;
+  --tav-6: 1.5rem;
+  --tav-8: 2rem;
+  --tav-12: 3rem;
+  --tav-16: 4rem;
+
+  --tartalom-szelesseg: 72rem;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --szin-hatter: #0d1117;
+    --szin-felulet: #151b24;
+    --szin-felulet-2: #1d2531;
+    --szin-szoveg: #e8edf3;
+    --szin-halvany: #a3aebd;
+    --szin-keret: #2c3644;
+    --szin-elsodleges: #7aa2ff;
+    --szin-elsodleges-sotet: #a9c2ff;
+    --szin-elsodleges-halvany: #1a2742;
+    --szin-elsodlegesen: #0d1117;
+    --szin-kiemelo: #5eead4;
+    --szin-kiemelo-halvany: #12302d;
+    --szin-siker: #86efac;
+    --szin-siker-halvany: #143021;
+    --szin-figyelmeztetes: #fcd34d;
+    --szin-figyelmeztetes-halvany: #33280c;
+    --szin-hiba: #fca5a5;
+    --arnyek: 0 1px 2px rgb(0 0 0 / 40%);
+    --arnyek-nagy: 0 12px 32px rgb(0 0 0 / 45%);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --szin-hatter: #0d1117;
+  --szin-felulet: #151b24;
+  --szin-felulet-2: #1d2531;
+  --szin-szoveg: #e8edf3;
+  --szin-halvany: #a3aebd;
+  --szin-keret: #2c3644;
+  --szin-elsodleges: #7aa2ff;
+  --szin-elsodleges-sotet: #a9c2ff;
+  --szin-elsodleges-halvany: #1a2742;
+  --szin-elsodlegesen: #0d1117;
+  --szin-kiemelo: #5eead4;
+  --szin-kiemelo-halvany: #12302d;
+  --szin-siker: #86efac;
+  --szin-siker-halvany: #143021;
+  --szin-figyelmeztetes: #fcd34d;
+  --szin-figyelmeztetes-halvany: #33280c;
+  --szin-hiba: #fca5a5;
+  --arnyek: 0 1px 2px rgb(0 0 0 / 40%);
+  --arnyek-nagy: 0 12px 32px rgb(0 0 0 / 45%);
+  color-scheme: dark;
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@aweboldal/felulet",
+  "private": true,
+  "type": "module",
+  "description": "Közös komponenskészlet és keret-szerződés (TERV.md F22 K2–K3): a keret és a beköltözött modulok egyetlen példányban használják.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./felulet.css": "./src/felulet.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aweboldal/arak": "*",
+    "@aweboldal/modulok": "*"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "react": "^19.1.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@aweboldal/dizajn",
+  "private": true,
+  "exports": {
+    "./tokens.css": "./tokens.css"
+  }
+}

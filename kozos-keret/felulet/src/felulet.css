@@ -1,0 +1,54 @@
+/* A közös komponenskészlet stílusa (TERV.md F22 K3): csak a dizájn-tokenekből (packages/dizajn), „fg-”
+   előtaggal, hogy semmilyen modul stílusát ne írja felül, és azt se írhassa felül véletlenül. */
+.fg-gomb {
+  font: inherit;
+  padding: var(--tav-2) var(--tav-4);
+  border-radius: var(--kerekites-kicsi);
+  border: 1px solid var(--szin-keret);
+  background: var(--szin-felulet);
+  color: var(--szin-szoveg);
+  cursor: pointer;
+  min-height: 2.5rem;
+}
+.fg-gomb:hover { background: var(--szin-felulet-2); }
+.fg-gomb:focus-visible, .fg-bevitel:focus-visible { outline: 3px solid var(--szin-elsodleges); outline-offset: 2px; }
+.fg-gomb--elsodleges { background: var(--szin-elsodleges); border-color: var(--szin-elsodleges); color: var(--szin-elsodlegesen); }
+.fg-gomb--elsodleges:hover { background: var(--szin-elsodleges-sotet); }
+.fg-gomb--veszelyes { color: var(--szin-hiba); border-color: var(--szin-hiba); }
+.fg-gomb--link { background: none; border: none; color: var(--szin-elsodleges); text-decoration: underline; padding: var(--tav-1); min-height: auto; }
+.fg-gomb:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.fg-mezo { display: grid; gap: var(--tav-1); margin-bottom: var(--tav-4); }
+.fg-mezo label { font-weight: 600; }
+.fg-bevitel { font: inherit; padding: var(--tav-2) var(--tav-3); border: 1px solid var(--szin-keret); border-radius: var(--kerekites-kicsi); background: var(--szin-hatter); color: var(--szin-szoveg); }
+.fg-bevitel--szam { text-align: right; font-variant-numeric: tabular-nums; }
+.fg-mezo--hibas .fg-bevitel { border-color: var(--szin-hiba); }
+.fg-mezo__sugo { margin: 0; color: var(--szin-halvany); font-size: 0.875rem; }
+.fg-mezo__hiba { margin: 0; color: var(--szin-hiba); font-size: 0.875rem; }
+
+.fg-tablazat-keret { overflow-x: auto; }
+.fg-tablazat { width: 100%; border-collapse: collapse; }
+.fg-tablazat th, .fg-tablazat td { padding: var(--tav-2) var(--tav-3); border-bottom: 1px solid var(--szin-keret); text-align: left; }
+.fg-tablazat th { font-weight: 600; color: var(--szin-halvany); }
+.fg-szam { text-align: right; font-variant-numeric: tabular-nums; }
+
+.fg-parbeszed { border: 1px solid var(--szin-keret); border-radius: var(--kerekites); padding: 0; background: var(--szin-hatter); color: var(--szin-szoveg); box-shadow: var(--arnyek-nagy); width: min(40rem, calc(100vw - 2rem)); }
+.fg-parbeszed::backdrop { background: rgb(0 0 0 / 45%); }
+.fg-parbeszed__fej { display: flex; justify-content: space-between; align-items: center; padding: var(--tav-4); border-bottom: 1px solid var(--szin-keret); }
+.fg-parbeszed__fej h2 { margin: 0; font-size: 1.25rem; }
+.fg-parbeszed__torzs { padding: var(--tav-4); max-height: 70vh; overflow: auto; }
+.fg-parbeszed__lab { padding: var(--tav-4); border-top: 1px solid var(--szin-keret); display: flex; justify-content: flex-end; gap: var(--tav-2); }
+
+.fg-uzenet { padding: var(--tav-3) var(--tav-4); border-radius: var(--kerekites-kicsi); margin-bottom: var(--tav-4); }
+.fg-uzenet--hiba { background: var(--szin-hatter); border: 1px solid var(--szin-hiba); color: var(--szin-szoveg); }
+.fg-ures { padding: var(--tav-6); text-align: center; color: var(--szin-halvany); border: 1px dashed var(--szin-keret); border-radius: var(--kerekites); }
+.fg-halvany { color: var(--szin-halvany); }
+.fg-rejtett { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.fg-ertesitesek { position: fixed; right: var(--tav-4); bottom: var(--tav-4); display: grid; gap: var(--tav-2); z-index: 50; }
+.fg-ertesites { padding: var(--tav-3) var(--tav-4); border-radius: var(--kerekites-kicsi); background: var(--szin-szoveg); color: var(--szin-hatter); box-shadow: var(--arnyek-nagy); max-width: 24rem; }
+.fg-ertesites--hiba { background: var(--szin-hiba); color: var(--szin-hatter); }
+kbd { font-family: ui-monospace, monospace; padding: 0 var(--tav-1); border: 1px solid var(--szin-keret); border-radius: 4px; background: var(--szin-felulet); white-space: nowrap; }
+.fg-ablak { border: 1px solid var(--szin-keret); border-radius: var(--kerekites); background: var(--szin-hatter); color: var(--szin-szoveg); box-shadow: var(--arnyek-nagy); padding: var(--tav-4); width: min(40rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
+.fg-ablak::backdrop { background: rgb(0 0 0 / 45%); }
+.fg-mezo__cimkesor { display: flex; align-items: center; gap: var(--tav-2); }

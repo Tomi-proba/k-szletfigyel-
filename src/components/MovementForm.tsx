@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementReason, MovementType } from '../types'

@@ -1,0 +1,55 @@
+/* A Készletkezelő a közös keretben (AWEBOLDAL TERV.md F24 KS6): a saját színváltozói a közös tokenekre mutatnak,
+   így a keret témáját (világos/sötét) követi. Az önálló felület színei változatlanok (src/index.css). A fordításkor
+   minden szabály a Készlet dobozára szűkül (vite.keret.config.ts). */
+:root {
+  color-scheme: light dark;
+  --color-bg: var(--szin-hatter);
+  --color-surface: var(--szin-felulet);
+  --color-border: var(--szin-keret);
+  --color-text: var(--szin-szoveg);
+  --color-text-muted: var(--szin-halvany);
+  --color-primary: var(--szin-elsodleges);
+  --color-primary-hover: var(--szin-elsodleges-sotet);
+  --color-danger: var(--szin-hiba);
+  --color-danger-bg: color-mix(in srgb, var(--szin-hiba) 12%, var(--szin-hatter));
+  --color-warning: var(--szin-figyelmeztetes);
+  --color-warning-bg: var(--szin-figyelmeztetes-halvany);
+  --color-success: var(--szin-siker);
+  --color-success-bg: var(--szin-siker-halvany);
+  --color-info-bg: color-mix(in srgb, var(--szin-elsodleges) 10%, var(--szin-hatter));
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--betu);
+}
+
+.keszlet-keret--keskeny {
+  max-width: 44rem;
+}
+
+.keszlet-keret__uzenet {
+  padding: 1rem;
+  color: var(--color-text-muted);
+}
+
+/* Az oldalon belüli fülsor (pl. Készlet: Termékek, Mozgásnapló, Napi zárás); telefonon vízszintesen görgethető. */
+.keszlet-keret__fulek {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.keszlet-keret__fulek a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  white-space: nowrap;
+  color: var(--color-text);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+.keszlet-keret__fulek a[aria-current='page'] {
+  border-bottom-color: var(--color-primary);
+  font-weight: 700;
+}

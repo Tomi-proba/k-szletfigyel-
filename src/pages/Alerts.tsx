@@ -1,6 +1,7 @@
 import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'

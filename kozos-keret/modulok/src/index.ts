@@ -66,8 +66,11 @@ export const MODUL_LEIRASOK: Record<ModulKod, ModulLeiras> = {
     nev: modul('keszlet').nev,
     elotag: '/keszlet',
     esemenyNev: 'keszlet',
+    // A Készletkezelő második menüsorát a keretben a modul adja (szerepkörfüggő, számlálós; F24 KS7): ez az
+    // alapértelmezés, amíg a modul be nem töltődött, és a mai felületnél.
     menu: [
-      { cim: 'Termékek', utvonal: '/keszlet/termekek' },
+      { cim: 'Áttekintés', utvonal: '/keszlet' },
+      { cim: 'Termékek', utvonal: '/keszlet/keszlet' },
       { cim: 'Mozgásnapló', utvonal: '/keszlet/mozgasnaplo' },
       { cim: 'Jóváhagyásra vár', utvonal: '/keszlet/jovahagyasra-var' },
     ],

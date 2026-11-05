@@ -17,7 +17,8 @@
       "preload.js",
       "leveldb.js",
       "regiAdatok.js",
-      "dist/**/*"
+      "dist/**/*",
+      "!dist/modul/**"
     ],
     "directories": {
       "output": "dist-electron"

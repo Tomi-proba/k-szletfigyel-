@@ -5,7 +5,7 @@
 // subscription state layered on top.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { isSupabaseConfigured, kivalasztottCegBeallitas, supabase } from '../lib/supabase'
+import { isSupabaseConfigured, keretTokenForras, kivalasztottCegBeallitas, supabase, tokenTartalom } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
 import { mapProfileRow, mapTagsagRow, type CegTagsag, type Company, type Profile, type UserRole } from '../types/auth'
 import { fetchBusinessData } from '../lib/remoteSync'
@@ -69,8 +69,13 @@ interface AuthContextValue {
   cegValasztas: (cegId: string) => Promise<AuthResult>
   /** Új Készlet-cég a bejelentkezett felhasználónak (ő lesz a fő irodája); a keretből a portál cégével. */
   ujCeg: (nev: string, portalCegId?: string | null) => Promise<AuthResult & { cegId?: string }>
-  /** A keret választja a céget (a portál cége szerint): ezt a céget kell mutatni, ha a felhasználó tagja. */
-  kertCegBeallitas: (cegId: string | null) => void
+  /**
+   * A közös keretben a keret cégválasztója dönt: a portál cégéhez rendelt Készlet-céget kell mutatni. Ha a
+   * felhasználónak ilyen cége nincs, `nincsCeg` igaz (a keretben az összerendelés vagy új cég következik).
+   */
+  portalCegBeallitas: (portalCegId: string) => Promise<void>
+  /** A kiválasztott Készlet-cég összerendelése a portál cégével (fő iroda vagy tulajdonos). */
+  portalOsszerendeles: (cegId: string, portalCegId: string) => Promise<AuthResult>
   isReadOnly: boolean
   /** True once profile.role === 'raktaros' (or, temporarily, the
    * `?demo_szerepkor=raktaros` override - see readDemoRole above) - the
@@ -159,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tagsagok, setTagsagok] = useState<CegTagsag[]>([])
   const [nincsCeg, setNincsCeg] = useState(false)
   const [cegValtasFolyamatban, setCegValtasFolyamatban] = useState(false)
-  const kertCeg = useRef<string | null>(null)
+  const portalCeg = useRef<string | null>(null)
   const cegBetolteseRef = useRef<(t: CegTagsag, p: Record<string, unknown>) => Promise<void>>(async () => {})
   const profilSor = useRef<Record<string, unknown> | null>(null)
   const [dataLoadError, setDataLoadError] = useState<string | null>(null)
@@ -169,7 +174,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return
     // Kétlépcsős azonosítás nélkül (aal1) semmilyen adatot nem töltünk be: előbb a kód, illetve első
     // alkalommal a beállítás (lásd pages/auth/Ketlepcsos.tsx). AWEBOLDAL TERV.md F21.
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    // A keretben a keret munkamenetének tokenje mondja meg (a portál csak kétlépcsős belépés után ad tokent).
+    const keretTok = keretTokenForras()
+    const aal = keretTok
+      ? { currentLevel: tokenTartalom((await keretTok()) ?? '')?.aal ?? null, nextLevel: 'aal2' }
+      : (await supabase.auth.mfa.getAuthenticatorAssuranceLevel()).data
     const allapot = mfaAllapot({ currentLevel: aal?.currentLevel ?? null, nextLevel: aal?.nextLevel ?? null })
     setMfa(allapot)
     if (allapot !== 'ok') return
@@ -198,9 +207,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const lista = (tagSorok ?? []).map((r) => mapTagsagRow(r as Record<string, unknown>)).sort((a, b) => a.company.name.localeCompare(b.company.name, 'hu'))
     setTagsagok(lista)
-    const valasztott =
-      (kertCeg.current ? lista.find((t) => t.company.id === kertCeg.current) : undefined) ??
-      (kertCeg.current ? undefined : (lista.find((t) => t.company.id === taroltCeg()) ?? lista[0]))
+    const valasztott = portalCeg.current
+      ? lista.find((t) => t.company.portalCompanyId === portalCeg.current)
+      : (lista.find((t) => t.company.id === taroltCeg()) ?? lista[0])
     if (!valasztott) {
       setNincsCeg(true)
       setProfile(null)
@@ -258,6 +267,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     let cancelled = false
+
+    const keretTok = keretTokenForras()
+    if (keretTok) {
+      // A közös keretben (F24 KS3): a felhasználó a keret munkamenetének tokenjéből; saját belépés nincs.
+      void (async () => {
+        const t = tokenTartalom((await keretTok()) ?? '')
+        if (cancelled) return
+        if (t) {
+          setSession({ user: { id: t.sub, email: t.email ?? undefined } } as unknown as Session)
+          await loadProfileAndCompany(t.sub)
+        }
+        setLoading(false)
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (cancelled) return
@@ -418,7 +444,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nev.trim()) return { error: 'A cégnév kötelező.' }
       const { data, error } = await supabase.rpc('ceg_letrehozasa', { p_nev: nev.trim(), p_portal_ceg: portalCegId ?? null })
       if (error) return { error: error.message }
-      kertCeg.current = kertCeg.current ?? (data as string)
       cegTarolasa(data as string)
       await loadProfileAndCompany(session.user.id)
       return { error: null, cegId: data as string }
@@ -426,9 +451,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, loadProfileAndCompany],
   )
 
-  const kertCegBeallitas = useCallback((cegId: string | null) => {
-    kertCeg.current = cegId
-  }, [])
+  const portalCegBeallitas = useCallback(
+    async (portalCegId: string) => {
+      if (portalCeg.current === portalCegId) return
+      portalCeg.current = portalCegId
+      if (!session) return
+      const t = tagsagok.find((x) => x.company.portalCompanyId === portalCegId)
+      if (t && profilSor.current) {
+        await cegValasztas(t.company.id)
+        return
+      }
+      // Ehhez a portál-céghez nincs (betöltött) Készlet-cég: újratöltés (a tagságok is), utána dönt.
+      const sor = await mentesiSor.kiurulesig()
+      if (sor.fajta === 'ujraprobalas') return
+      mentesiSor.leallit()
+      resetToLocalMode()
+      await loadProfileAndCompany(session.user.id)
+    },
+    [session, tagsagok, cegValasztas, loadProfileAndCompany],
+  )
+
+  const portalOsszerendeles = useCallback(
+    async (cegId: string, portalCegId: string): Promise<AuthResult> => {
+      if (!supabase || !session) return { error: 'Nincs bejelentkezve.' }
+      // Az összerendelés a kiválasztott cégre vonatkozik (x-keszlet-ceg): erre a cégre váltunk a hívás idejére.
+      kivalasztottCegBeallitas(cegId)
+      const { error } = await supabase.rpc('ceg_portal_osszerendeles', { p_portal_ceg: portalCegId })
+      if (error) return { error: error.message }
+      await loadProfileAndCompany(session.user.id)
+      return { error: null }
+    },
+    [session, loadProfileAndCompany],
+  )
 
   const reloadData = useCallback(async () => {
     if (session) await loadProfileAndCompany(session.user.id)
@@ -454,7 +508,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cegValtasFolyamatban,
     cegValasztas,
     ujCeg,
-    kertCegBeallitas,
+    portalCegBeallitas,
+    portalOsszerendeles,
     isReadOnly,
     isWarehouseUser,
     effectiveRole,

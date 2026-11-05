@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '../keret/router'
 import { useAuth } from '../hooks/useAuth'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { belepesIdeje, belepesIdejeMentes, jegyHiba, jegyTartalom, kozosBelepes, kozosBelepesMentes, lejart, ssoAdatok, tetlensegPerc } from '../lib/kozosBelepes'

@@ -20,7 +20,14 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* A keret közös csomagjai: a kozos-keret/ másolatból (AWEBOLDAL TERV.md F24 KS1) */
+    "paths": {
+      "@aweboldal/felulet": ["./kozos-keret/felulet/src/index.ts"],
+      "@aweboldal/modulok": ["./kozos-keret/modulok/src/index.ts"],
+      "@aweboldal/arak": ["./kozos-keret/arak/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

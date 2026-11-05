@@ -40,6 +40,29 @@ export interface KeretKontextus {
   teendokFrissitese: () => void
   /** Belépési jegy a modulnak a kiválasztott céghez (a keret saját belépésével; F21), új ablak nélkül. */
   jegyKeres: (modul: ModulKod) => Promise<string>
+  /**
+   * A közös Supabase-projekt hozzáférési tokenje a keret munkamenetéből (F24 KS3): a modul ezzel éri el a
+   * Supabase-t, saját munkamenetet nem tárol és nem frissít. Null, ha a keret nem Supabase-belépéssel fut.
+   */
+  supabaseToken?: () => Promise<string | null>
+  /**
+   * A modul második menüsorának pontjai, ha szerepkörtől függnek vagy számlálót mutatnak (F24 KS7); null: a keret
+   * a modul leírásának menüjét mutatja.
+   */
+  modulMenuBeallitas?: (pontok: ModulMenuPont[] | null) => void
+}
+
+/** A modul második menüsorának egy pontja. */
+export interface ModulMenuPont {
+  cim: string
+  /** Keretbeli útvonal, pl. /keszlet/mozgasnaplo. */
+  utvonal: string
+  /** Pl. a jóváhagyásra váró tételek száma; 0 vagy hiány: nincs jelvény. */
+  szamlalo?: number
+  /** Csak pontos egyezésre aktív (pl. a modul áttekintése). */
+  pontos?: boolean
+  /** Ezekre az útvonalakra is aktív (pl. egy csoport alpontjai). */
+  alutvonalak?: string[]
 }
 
 const Kontextus = createContext<KeretKontextus | null>(null)

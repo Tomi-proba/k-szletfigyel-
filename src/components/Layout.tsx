@@ -16,7 +16,8 @@ import {
   X,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'

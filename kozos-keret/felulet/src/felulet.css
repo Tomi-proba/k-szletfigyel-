@@ -46,8 +46,9 @@
 .fg-rejtett { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .fg-ertesitesek { position: fixed; right: var(--tav-4); bottom: var(--tav-4); display: grid; gap: var(--tav-2); z-index: 50; }
-.fg-ertesites { padding: var(--tav-3) var(--tav-4); border-radius: var(--kerekites-kicsi); background: var(--szin-szoveg); color: var(--szin-hatter); box-shadow: var(--arnyek-nagy); max-width: 24rem; }
-.fg-ertesites--hiba { background: var(--szin-hiba); color: var(--szin-hatter); }
+.fg-ertesites { padding: var(--tav-3) var(--tav-4); border-radius: var(--kerekites-kicsi); background: var(--szin-felulet); color: var(--szin-szoveg); border: 1px solid var(--szin-keret); border-left: 4px solid var(--szin-elsodleges); box-shadow: var(--arnyek-nagy); max-width: 24rem; }
+.fg-ertesites--siker { border-left-color: var(--szin-siker); }
+.fg-ertesites--hiba { border-left-color: var(--szin-hiba); }
 kbd { font-family: ui-monospace, monospace; padding: 0 var(--tav-1); border: 1px solid var(--szin-keret); border-radius: 4px; background: var(--szin-felulet); white-space: nowrap; }
 .fg-ablak { border: 1px solid var(--szin-keret); border-radius: var(--kerekites); background: var(--szin-hatter); color: var(--szin-szoveg); box-shadow: var(--arnyek-nagy); padding: var(--tav-4); width: min(40rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
 .fg-ablak::backdrop { background: rgb(0 0 0 / 45%); }

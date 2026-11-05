@@ -1,6 +1,7 @@
 import { CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAuth } from '../hooks/useAuth'
 import { isReturnable, useStore } from '../store/useStore'
 import { VisszaruModal } from '../components/VisszaruModal'

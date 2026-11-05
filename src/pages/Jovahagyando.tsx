@@ -10,7 +10,7 @@
 // „Kevesebb jött”, „Nem érkezett meg”), egy koppintás a szokásos esetre. A gombok és kártyák a közös
 // komponensekből vannak (src/kozos/kozos.css: .btn, .card, .badge).
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { CheckCircle2, ChevronDown, ChevronUp, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'

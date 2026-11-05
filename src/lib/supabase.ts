@@ -43,6 +43,42 @@ export function cegesFetch(alap: typeof fetch = fetch): typeof fetch {
   }
 }
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
+// `let`: a közös keretben (keretSupabaseBeallitas) egy másik, a keret tokenjével dolgozó kliensre cserélődik; az
+// ES-modulok élő kötése miatt minden importáló az újat látja.
+export let supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl as string, supabaseAnonKey as string, { auth: { flowType: 'pkce' }, global: { fetch: cegesFetch() } })
   : null
+
+/** A keret tokenforrása (AWEBOLDAL TERV.md F24 KS3); null: önálló futás. */
+let keretToken: (() => Promise<string | null>) | null = null
+export const keretTokenForras = () => keretToken
+
+/**
+ * A közös keretben a Készlet a keret Supabase-munkamenetét HASZNÁLJA: minden kéréshez a keret adja a hozzáférési
+ * tokent (a keret frissíti), a Készlet saját munkamenetet nem tárol és nem frissít – így a két program frissítő
+ * tokenjei nem ütköznek. Ilyenkor a supabase.auth nem érhető el; a belépés állapotát a token adja (useAuth).
+ */
+export function keretSupabaseBeallitas(token: () => Promise<string | null>) {
+  if (keretToken === token || !isSupabaseConfigured) return
+  keretToken = token
+  supabase = createClient(supabaseUrl as string, supabaseAnonKey as string, {
+    accessToken: async () => (await token()) ?? null,
+    global: { fetch: cegesFetch() },
+  })
+}
+
+/** A JWT tartalma (aláírás-ellenőrzés nélkül: a hitelesítést a Supabase végzi minden kérésnél). */
+export function tokenTartalom(token: string): { sub: string; email: string | null; aal: string | null } | null {
+  const resz = token.split('.')
+  if (resz.length !== 3) return null
+  try {
+    const b64 = resz[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    const json = decodeURIComponent(
+      Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''),
+    )
+    const t = JSON.parse(json) as { sub?: string; email?: string; aal?: string }
+    return t.sub ? { sub: t.sub, email: t.email ?? null, aal: t.aal ?? null } : null
+  } catch {
+    return null
+  }
+}

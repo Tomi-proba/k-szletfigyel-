@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useKeretHaVan } from '@aweboldal/felulet'
+import { keszletAlapIdoszak, tartomany } from '@aweboldal/modulok'
 
 export interface DateRange {
   from: string
@@ -35,7 +37,16 @@ function save(key: string, range: DateRange) {
  * the same event handler (e.g. a quick-range button doing setFrom then
  * setTo) from clobbering each other's write. */
 export function usePersistedDateRange(storageKey: string, defaultRange: () => DateRange) {
-  const [range, setRangeState] = useState(() => load(storageKey, defaultRange))
+  // A közös keretben (AWEBOLDAL TERV.md F24 KS5) a dátumszűrő alapja a keret választott időszaka (ha nincs
+  // választás, a Készlet alapértelmezése: a folyó hónap); a keret időszakának változásakor az új időszakra áll.
+  const k = useKeretHaVan()
+  const keretTartomany = k ? tartomany(k.idoszak(null, () => keszletAlapIdoszak())) : null
+  const [range, setRangeState] = useState(() =>
+    keretTartomany ? { from: keretTartomany.tol, to: keretTartomany.ig } : load(storageKey, defaultRange),
+  )
+  useEffect(() => {
+    if (keretTartomany) setRangeState({ from: keretTartomany.tol, to: keretTartomany.ig })
+  }, [keretTartomany?.tol, keretTartomany?.ig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function setRange(next: DateRange) {
     setRangeState(next)

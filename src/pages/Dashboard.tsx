@@ -9,12 +9,13 @@ import {
   Truck,
   TrendingDown,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import { MovementForm } from '../components/MovementForm'
 import { KozosTeendokKartya } from '../components/KozosTeendok'
+import { keretben } from '../keret/futas'
 import { Card, PageHeader } from '../components/ui'
 import { formatCurrency, formatNumber } from '../lib/format'
 
@@ -153,7 +154,8 @@ export function Dashboard() {
             </Card>
           )}
 
-          <KozosTeendokKartya />
+          {/* A keretben a többi program teendőit a keret közös Teendők oldala adja (nem jelenik meg kétszer). */}
+          {!keretben() && <KozosTeendokKartya />}
 
           <Card>
             <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Legsürgősebb rendelések</h2>

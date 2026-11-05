@@ -1,6 +1,6 @@
 import { FileSpreadsheet, FileText, Pause, Pencil, Play, Plus, CheckCircle2, RotateCcw, Repeat, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { DeleteLedgerEntryMode } from '../store/useStore'

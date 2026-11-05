@@ -4,7 +4,7 @@
 // (see useAlerts - one shared computation, not a separate channel).
 import { AlertTriangle, CheckCircle2, Clock, Eye, FileSpreadsheet, FileText } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../keret/router'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
 import { useAlerts } from '../hooks/useAlerts'

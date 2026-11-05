@@ -39,12 +39,12 @@ function SummaryCard({
   }[tone]
 
   return (
-    <Link to={to} className="block">
-      <Card className="flex items-center gap-4 transition-shadow hover:shadow-md">
+    <Link to={to} className="block h-full">
+      <Card className="flex h-full items-center gap-4 transition-shadow hover:shadow-md">
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${toneClasses}`}>
           <Icon size={22} />
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-2xl font-bold text-[var(--color-text)]">{count}</div>
           <div className="text-sm text-[var(--color-text-muted)]">{label}</div>
         </div>
@@ -88,7 +88,9 @@ export function Dashboard() {
         )}
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {/* A csempék a rendelkezésre álló helyhez igazodnak (nem az ablak szélességéhez): a gyors rögzítő mellett,
+              a keretben és önállóan is legalább 13rem szélesek. */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,13rem),1fr))] gap-3">
             <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
             <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
             <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />

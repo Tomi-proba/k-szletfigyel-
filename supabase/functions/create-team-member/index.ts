@@ -49,7 +49,7 @@ const IRODA_CREATABLE_ROLES = ['raktaros', 'iroda']
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-keszlet-ceg, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -82,8 +82,10 @@ Deno.serve(async (req: Request) => {
   // megy át, tehát a hívó tényleges jogosultságát ellenőrzi, nem kerülünk
   // meg semmilyen szabályt a KI-HÍVHATJA-EZT kérdésnél, csak magánál a
   // user-létrehozásnál (lentebb, adminClient) kell a service role.
+  // A kiválasztott cég (x-keszlet-ceg) a böngészőből jön; a hívó jogosultságát EBBEN a cégben nézzük (F24 KS4).
+  const kertCeg = req.headers.get('x-keszlet-ceg') ?? ''
   const callerClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader, ...(kertCeg ? { 'x-keszlet-ceg': kertCeg } : {}) } },
   })
   const {
     data: { user: callerUser },
@@ -93,7 +95,12 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Nincs bejelentkezve.' }, 401)
   }
 
-  const { data: callerProfile } = await callerClient.from('profiles').select('role, company_id').eq('id', callerUser.id).maybeSingle()
+  const { data: callerProfile } = await callerClient
+    .from('company_members')
+    .select('role, company_id')
+    .eq('user_id', callerUser.id)
+    .eq('company_id', kertCeg)
+    .maybeSingle()
   if (!callerProfile || (callerProfile.role !== 'iroda' && callerProfile.role !== 'fo_iroda')) {
     return json({ error: 'Csak iroda vagy fő iroda jogosultsággal hozható létre új felhasználó.' }, 403)
   }
@@ -158,10 +165,16 @@ Deno.serve(async (req: Request) => {
     user_metadata: { invite_token: invite.token },
   })
   if (createError) {
-    const message = createError.message?.includes('already been registered')
-      ? 'Ezzel az email címmel már van fiók.'
-      : (createError.message ?? 'Nem sikerült a felhasználó létrehozása.')
-    return json({ error: message }, 400)
+    // Ha ezzel az e-mail-címmel már van fiók (pl. egy könyvelőiroda munkatársa, aki más cégnek is tagja), nem új
+    // fiók készül: a meglévő felhasználó a meghívóval ennek a cégnek is tagja lesz (F24 KS4). A jelszava marad.
+    if (createError.message?.includes('already been registered')) {
+      const { error: tagHiba } = await adminClient.rpc('meghivo_elfogadasa', { p_token: invite.token, p_email: email })
+      if (tagHiba) {
+        return json({ error: tagHiba.message.includes('már tagja') ? 'Ez a felhasználó már tagja a cégnek.' : 'Nem sikerült a meglévő fiókot a céghez adni.' }, 400)
+      }
+      return json({ ok: true, meglevoFiok: true })
+    }
+    return json({ error: createError.message ?? 'Nem sikerült a felhasználó létrehozása.' }, 400)
   }
 
   return json({ ok: true })

@@ -1,8 +1,6 @@
-// A 2026-11-05-i (előkészített, élesben még nem futtatott) migráció: a kétlépcsős adatbázis-szabály
-// kikapcsolva jön létre; csak akkor kapcsolható be, ha minden felhasználónak van ellenőrzött kétlépcsős
+// A kétlépcsős adatbázis-szabály (F21, az egységes sémában): kikapcsolva jön létre; csak akkor kapcsolható be, ha minden felhasználónak van ellenőrzött kétlépcsős
 // tényezője (senki nem zárhatja ki magát); bekapcsolva aal2 nélkül semmilyen cégadat nem érhető el;
 // átállási lista; raktáros tétlenségi idő. Futtatás: KESZLET_TEST_DATABASE_URL=postgresql://…/keszlet_test npm test
-import { readFileSync } from 'node:fs'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DB_URL, hibakod, ujAdatbazis, ujCeg, ujCsapattag, type TesztFelhasznalo } from './adatbazis'
@@ -38,7 +36,6 @@ const tenyezo = (f: TesztFelhasznalo, status = 'verified') =>
 beforeAll(async () => {
   if (!DB_URL) return
   pool = await ujAdatbazis('ketlepcsos')
-  await pool.query(readFileSync(new URL('../../supabase/migrations/2026-11-05_ketlepcsos_kozos_belepes.sql', import.meta.url), 'utf8'))
   ceg = await ujCeg(pool)
   raktaros = await ujCsapattag(pool, ceg, 'raktaros')
   tulajdonos = await ujCsapattag(pool, ceg, 'tulajdonos')
@@ -47,15 +44,12 @@ afterAll(async () => {
   await pool?.end()
 })
 
-leiras('kétlépcsős adatbázis-szabály (2026-11-05)', () => {
-  it('a migráció után a szabály kikapcsolva: aal1-gyel is minden úgy működik, mint eddig', async () => {
+leiras('kétlépcsős adatbázis-szabály (F21, az egységes sémában)', () => {
+  it('a sémában a szabály kikapcsolva jön létre: aal1-gyel is minden működik', async () => {
     expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(1)
     expect(await neveben(ceg, 'aal1', 'select public.my_role() as r')).toEqual([{ r: 'fo_iroda' }])
   })
 
-  it('a migráció újrafuttatható', async () => {
-    await pool.query(readFileSync(new URL('../../supabase/migrations/2026-11-05_ketlepcsos_kozos_belepes.sql', import.meta.url), 'utf8'))
-  })
 
   it('átállási lista: a fő iroda és a tulajdonos látja, ki nem állította még be; a raktáros nem', async () => {
     await tenyezo(ceg)

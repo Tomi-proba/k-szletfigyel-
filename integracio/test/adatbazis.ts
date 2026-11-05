@@ -35,7 +35,7 @@ export type Ceg = { felhasznalo: string; companyId: string; locationId: string }
 export async function ujCeg(pool: pg.Pool, nev = "Teszt Kft."): Promise<Ceg> {
   const id = randomUUID();
   await pool.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)", [id, `${id}@teszt.example`, { company_name: nev, name: "Fő Iroda" }]);
-  const companyId = (await pool.query("select company_id from public.profiles where id = $1", [id])).rows[0].company_id as string;
+  const companyId = (await pool.query("select company_id from public.company_members where user_id = $1", [id])).rows[0].company_id as string;
   const locationId = (await pool.query("select id from public.locations where company_id = $1", [companyId])).rows[0].id as string;
   return { felhasznalo: id, companyId, locationId };
 }

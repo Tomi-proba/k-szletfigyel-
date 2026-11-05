@@ -250,6 +250,38 @@ function saveExpandedGroups(groups: Set<string>) {
   }
 }
 
+/** Cégválasztó (AWEBOLDAL TERV.md F24 KS4): csak akkor látszik, ha a felhasználó több cégnek is tagja. */
+function CegValaszto() {
+  const { tagsagok, company, cegValasztas } = useAuth()
+  const [hiba, setHiba] = useState<string | null>(null)
+  if (tagsagok.length < 2 || !company) return null
+  return (
+    <div className="mb-4 px-2">
+      <label htmlFor="ceg-valaszto" className="mb-1 block text-xs font-semibold text-[var(--color-text-muted)]">
+        Cég
+      </label>
+      <select
+        id="ceg-valaszto"
+        data-ceg-valaszto
+        value={company.id}
+        onChange={async (e) => setHiba((await cegValasztas(e.target.value)).error)}
+        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-2 text-sm text-[var(--color-text)]"
+      >
+        {tagsagok.map((t) => (
+          <option key={t.company.id} value={t.company.id}>
+            {t.company.name}
+          </option>
+        ))}
+      </select>
+      {hiba && (
+        <p className="mt-1 text-xs text-[var(--color-danger)]" role="alert">
+          {hiba}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [quickMoveOpen, setQuickMoveOpen] = useState(false)
@@ -446,6 +478,7 @@ export function Layout() {
           <Link to="/" className="mb-6 px-2 text-lg font-bold text-[var(--color-text)]">
             Készletfigyelő
           </Link>
+          <CegValaszto />
           {navLinks()}
           {session && (
             <button
@@ -468,6 +501,7 @@ export function Layout() {
                   <X size={20} />
                 </button>
               </div>
+              <CegValaszto />
               {navLinks(() => setDrawerOpen(false))}
               {session && (
                 <button

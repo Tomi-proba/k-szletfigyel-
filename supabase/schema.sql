@@ -1,46 +1,30 @@
--- Készletfigyelő - SaaS réteg adatbázis-sémája.
+-- Készletkezelő – a Supabase-projekt TELJES, EGYSÉGES adatbázis-sémája (2026-11-06, AWEBOLDAL TERV.md F24 KS4).
 --
--- Futtasd le TELJES EGÉSZÉBEN egy ÚJ (még üres) Supabase projekt SQL
--- Editorában (Supabase Dashboard > SQL Editor > New query), MIELŐTT
--- beállítod a VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY env változókat az
--- appban. HA MÁR FUT élesben egy korábbi verzió ezzel a sémával, NE ezt a
--- fájlt futtasd le újra rajta - helyette a 2026-10-01-i migrációs
--- SQL-blokkot kell lefuttatni (ezt a beszélgetésben/chat-ben kaptad meg),
--- ami ugyanide juttatja el a már létező adatbázist anélkül, hogy bármit
--- töröl belőle.
+-- TISZTA PROJEKTRE készült: egy üres Supabase-projekt SQL-szerkesztőjében, egyben kell lefuttatni (a régi,
+-- lépésenkénti migrációk nincsenek többé: ez az egyetlen forrás; supabase/migrations/2026-11-06_tiszta_alap.sql
+-- ugyanez). A régi adatokkal nem kompatibilis: az élő projekt újraépítését az AWEBOLDAL ELESITES.md
+-- „A Készlet adatbázisának újraépítése” fejezete írja le (előtte teljes mentés).
 --
--- Ez a fájl részekből áll (fentről lefelé, egymásra épülve, egyben
--- futtatandó): (1) a bejelentkezés/cég/előfizetés réteg, (2) a szerepkör
--- alapú hozzáférés + a MEGOSZTOTT üzleti adat (telephelyek, termékek,
--- mozgások, beszerzési tételek, napi zárás, audit napló), (3) a
--- jóváhagyási (pending_changes) réteg. A beszállítók, vevők, pénzügyi
--- napló és ÁFA-adat egyelőre SZÁNDÉKOSAN NEM került át ide - ezek
--- továbbra is eszközönkénti (localStorage) irodai adatok; ez egy külön,
--- következő lépésben migrálható át, ha szükséges.
+-- TÖBB CÉG EGY FELHASZNÁLÓNAK: a felhasználó és a cég kapcsolata a company_members tábla (cégenként
+-- szerepkörrel és a raktáros telephelyével). A böngésző minden kérésben megmondja, melyik cégben dolgozik
+-- (x-keszlet-ceg fejléc); a jogosultsági segédfüggvények (my_company_id, my_role, my_assigned_location_id)
+-- CSAK akkor adnak értéket, ha a felhasználó tagja annak a cégnek. Minden RLS-szabály ezeken át dönt, így
+-- egy cég adatai soha nem látszanak egy másikéban, akkor sem, ha a kliens hibás azonosítót küldene.
 --
--- Cégenkénti adatelkülönítés: minden lekérdezés Row Level Security (RLS)
--- policy-kon megy át, adatbázis-szinten kikényszerítve - egy bejelentkezett
--- felhasználó SQL-szinten sem tud hozzáférni egy másik cég sorához, akkor
--- sem, ha az alkalmazás kódjában lenne egy hiba/elírt azonosító.
+-- Cégenkénti adatelkülönítés: minden lekérdezés Row Level Security (RLS) policy-kon megy át, adatbázis-
+-- szinten kikényszerítve.
 --
--- --- NÉGY SZEREPKÖR (2026-10-01-től) -----------------------------------
--- - 'fo_iroda' (fő iroda): teljes írási jog a megosztott üzleti adatra
---   (telephelyek, termékek). Ő hagyja jóvá az 'iroda' szerepkör törzsadat-
---   módosítási kéréseit (lásd pending_changes lentebb), és a raktáros
---   beérkezés/kiszállítás-kéréseit is (movements.approval_status) - ezt
---   mostantól 'iroda' is jóváhagyhatja, nem csak 'fo_iroda'.
--- - 'iroda': UGYANAZT LÁTJA, amit a fő iroda (teljes, cégen belüli
---   rálátás minden telephelyre, minden adatra) - de a telephely/termék
---   törzsadat-módosításai nem azonnal hatnak, hanem egy pending_changes
---   sorként várnak a fő iroda jóváhagyására. Mozgást (be/ki) viszont
---   közvetlenül rögzíthet, és raktáros-kérést jóváhagyhat, pont úgy, mint
---   a fő iroda.
--- - 'tulajdonos': ugyanaz a teljes rálátás, mint a fő irodának, de
---   KIZÁRÓLAG olvasó jogú - sem közvetlen módosítást, sem jóváhagyási
---   kérést nem adhat be, SEMMILYEN táblán. Ez adatbázis-szinten (RLS) van
---   kikényszerítve, nem csak a felületen.
--- - 'raktaros': egyetlen hozzárendelt telephelyre korlátozva - változatlan
---   a korábbi viselkedéshez képest.
+-- Kétlépcsős azonosítás (F21): a public.biztonsagi_beallitas kapcsolója szerint kétlépcsős (aal2)
+-- munkamenet nélkül semmilyen cégadat nem érhető el; a kapcsoló alapból KI, a bekapcsolás lépései az
+-- ELESITES.md-ben.
+--
+-- --- NÉGY SZEREPKÖR (cégenként, a company_members.role) -----------------------------------
+-- - 'fo_iroda' (fő iroda): teljes írási jog a megosztott üzleti adatra (telephelyek, termékek). Ő hagyja
+--   jóvá az 'iroda' szerepkör törzsadat-módosítási kéréseit (pending_changes) és a raktáros bejelentéseit.
+-- - 'iroda': ugyanazt látja, mint a fő iroda, de a telephely/termék törzsadat-módosításai jóváhagyásra
+--   várnak (pending_changes). Mozgást közvetlenül rögzíthet.
+-- - 'tulajdonos': teljes rálátás, de KIZÁRÓLAG olvasó jogú, SEMMILYEN táblán nem írhat (RLS).
+-- - 'raktaros': egyetlen hozzárendelt telephelyre korlátozva.
 create extension if not exists "pgcrypto";
 
 -- Egy regisztrált vállalkozás előfizetési állapota.
@@ -50,11 +34,10 @@ create table if not exists public.companies (
   created_at timestamptz not null default now(),
   subscription_status text not null default 'trial'
     check (subscription_status in ('trial', 'active', 'expired', 'cancelled')),
-  -- Alapértelmezett próbaidőszak: 14 nap volt; a 2026-11-04-i migráció (a fájl végén) 30 napra
-  -- állítja az új cégeknél. Az árak a portál árlistájából jönnek (plan_price_huf már nem használt).
-  trial_ends_at timestamptz not null default (now() + interval '14 days'),
+  -- 30 napos próbaidő (F20). Az árak a portál árlistájából jönnek; a plan_price_huf csak tájékoztató.
+  trial_ends_at timestamptz not null default (now() + interval '30 days'),
   plan text not null default 'havi_elofizetes',
-  plan_price_huf integer not null default 9990,
+  plan_price_huf integer,
   current_period_end timestamptz,
   -- Sikertelen fizetés esetén ide kerül az időbélyeg - ebből számolódik a
   -- 3-5 napos türelmi idő, mielőtt a hozzáférés korlátozódna.
@@ -64,20 +47,21 @@ create table if not exists public.companies (
   -- "Előfizetés" oldal még demó módban működik valós terhelés nélkül.
   -- Lásd supabase/functions/create-checkout-session/index.ts.
   stripe_customer_id text,
-  stripe_subscription_id text
+  stripe_subscription_id text,
+  -- A raktáros tétlenségi ideje percben (F21): alapból 30, a fő iroda legfeljebb 12 órára állíthatja.
+  raktaros_tetlenseg_perc integer not null default 30 check (raktaros_tetlenseg_perc between 30 and 720),
+  -- A portál cége, amelyhez ez a Készlet-cég tartozik (a közös keret cégváltója ez alapján választ, F24).
+  -- Egyszer, a kereten belül rendeli össze a fő iroda vagy a tulajdonos (ceg_portal_osszerendeles).
+  portal_company_id uuid unique
 );
 
--- Egy Supabase Auth felhasználó (auth.users) és a hozzá tartozó cég közti kapocs.
+-- Egy Supabase Auth felhasználó (auth.users) saját adatai. A cégei és a cégenkénti szerepköre a
+-- company_members táblában (lentebb, a telephelyek után).
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
-  company_id uuid not null references public.companies (id) on delete cascade,
   email text not null,
-  -- A felhasználó valódi neve - regisztrációkor/csapattag-létrehozáskor
-  -- kötelező megadni (lásd handle_new_user() lent), hogy az audit napló
-  -- ("Ki módosította?") ne csak email címet tudjon mutatni. Nullable marad
-  -- a séma szintjén, mert a mezőt bevezető migráció előtt létrejött
-  -- profiloknak nincs neve - ezeknél a felület az email címet mutatja
-  -- helyette, amíg a felhasználó meg nem adja (lásd pages/Settings.tsx).
+  -- A felhasználó valódi neve (az audit napló „Ki módosította?” oszlopához); ha üres, a felület az
+  -- e-mail-címet mutatja.
   name text,
   -- Ez teszi valakit üzemeltetői (platform admin) jogúvá - lásd lent, hogyan
   -- állítsd be az elsőt. Egy felhasználó SOHA nem tudja saját magát
@@ -86,26 +70,31 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
-create index if not exists profiles_company_id_idx on public.profiles (company_id);
-
 alter table public.companies enable row level security;
 alter table public.profiles enable row level security;
 
--- --- companies RLS ----------------------------------------------------------
+-- --- Kétlépcsős adatbázis-szabály (F21) -------------------------------------
+create table if not exists public.biztonsagi_beallitas (
+  id boolean primary key default true check (id),
+  ketlepcsos_kotelezo boolean not null default false,
+  bekapcsolva_ekkor timestamptz
+);
+insert into public.biztonsagi_beallitas (id) values (true) on conflict (id) do nothing;
+-- Nincs policy: a böngészőből nem olvasható és nem írható; csak a security definer függvények érik el.
+alter table public.biztonsagi_beallitas enable row level security;
+revoke all on public.biztonsagi_beallitas from anon, authenticated;
 
-create policy "Saját cég megtekintése" on public.companies
-  for select using (
-    id in (select company_id from public.profiles where profiles.id = auth.uid())
-  );
-
--- A demó előfizetés-váltó gombok (Subscription.tsx) ezen keresztül írják a
--- companies sort. Éles Stripe webhook a service role kulccsal futna (ami
--- megkerüli az RLS-t), tehát ez a policy nem jelent biztonsági rést egy
--- valódi fizetési integrációnál sem.
-create policy "Saját cég módosítása" on public.companies
-  for update using (
-    id in (select company_id from public.profiles where profiles.id = auth.uid())
-  );
+-- Igaz, ha a kérés megfelel a kétlépcsős szabálynak: a szabály ki van kapcsolva, vagy a munkamenet aal2.
+create or replace function public.ketlepcsos_rendben()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not coalesce((select ketlepcsos_kotelezo from public.biztonsagi_beallitas where id), false)
+      or coalesce(auth.jwt() ->> 'aal', 'aal1') = 'aal2';
+$$;
 
 -- SECURITY DEFINER, hogy a "platform admin vagyok-e" ellenőrzés megkerülje
 -- a hívó RLS-ét - enélkül egy, a profiles táblán ÖNMAGÁRA hivatkozó policy
@@ -120,12 +109,12 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce((select is_platform_admin from public.profiles where id = auth.uid()), false);
+  select coalesce((select is_platform_admin from public.profiles where id = auth.uid()), false) and public.ketlepcsos_rendben();
 $$;
 
 create policy "Admin minden céget lát" on public.companies
   for select using (
-    public.is_platform_admin()
+    (select public.is_platform_admin())
   );
 
 -- --- profiles RLS (alap) ------------------------------------------------------
@@ -135,7 +124,7 @@ create policy "Saját profil megtekintése" on public.profiles
 
 create policy "Admin minden profilt lát" on public.profiles
   for select using (
-    public.is_platform_admin()
+    (select public.is_platform_admin())
   );
 
 -- --- Biztonsági trigger: önmagunkat sosem léptethetjük admin-ná -------------
@@ -153,37 +142,6 @@ $$;
 create trigger profiles_prevent_self_admin_promotion
   before update on public.profiles
   for each row execute function public.prevent_self_admin_promotion();
-
--- --- Regisztráció: automatikus cég + profil létrehozás ----------------------
--- A cégnevet a signUp hívás options.data.company_name mezőjéből olvassa -
--- lásd src/hooks/useAuth.ts signUp függvényét. A teljes handle_new_user()
--- függvényt lentebb DEFINIÁLJUK ÚJRA (create or replace), hogy a
--- meghívóval történő csatlakozást és az alapértelmezett telephely
--- létrehozását is tudja - ezért itt, elsőre, még csak a triggert vesszük
--- fel, ami a végleges (lentebbi) function-defíníciót fogja hívni,
--- bármikor is fut le a teljes fájl.
-
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
-declare
-  new_company_id uuid;
-  provided_company_name text;
-begin
-  provided_company_name := coalesce(new.raw_user_meta_data ->> 'company_name', 'Névtelen vállalkozás');
-
-  insert into public.companies (name) values (provided_company_name)
-  returning id into new_company_id;
-
-  insert into public.profiles (id, company_id, email)
-  values (new.id, new_company_id, new.email);
-
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
 
 -- --- Az első üzemeltetői (admin) fiók beállítása ----------------------------
 -- Regisztrálj egy fiókot a normál regisztrációs űrlapon, majd futtasd le
@@ -211,36 +169,91 @@ create table if not exists public.locations (
 
 create index if not exists locations_company_id_idx on public.locations (company_id);
 
--- A profiles tábla szerepkör/telephely-mezői ITT, a locations tábla
--- létrehozása UTÁN kerülnek fel (az assigned_location_id erre hivatkozik
--- idegen kulcsként), de MÉG A locations-RLS-SZABÁLYOK ELŐTT.
-alter table public.profiles
-  add column if not exists role text not null default 'iroda' check (role in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos')),
-  add column if not exists assigned_location_id uuid references public.locations (id),
-  add column if not exists assigned_location_name text;
+-- --- Cégtagság: felhasználó–cég kapcsolat, cégenként szerepkörrel ----------------
+-- Egy felhasználó több cégnek is tagja lehet (pl. könyvelőiroda), mindegyikben a saját szerepkörével; a
+-- raktáros szerepkörhöz egy telephely tartozik. Itt, a locations UTÁN jön létre (a telephelyre hivatkozik).
+-- Nincs INSERT/UPDATE/DELETE policy: tagságot csak a security definer függvények és a regisztrációs
+-- trigger hoznak létre (meghívó, új cég), így senki nem léptetheti elő magát API-hívással.
+create table if not exists public.company_members (
+  company_id uuid not null references public.companies (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  role text not null check (role in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos')),
+  assigned_location_id uuid references public.locations (id),
+  assigned_location_name text,
+  created_at timestamptz not null default now(),
+  primary key (company_id, user_id),
+  check (role <> 'raktaros' or assigned_location_id is not null)
+);
+create index if not exists company_members_user_id_idx on public.company_members (user_id);
+alter table public.company_members enable row level security;
 
--- Ha ezt egy már élő, korábbi (2 szerepkörös) sémán futtatod, a fenti
--- "add column if not exists" nem bővíti a már létező check constraint-et -
--- azt a 2026-10-01-i migrációs blokk külön, explicit DROP+ADD CONSTRAINT-
--- tel kezeli. Friss (üres) projektben ez a sor nem releváns.
+-- --- A kiválasztott cég és a jogosultsági segédfüggvények -------------------------
+-- A böngésző minden kérésben megmondja, melyik cégben dolgozik: x-keszlet-ceg fejléc (a PostgREST a
+-- request.headers beállításban adja át). Ha nincs fejléc, és a felhasználó EGYETLEN cég tagja, az a cég.
+-- Minden jogosultság-ellenőrzés EZEKEN a SECURITY DEFINER függvényeken át megy (soha közvetlen
+-- albekérdezéssel egy policy-ban: az rekurzióhoz vezethet), és mindegyik csak akkor ad értéket, ha a
+-- felhasználó TAGJA a kiválasztott cégnek, és a kétlépcsős szabálynak is megfelel.
+create or replace function public.kert_ceg()
+returns uuid
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v text;
+begin
+  v := nullif(current_setting('request.headers', true), '')::json ->> 'x-keszlet-ceg';
+  if v is null or v !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return null;
+  end if;
+  return v::uuid;
+end;
+$$;
 
--- --- SECURITY DEFINER segédfüggvények -----------------------------------
--- Minden, a profiles táblára vonatkozó jogosultság-ellenőrzést EZEKEN
--- keresztül végzünk, SOHA közvetlen "select ... from public.profiles"
--- albekérdezéssel egy másik policy-n belül - az ugyanis (ha a policy maga
--- is a profiles táblán van, vagy ha a hívó RLS-e közben újra kiértékelődne)
--- "infinite recursion detected in policy for relation profiles" hibát
--- (PostgREST felől 500-as HTTP válasz) okozhat, ahogy élesben ki is
--- derült. A SECURITY DEFINER függvény a belső profiles-lekérdezést a
--- hívó RLS-ét megkerülve futtatja, így sosem rekurzál, bárhonnan hívod.
-create or replace function public.my_role()
-returns text
-language sql
+-- A kiválasztott tagság (cég, szerepkör, raktárosnál telephely) kérésenként EGYSZER számolódik, és a
+-- tranzakció végéig megmarad (a jogosultsági szabályok soronként sokszor kérdezik). A gyorsítótár kulcsa a
+-- felhasználó, a kért cég és a kétlépcsős szint: ha bármelyik más, újra számolódik. A tagságot módosító
+-- függvények (ceg_letrehozasa, meghivo_elfogadasa) törlik.
+create or replace function public.kivalasztott_tagsag(out ceg uuid, out szerep text, out telephely uuid)
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select role from public.profiles where id = auth.uid();
+declare
+  v_u uuid := auth.uid();
+  v_k uuid := public.kert_ceg();
+  v_kulcs text := coalesce(v_u::text, '') || '|' || coalesce(v_k::text, '') || '|' || coalesce(auth.jwt() ->> 'aal', '');
+begin
+  if v_u is null then
+    return;
+  end if;
+  if current_setting('keszlet.tagsag_kulcs', true) = v_kulcs then
+    ceg := nullif(current_setting('keszlet.tagsag_ceg', true), '')::uuid;
+    szerep := nullif(current_setting('keszlet.tagsag_szerep', true), '');
+    telephely := nullif(current_setting('keszlet.tagsag_telephely', true), '')::uuid;
+    return;
+  end if;
+  if public.ketlepcsos_rendben() then
+    select m.company_id, m.role, m.assigned_location_id into ceg, szerep, telephely
+    from public.company_members m
+    where m.user_id = v_u
+      and (
+        (v_k is not null and m.company_id = v_k)
+        or (v_k is null and not exists (select 1 from public.company_members x where x.user_id = v_u and x.company_id <> m.company_id))
+      )
+    limit 1;
+  end if;
+  perform set_config('keszlet.tagsag_kulcs', v_kulcs, true);
+  perform set_config('keszlet.tagsag_ceg', coalesce(ceg::text, ''), true);
+  perform set_config('keszlet.tagsag_szerep', coalesce(szerep, ''), true);
+  perform set_config('keszlet.tagsag_telephely', coalesce(telephely::text, ''), true);
+end;
+$$;
+
+create or replace function public.tagsag_gyorsitotar_torlese()
+returns void language sql set search_path = public as $$
+  select set_config('keszlet.tagsag_kulcs', '', true);
 $$;
 
 create or replace function public.my_company_id()
@@ -250,7 +263,17 @@ stable
 security definer
 set search_path = public
 as $$
-  select company_id from public.profiles where id = auth.uid();
+  select ceg from public.kivalasztott_tagsag();
+$$;
+
+create or replace function public.my_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select szerep from public.kivalasztott_tagsag();
 $$;
 
 create or replace function public.my_assigned_location_id()
@@ -260,8 +283,27 @@ stable
 security definer
 set search_path = public
 as $$
-  select assigned_location_id from public.profiles where id = auth.uid();
+  select telephely from public.kivalasztott_tagsag();
 $$;
+
+-- --- companies RLS ----------------------------------------------------------
+-- A felhasználó az ÖSSZES saját cégét látja (a cégválasztóhoz), az adataikat viszont csak a kiválasztott
+-- cégben (lásd a többi táblát).
+create policy "Saját cégek megtekintése" on public.companies
+  for select using (
+    (select public.ketlepcsos_rendben()) and id in (select company_id from public.company_members where user_id = auth.uid())
+  );
+
+-- A demó előfizetés-váltó gombok (Subscription.tsx) ezen keresztül írják a kiválasztott cég sorát. Éles
+-- fizetési webhook a service role kulccsal futna (megkerüli az RLS-t).
+create policy "Kiválasztott cég módosítása" on public.companies
+  for update using (id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda');
+
+-- --- company_members RLS ------------------------------------------------------
+create policy "Saját tagságok megtekintése" on public.company_members
+  for select using (user_id = auth.uid() and (select public.ketlepcsos_rendben()));
+create policy "Iroda-szintű szerepkörök látják a cég tagjait" on public.company_members
+  for select using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos'));
 
 alter table public.locations enable row level security;
 
@@ -270,7 +312,7 @@ alter table public.locations enable row level security;
 -- (lásd lentebb: telephely LÉTREHOZÁSA/MÓDOSÍTÁSA kizárólag fő iroda).
 create policy "Iroda-szintű szerepkörök minden telephelyet látnak" on public.locations
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 
 -- Telephely létrehozása/módosítása/törlése KIZÁRÓLAG fő iroda jog -
@@ -278,21 +320,21 @@ create policy "Iroda-szintű szerepkörök minden telephelyet látnak" on public
 -- pending_changes táblába ír, amit a fő iroda hagy jóvá (lásd lejjebb).
 create policy "Fő iroda telephelyet létrehozhat" on public.locations
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   );
 create policy "Fő iroda telephelyet módosíthat" on public.locations
   for update using (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   );
 
 -- Raktáros KIZÁRÓLAG a saját, hozzárendelt telephelyét látja - más
 -- telephely létezéséről sem szerezhet tudomást ezen a lekérdezésen keresztül.
 create policy "Raktáros csak a saját telephelyét látja" on public.locations
   for select using (
-    id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 
 -- --- Termékek ------------------------------------------------------------
@@ -323,7 +365,7 @@ alter table public.products enable row level security;
 
 create policy "Iroda-szintű szerepkörök minden terméket látnak" on public.products
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 
 -- Termék létrehozása/módosítása KIZÁRÓLAG fő iroda jog - 'iroda' innentől
@@ -331,14 +373,14 @@ create policy "Iroda-szintű szerepkörök minden terméket látnak" on public.p
 -- megjegyzését fentebb ugyanerről a mintáról.
 create policy "Fő iroda terméket létrehozhat" on public.products
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   );
 create policy "Fő iroda terméket módosíthat" on public.products
   for update using (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   );
 
 -- Raktáros csak a saját telephelyéhez tartozó termékeket látja, és csak a
@@ -350,14 +392,14 @@ create policy "Fő iroda terméket módosíthat" on public.products
 -- DOCUMENTATION.md 14. fejezet.
 create policy "Raktáros csak saját telephelye termékeit látja" on public.products
   for select using (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 create policy "Raktáros a saját telephelye termékeit frissítheti" on public.products
   for update using (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   )
   with check (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 
 -- --- Beszerzési tételek (FIFO-rétegek) ---------------------------------------
@@ -394,18 +436,18 @@ alter table public.purchase_lots enable row level security;
 
 create policy "Iroda-szintű szerepkörök minden tételt látnak" on public.purchase_lots
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 create policy "Fő iroda és iroda tételt létrehozhat" on public.purchase_lots
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 create policy "Fő iroda és iroda tételt módosíthat" on public.purchase_lots
   for update using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 
 -- Raktáros nem látja/kezeli közvetlenül a beszerzési árakat a felületen, de
@@ -416,22 +458,22 @@ create policy "Fő iroda és iroda tételt módosíthat" on public.purchase_lots
 -- DOCUMENTATION.md 14. fejezet - ez egy tudatos, dokumentált korlát.
 create policy "Raktáros a saját telephelye tételeit látja" on public.purchase_lots
   for select using (
-    public.my_role() = 'raktaros'
-    and product_id in (select id from public.products where location_id = public.my_assigned_location_id())
+    (select public.my_role()) = 'raktaros'
+    and product_id in (select id from public.products where location_id = (select public.my_assigned_location_id()))
   );
 create policy "Raktáros tételt létrehozhat a saját telephelyén" on public.purchase_lots
   for insert with check (
-    public.my_role() = 'raktaros'
-    and product_id in (select id from public.products where location_id = public.my_assigned_location_id())
+    (select public.my_role()) = 'raktaros'
+    and product_id in (select id from public.products where location_id = (select public.my_assigned_location_id()))
   );
 create policy "Raktáros tételt frissíthet a saját telephelyén" on public.purchase_lots
   for update using (
-    public.my_role() = 'raktaros'
-    and product_id in (select id from public.products where location_id = public.my_assigned_location_id())
+    (select public.my_role()) = 'raktaros'
+    and product_id in (select id from public.products where location_id = (select public.my_assigned_location_id()))
   )
   with check (
-    public.my_role() = 'raktaros'
-    and product_id in (select id from public.products where location_id = public.my_assigned_location_id())
+    (select public.my_role()) = 'raktaros'
+    and product_id in (select id from public.products where location_id = (select public.my_assigned_location_id()))
   );
 
 -- --- Készletmozgások ----------------------------------------------------
@@ -487,34 +529,34 @@ alter table public.movements enable row level security;
 
 create policy "Iroda-szintű szerepkörök minden mozgást látnak" on public.movements
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 create policy "Fő iroda és iroda mozgást létrehozhat" on public.movements
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 create policy "Fő iroda és iroda mozgást módosíthat" on public.movements
   for update using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 
 create policy "Raktáros csak saját telephelye mozgásait látja" on public.movements
   for select using (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 create policy "Raktáros mozgást rögzíthet a saját telephelyén" on public.movements
   for insert with check (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 create policy "Raktáros a saját telephelye mozgásait módosíthatja" on public.movements
   for update using (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   )
   with check (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 
 -- --- Napi zárás ----------------------------------------------------------
@@ -544,30 +586,30 @@ alter table public.daily_closings enable row level security;
 
 create policy "Iroda-szintű szerepkörök minden zárást látnak" on public.daily_closings
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 create policy "Fő iroda és iroda zárást létrehozhat" on public.daily_closings
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 -- Csak fő iroda vagy iroda állíthatja "megtekintve"/"jóváhagyva" állapotba
 -- - a raktáros sosem hagyhatja jóvá a saját zárását, ez adatbázis-szinten
 -- is kikényszerítve van, nem csak a felület rejti el a gombot előle.
 create policy "Fő iroda és iroda zárást módosíthat" on public.daily_closings
   for update using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 
 create policy "Raktáros csak a saját telephelye zárásait látja" on public.daily_closings
   for select using (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 create policy "Raktáros elküldheti a saját telephelye zárását" on public.daily_closings
   for insert with check (
-    location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros'
+    location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros'
   );
 
 -- --- Audit napló -----------------------------------------------------------
@@ -608,13 +650,13 @@ alter table public.audit_log enable row level security;
 -- tevékenységét sem kell látnia.
 create policy "Iroda-szintű szerepkörök olvashatják a céges audit naplót" on public.audit_log
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 -- Bármelyik céges felhasználó rögzítheti a SAJÁT tevékenységét a naplóba
 -- (raktáros is - a saját mozgásrögzítése is bekerül, csak nem látja vissza).
 create policy "Bármelyik céges felhasználó naplózhat" on public.audit_log
   for insert with check (
-    company_id = public.my_company_id()
+    company_id = (select public.my_company_id())
   );
 
 -- --- profiles: iroda-szintű szerepkörök látják a cég felhasználóit --------
@@ -623,9 +665,10 @@ create policy "Bármelyik céges felhasználó naplózhat" on public.audit_log
 -- telephelyre vagy admin jogra. Szerepkört és telephelyet KIZÁRÓLAG a
 -- lentebbi handle_new_user() trigger állíthat be, regisztrációkor
 -- (meghívó alapján), vagy az üzemeltető SQL-ből.
-create policy "Iroda-szintű szerepkörök látják a cég profiljait" on public.profiles
+create policy "Iroda-szintű szerepkörök látják a cég tagjainak profilját" on public.profiles
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
+    and exists (select 1 from public.company_members m where m.user_id = profiles.id and m.company_id = (select public.my_company_id()))
   );
 
 -- --- Meghívók: fő iroda vagy iroda hoz létre, hogy valaki csatlakozhasson
@@ -670,11 +713,11 @@ alter table public.invites enable row level security;
 -- validálja, ami az RLS-t megkerülve fér hozzá.
 create policy "Fő iroda és iroda meghívót hozhat létre a saját cégéhez" on public.invites
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 create policy "Fő iroda és iroda látja a saját cége meghívóit" on public.invites
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
   );
 
 -- ============================================================================
@@ -723,73 +766,150 @@ alter table public.pending_changes enable row level security;
 
 create policy "Iroda-szintű szerepkörök látják a függő módosításokat" on public.pending_changes
   for select using (
-    company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos')
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
 -- Kizárólag 'iroda' adhat be módosítási kérést - a fő iroda közvetlenül ír
 -- (nincs szüksége erre a táblára), a tulajdonos és a raktáros soha nem ír
 -- semmit, még kérést sem.
 create policy "Iroda módosítási kérést adhat be" on public.pending_changes
   for insert with check (
-    company_id = public.my_company_id() and public.my_role() = 'iroda' and requested_by = auth.uid()
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'iroda' and requested_by = auth.uid()
   );
 -- Csak a fő iroda hagyhatja jóvá/utasíthatja el.
 create policy "Fő iroda jóváhagyhatja vagy elutasíthatja" on public.pending_changes
   for update using (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   )
   with check (
-    company_id = public.my_company_id() and public.my_role() = 'fo_iroda'
+    company_id = (select public.my_company_id()) and (select public.my_role()) = 'fo_iroda'
   );
 
--- --- handle_new_user() ÚJRADEFINIÁLVA: meghívóval csatlakozás VAGY új cég
--- létrehozása + alapértelmezett telephely ------------------------------------
--- Felülírja a fenti (első blokkbeli) egyszerűbb verziót - a trigger maga
--- (on_auth_user_created) változatlan marad, csak a function-testet cseréli
--- le a "create or replace". Ha van "invite_token" a regisztráció
--- metaadatában, a felhasználó a meglévő céghez csatlakozik a meghívóban
--- megadott szerepkörrel/telephellyel, ahelyett hogy új céget hozna létre.
--- Új cég regisztrálásakor emellett automatikusan létrejön egy
--- alapértelmezett telephely is, és a regisztráló mindig 'fo_iroda'
--- szerepkört kap (ő az első, "vállalkozás tulajdonosa" fiók - innentől ő
--- hívhat meg mindenki mást, és ő hagyja jóvá az iroda-szintű módosításokat).
+-- --- Regisztráció: meghívóval csatlakozás VAGY új cég + alapértelmezett telephely ----------
+-- Ha van "invite_token" a regisztráció metaadatában, a felhasználó a meghívó cégének tagja lesz a megadott
+-- szerepkörrel/telephellyel. Különben új cég jön létre (a cégnév a company_name metaadatból), egy
+-- alapértelmezett telephellyel, és a regisztráló a cég fő irodája lesz. Egy MÁR LÉTEZŐ felhasználó további
+-- céget a ceg_letrehozasa(), további cégbe tagságot a meghivo_elfogadasa() függvénnyel kap.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   new_company_id uuid;
-  provided_company_name text;
   invite_token text;
   invite_row public.invites%rowtype;
 begin
-  invite_token := new.raw_user_meta_data ->> 'invite_token';
+  insert into public.profiles (id, email, name)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data ->> 'name', null));
 
+  invite_token := new.raw_user_meta_data ->> 'invite_token';
   if invite_token is not null then
     select * into invite_row from public.invites
       where token = invite_token and used_at is null and expires_at > now()
       limit 1;
-
     if invite_row.id is null then
       raise exception 'Érvénytelen vagy lejárt meghívó.';
     end if;
-
-    insert into public.profiles (id, company_id, email, name, role, assigned_location_id, assigned_location_name)
-    values (new.id, invite_row.company_id, new.email, invite_row.name, invite_row.role, invite_row.assigned_location_id, invite_row.assigned_location_name);
-
+    update public.profiles set name = coalesce(invite_row.name, name) where id = new.id;
+    insert into public.company_members (company_id, user_id, role, assigned_location_id, assigned_location_name)
+    values (invite_row.company_id, new.id, invite_row.role, invite_row.assigned_location_id, invite_row.assigned_location_name);
     update public.invites set used_at = now(), used_by = new.id where id = invite_row.id;
-  else
-    provided_company_name := coalesce(new.raw_user_meta_data ->> 'company_name', 'Névtelen vállalkozás');
-
-    insert into public.companies (name) values (provided_company_name)
+  elsif new.raw_user_meta_data ? 'company_name' then
+    insert into public.companies (name) values (coalesce(nullif(btrim(new.raw_user_meta_data ->> 'company_name'), ''), 'Névtelen vállalkozás'))
     returning id into new_company_id;
-
     insert into public.locations (company_id, name) values (new_company_id, 'Fő telephely');
-
-    insert into public.profiles (id, company_id, email, name, role)
-    values (new.id, new_company_id, new.email, new.raw_user_meta_data ->> 'name', 'fo_iroda');
+    insert into public.company_members (company_id, user_id, role) values (new_company_id, new.id, 'fo_iroda');
   end if;
-
+  -- Cégnév és meghívó nélkül (pl. a portálon regisztrált, még Készlet-cég nélküli felhasználó) csak a
+  -- profil jön létre; a cégét a keretben hozza létre vagy kapja meg.
   return new;
 end;
 $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- --- Új cég egy MÁR BEJELENTKEZETT felhasználónak -----------------------------------
+-- A hívó a cég fő irodája lesz; egy alapértelmezett telephely is létrejön. A közös keretből a portál
+-- cégének azonosítójával hívják (p_portal_ceg), így a Készlet-cég rögtön a portál cégéhez tartozik.
+create or replace function public.ceg_letrehozasa(p_nev text, p_portal_ceg uuid default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_ceg uuid;
+begin
+  if auth.uid() is null or not public.ketlepcsos_rendben() then
+    raise exception 'Bejelentkezés szükséges.' using errcode = '42501';
+  end if;
+  if nullif(btrim(p_nev), '') is null then
+    raise exception 'A cégnév kötelező.' using errcode = '22023';
+  end if;
+  if p_portal_ceg is not null and exists (select 1 from public.companies where portal_company_id = p_portal_ceg) then
+    raise exception 'Ehhez a portál-céghez már tartozik Készlet-cég.' using errcode = '23505';
+  end if;
+  insert into public.companies (name, portal_company_id) values (btrim(p_nev), p_portal_ceg) returning id into v_ceg;
+  insert into public.locations (company_id, name) values (v_ceg, 'Fő telephely');
+  insert into public.company_members (company_id, user_id, role) values (v_ceg, auth.uid(), 'fo_iroda');
+  perform public.tagsag_gyorsitotar_torlese();
+  return v_ceg;
+end;
+$$;
+
+-- --- A kiválasztott Készlet-cég összerendelése a portál cégével (F24) -----------------
+-- Csak a fő iroda vagy a tulajdonos, egyszer; adószám alapján önmagában soha (D13).
+create or replace function public.ceg_portal_osszerendeles(p_portal_ceg uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_ceg uuid := public.my_company_id();
+  v_jelenlegi uuid;
+begin
+  if v_ceg is null or public.my_role() not in ('fo_iroda', 'tulajdonos') then
+    raise exception 'Az összerendelést a cég fő irodája vagy tulajdonosa végezheti.' using errcode = '42501';
+  end if;
+  select portal_company_id into v_jelenlegi from public.companies where id = v_ceg;
+  if v_jelenlegi = p_portal_ceg then
+    return;
+  end if;
+  if v_jelenlegi is not null then
+    raise exception 'Ez a Készlet-cég már egy másik portál-céghez tartozik.' using errcode = '23505';
+  end if;
+  if exists (select 1 from public.companies where portal_company_id = p_portal_ceg) then
+    raise exception 'Ehhez a portál-céghez már tartozik Készlet-cég.' using errcode = '23505';
+  end if;
+  update public.companies set portal_company_id = p_portal_ceg where id = v_ceg;
+end;
+$$;
+
+-- --- Meghívó elfogadása egy MÁR LÉTEZŐ felhasználónak (pl. a könyvelőiroda munkatársa több cégbe) ------
+-- A create-team-member Edge Function hívja a service role kulccsal, ha a megadott e-mail-címmel már van
+-- fiók: a felhasználó a meghívó cégének tagja lesz. A böngészőből nem hívható.
+create or replace function public.meghivo_elfogadasa(p_token text, p_email text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  invite_row public.invites%rowtype;
+  v_user uuid;
+begin
+  select * into invite_row from public.invites where token = p_token and used_at is null and expires_at > now() limit 1;
+  if invite_row.id is null then
+    raise exception 'Érvénytelen vagy lejárt meghívó.' using errcode = '22023';
+  end if;
+  select id into v_user from public.profiles where lower(email) = lower(btrim(p_email)) limit 1;
+  if v_user is null then
+    raise exception 'Nincs ilyen felhasználó.' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.company_members where company_id = invite_row.company_id and user_id = v_user) then
+    raise exception 'Ez a felhasználó már tagja a cégnek.' using errcode = '23505';
+  end if;
+  insert into public.company_members (company_id, user_id, role, assigned_location_id, assigned_location_name)
+  values (invite_row.company_id, v_user, invite_row.role, invite_row.assigned_location_id, invite_row.assigned_location_name);
+  update public.invites set used_at = now(), used_by = v_user where id = invite_row.id;
+  perform public.tagsag_gyorsitotar_torlese();
+end;
+$$;
+
+revoke all on function public.ceg_letrehozasa(text, uuid) from public, anon;
+revoke all on function public.ceg_portal_osszerendeles(uuid) from public, anon;
+revoke all on function public.meghivo_elfogadasa(text, text) from public, anon, authenticated;
+grant execute on function public.ceg_letrehozasa(text, uuid) to authenticated;
+grant execute on function public.ceg_portal_osszerendeles(uuid) to authenticated;
 
 -- --- Név módosítása - KIZÁRÓLAG fő iroda jogosultság ------------------------
 -- Szándékosan NINCS általános UPDATE policy a profiles táblán (lásd fentebb
@@ -803,7 +923,7 @@ $$;
 create or replace function public.update_my_name(new_name text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if (select role from public.profiles where id = auth.uid()) is distinct from 'fo_iroda' then
+  if public.my_role() is distinct from 'fo_iroda' then
     raise exception 'Csak a fő iroda módosíthatja a nevét.';
   end if;
   update public.profiles set name = nullif(trim(new_name), '') where id = auth.uid();
@@ -815,19 +935,12 @@ $$;
 -- a name mező bevezetése előtt létrejött fiókot utólag kell elnevezni.
 create or replace function public.update_member_name(member_id uuid, new_name text)
 returns void language plpgsql security definer set search_path = public as $$
-declare
-  caller_role text;
-  caller_company_id uuid;
-  target_company_id uuid;
 begin
-  select role, company_id into caller_role, caller_company_id from public.profiles where id = auth.uid();
-  if caller_role is distinct from 'fo_iroda' then
+  if public.my_role() is distinct from 'fo_iroda' then
     raise exception 'Csak a fő iroda módosíthatja mások nevét.';
   end if;
-
-  select company_id into target_company_id from public.profiles where id = member_id;
-  if target_company_id is null or target_company_id is distinct from caller_company_id then
-    raise exception 'Ez a felhasználó nem a saját cégedhez tartozik.';
+  if not exists (select 1 from public.company_members where user_id = member_id and company_id = public.my_company_id()) then
+    raise exception 'Ez a felhasználó nem a kiválasztott cégedhez tartozik.';
   end if;
 
   update public.profiles set name = nullif(trim(new_name), '') where id = member_id;
@@ -835,9 +948,7 @@ end;
 $$;
 
 -- ============================================================================
--- Minden üzleti adat a szerveren (2026-10-23) - azonos a
--- supabase/migrations/2026-10-23_szerveroldali_adatok.sql tartalmával (meglévő projektben azt kell
--- lefuttatni). A tests/db/sema.test.ts ellenőrzi, hogy a kettő ne térjen el.
+-- Minden üzleti adat a szerveren (2026-10-23) (a 2026-11-06-i egységes séma része)
 -- ============================================================================
 
 -- Készletfigyelő - minden üzleti adat a szerveren (2026-10-23).
@@ -996,58 +1107,58 @@ $$;
 -- beállításokat (költségszámítási módszer) olvashatja; a pénzügyi naplót nem látja.
 drop policy if exists "Céges felhasználók látják a beszállítókat" on public.suppliers;
 create policy "Céges felhasználók látják a beszállítókat" on public.suppliers
-  for select using (company_id = public.my_company_id());
+  for select using (company_id = (select public.my_company_id()));
 drop policy if exists "Fő iroda és iroda beszállítót rögzíthet" on public.suppliers;
 create policy "Fő iroda és iroda beszállítót rögzíthet" on public.suppliers
-  for insert with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for insert with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 drop policy if exists "Fő iroda és iroda beszállítót módosíthat" on public.suppliers;
 create policy "Fő iroda és iroda beszállítót módosíthat" on public.suppliers
-  for update using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'))
-  with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'))
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 
 drop policy if exists "Céges felhasználók látják a vevőket" on public.customers;
 create policy "Céges felhasználók látják a vevőket" on public.customers
-  for select using (company_id = public.my_company_id());
+  for select using (company_id = (select public.my_company_id()));
 drop policy if exists "Fő iroda és iroda vevőt rögzíthet" on public.customers;
 create policy "Fő iroda és iroda vevőt rögzíthet" on public.customers
-  for insert with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for insert with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 drop policy if exists "Fő iroda és iroda vevőt módosíthat" on public.customers;
 create policy "Fő iroda és iroda vevőt módosíthat" on public.customers
-  for update using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'))
-  with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'))
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 
 drop policy if exists "Iroda-szintű szerepkörök látják a pénzügyi naplót" on public.ledger_entries;
 create policy "Iroda-szintű szerepkörök látják a pénzügyi naplót" on public.ledger_entries
-  for select using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos'));
+  for select using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos'));
 drop policy if exists "Fő iroda és iroda naplózhat" on public.ledger_entries;
 create policy "Fő iroda és iroda naplózhat" on public.ledger_entries
-  for insert with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for insert with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 drop policy if exists "Fő iroda és iroda naplót módosíthat" on public.ledger_entries;
 create policy "Fő iroda és iroda naplót módosíthat" on public.ledger_entries
-  for update using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'))
-  with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'))
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 
 drop policy if exists "Iroda-szintű szerepkörök látják az ismétlődő tételeket" on public.recurring_ledger_entries;
 create policy "Iroda-szintű szerepkörök látják az ismétlődő tételeket" on public.recurring_ledger_entries
-  for select using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda', 'tulajdonos'));
+  for select using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos'));
 drop policy if exists "Fő iroda és iroda ismétlődő tételt rögzíthet" on public.recurring_ledger_entries;
 create policy "Fő iroda és iroda ismétlődő tételt rögzíthet" on public.recurring_ledger_entries
-  for insert with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for insert with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 drop policy if exists "Fő iroda és iroda ismétlődő tételt módosíthat" on public.recurring_ledger_entries;
 create policy "Fő iroda és iroda ismétlődő tételt módosíthat" on public.recurring_ledger_entries
-  for update using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'))
-  with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'))
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 
 drop policy if exists "Céges felhasználók látják a beállításokat" on public.company_settings;
 create policy "Céges felhasználók látják a beállításokat" on public.company_settings
-  for select using (company_id = public.my_company_id());
+  for select using (company_id = (select public.my_company_id()));
 drop policy if exists "Fő iroda és iroda beállítást rögzíthet" on public.company_settings;
 create policy "Fő iroda és iroda beállítást rögzíthet" on public.company_settings
-  for insert with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for insert with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 drop policy if exists "Fő iroda és iroda beállítást módosíthat" on public.company_settings;
 create policy "Fő iroda és iroda beállítást módosíthat" on public.company_settings
-  for update using (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'))
-  with check (company_id = public.my_company_id() and public.my_role() in ('fo_iroda', 'iroda'));
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'))
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda'));
 
 -- --- 2b. Napi zárás: a raktáros utólagos mozgása ------------------------------------
 -- Ha a raktáros olyan napra rögzít mozgást, amelyre már elküldte a napi zárást, a zárás „utólag
@@ -1056,8 +1167,8 @@ create policy "Fő iroda és iroda beállítást módosíthat" on public.company
 -- adatbázis-szinten tiltott marad (lásd napi_zaras_raktaros_vedelem).
 drop policy if exists "Raktáros jelölheti a saját zárásának utólagos módosítását" on public.daily_closings;
 create policy "Raktáros jelölheti a saját zárásának utólagos módosítását" on public.daily_closings
-  for update using (location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros')
-  with check (location_id = public.my_assigned_location_id() and public.my_role() = 'raktaros');
+  for update using (location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros')
+  with check (location_id = (select public.my_assigned_location_id()) and (select public.my_role()) = 'raktaros');
 
 create or replace function public.napi_zaras_raktaros_vedelem()
 returns trigger language plpgsql as $$
@@ -1088,8 +1199,8 @@ create trigger daily_closings_raktaros_vedelem
 -- a törzsadat (név, eladási ár, telephely …) továbbra is csak a fő irodáé (az iroda kérése jóváhagyással).
 drop policy if exists "Iroda a termékek készletét frissítheti" on public.products;
 create policy "Iroda a termékek készletét frissítheti" on public.products
-  for update using (company_id = public.my_company_id() and public.my_role() = 'iroda')
-  with check (company_id = public.my_company_id() and public.my_role() = 'iroda');
+  for update using (company_id = (select public.my_company_id()) and (select public.my_role()) = 'iroda')
+  with check (company_id = (select public.my_company_id()) and (select public.my_role()) = 'iroda');
 
 create or replace function public.termek_keszletmezo_vedelem()
 returns trigger language plpgsql as $$
@@ -1127,10 +1238,10 @@ create index if not exists mentesi_kotegek_company_id_idx on public.mentesi_kote
 alter table public.mentesi_kotegek enable row level security;
 drop policy if exists "Saját cég mentési kötegei" on public.mentesi_kotegek;
 create policy "Saját cég mentési kötegei" on public.mentesi_kotegek
-  for select using (company_id = public.my_company_id());
+  for select using (company_id = (select public.my_company_id()));
 drop policy if exists "Saját cég mentési köteget rögzíthet" on public.mentesi_kotegek;
 create policy "Saját cég mentési köteget rögzíthet" on public.mentesi_kotegek
-  for insert with check (company_id = public.my_company_id());
+  for insert with check (company_id = (select public.my_company_id()));
 
 -- Egy mentési köteg: [{ "tabla": "...", "sor": { ...oszlop: érték... } }, ...]. A hívó jogaival fut
 -- (security invoker), tehát minden sorra ugyanazok az RLS-szabályok érvényesek, mint eddig. Csak a
@@ -1227,9 +1338,7 @@ $$;
 grant execute on function public.keszlet_mentes(uuid, jsonb) to authenticated;
 
 -- ============================================================================
--- Integráció a többi modullal (2026-10-29) - azonos a supabase/migrations/2026-10-29_integracio.sql
--- tartalmával (meglévő projektben azt kell lefuttatni). A tests/db/sema.test.ts ellenőrzi, hogy a kettő
--- ne térjen el.
+-- Integráció a többi modullal (2026-10-29) (a 2026-11-06-i egységes séma része)
 -- ============================================================================
 
 -- Készletfigyelő - integráció a többi modullal (2026-10-29, TERV.md F15.2).
@@ -1689,9 +1798,7 @@ grant execute on function public.integracio_allapot() to authenticated;
 grant execute on function public.integracio_kihagyas(bigint, text) to authenticated;
 
 -- ============================================================================
--- A Könyvelőből érkező tételek (2026-10-31) - azonos a supabase/migrations/2026-10-31_integracio_bejovo.sql
--- tartalmával (meglévő projektben azt kell lefuttatni). A tests/db/sema.test.ts ellenőrzi, hogy a kettő
--- ne térjen el.
+-- A Könyvelőből érkező tételek (2026-10-31) (a 2026-11-06-i egységes séma része)
 -- ============================================================================
 
 -- Készletfigyelő - a Könyvelőből érkező tételek (2026-10-31, TERV.md F15.4, I3 4. lépés).
@@ -1817,9 +1924,7 @@ end;
 $$;
 
 -- ============================================================================
--- A szállítói számla dátumai (2026-10-31) - azonos a supabase/migrations/2026-10-31_szamla_datumok.sql
--- tartalmával (meglévő projektben azt kell lefuttatni). A tests/db/sema.test.ts ellenőrzi, hogy a kettő
--- ne térjen el.
+-- A szállítói számla dátumai (2026-10-31) (a 2026-11-06-i egységes séma része)
 -- ============================================================================
 
 -- Készletfigyelő - a szállítói számla kelte és teljesítési dátuma a beérkezésnél (2026-10-31).
@@ -2098,16 +2203,89 @@ drop policy if exists "Raktáros a saját telephelye termékeit frissítheti" on
 drop policy if exists "Raktáros tételt létrehozhat a saját telephelyén" on public.purchase_lots;
 drop policy if exists "Raktáros tételt frissíthet a saját telephelyén" on public.purchase_lots;
 
--- ---------------------------------------------------------------------------
--- 2026-11-04: 30 napos próbaidő és árak egy helyen (AWEBOLDAL TERV.md F20)
--- ---------------------------------------------------------------------------
--- * Az ÚJONNAN regisztráló cégek próbaideje 30 nap (eddig 14). Csak az alapértelmezett érték változik:
---   a MEGLÉVŐ cégek próbaideje, állapota és adatai NEM változnak (egyetlen meglévő sort sem írunk át).
--- * A beégetett 9 990 Ft-os alapár megszűnik: az árak egyetlen forrása a portál árlistája
---   (/api/v1/arak). A plan_price_huf oszlop megmarad (a meglévő értékekkel együtt), csak már nem használjuk,
---   és új cégnél üres marad.
--- Ismételten futtatható. Az élő projekten csak külön jóváhagyás után fut (ELESITES.md).
+-- ============================================================================
+-- Kétlépcsős azonosítás: átállási lista és a szabály be- és kikapcsolása (F21)
+-- ============================================================================
+-- A fő iroda és a tulajdonos látja a kiválasztott cég tagjait, és hogy kinek van ellenőrzött kétlépcsős tényezője.
+create or replace function public.ketlepcsos_allapot()
+returns table (id uuid, name text, email text, role text, ketlepcsos boolean)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.name, p.email, m.role,
+         exists (select 1 from auth.mfa_factors f where f.user_id = p.id and f.status = 'verified')
+  from public.company_members m join public.profiles p on p.id = m.user_id
+  where m.company_id = public.my_company_id()
+    and public.my_role() in ('fo_iroda', 'tulajdonos')
+  order by coalesce(p.name, p.email);
+$$;
+revoke all on function public.ketlepcsos_allapot() from public, anon;
+grant execute on function public.ketlepcsos_allapot() to authenticated;
 
-alter table public.companies alter column trial_ends_at set default (now() + interval '30 days');
-alter table public.companies alter column plan_price_huf drop default;
-alter table public.companies alter column plan_price_huf drop not null;
+-- Hány felhasználónak nincs még ellenőrzött kétlépcsős tényezője (az egész projektben).
+create or replace function public.ketlepcsos_hianyzik()
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select count(*)::integer from public.profiles p
+  where not exists (select 1 from auth.mfa_factors f where f.user_id = p.id and f.status = 'verified');
+$$;
+
+-- Bekapcsolás (csak az SQL-szerkesztőből): megtagadja, amíg valakinek nincs beállítva, így senki nem zárhatja ki magát.
+create or replace function public.ketlepcsos_kotelezove_tetel()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  hianyzik integer := public.ketlepcsos_hianyzik();
+begin
+  if hianyzik > 0 then
+    raise exception 'A kétlépcsős szabály nem kapcsolható be: % felhasználónak még nincs beállítva (lásd a Csapat oldal átállási listáját).', hianyzik
+      using errcode = 'KF2FA';
+  end if;
+  update public.biztonsagi_beallitas set ketlepcsos_kotelezo = true, bekapcsolva_ekkor = now() where id;
+  return 'A kétlépcsős szabály bekapcsolva: kétlépcsős azonosítás nélkül semmilyen cégadat nem érhető el.';
+end;
+$$;
+
+create or replace function public.ketlepcsos_kikapcsolasa()
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  update public.biztonsagi_beallitas set ketlepcsos_kotelezo = false, bekapcsolva_ekkor = null where id;
+  select 'A kétlépcsős adatbázis-szabály kikapcsolva (a program a belépéskor továbbra is kéri a kódot).';
+$$;
+
+-- A böngészőből (anon, authenticated) nem hívható: csak az üzemeltető, az SQL-szerkesztőből.
+revoke all on function public.ketlepcsos_hianyzik() from public, anon, authenticated;
+revoke all on function public.ketlepcsos_kotelezove_tetel() from public, anon, authenticated;
+revoke all on function public.ketlepcsos_kikapcsolasa() from public, anon, authenticated;
+
+-- A raktáros tétlenségi ideje (a kiválasztott cégben, csak a fő iroda).
+create or replace function public.raktaros_tetlenseg_beallitasa(perc integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.my_role() is distinct from 'fo_iroda' then
+    raise exception 'Csak a fő iroda állíthatja.' using errcode = '42501';
+  end if;
+  if perc < 30 or perc > 720 then
+    raise exception 'A tétlenségi idő 30 perc és 12 óra között lehet.' using errcode = '22023';
+  end if;
+  update public.companies set raktaros_tetlenseg_perc = perc where id = public.my_company_id();
+end;
+$$;
+revoke all on function public.raktaros_tetlenseg_beallitasa(integer) from public, anon;
+grant execute on function public.raktaros_tetlenseg_beallitasa(integer) to authenticated;

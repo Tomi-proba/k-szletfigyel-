@@ -16,8 +16,10 @@ export interface Company {
   cancelledAt: string | null
   stripeCustomerId: string | null
   stripeSubscriptionId: string | null
-  /** A raktáros tétlenségi ideje percben (30–720); null, amíg a 2026-11-05-i migráció nem futott. */
+  /** A raktáros tétlenségi ideje percben (30–720). */
   raktarosTetlensegPerc: number | null
+  /** A portál cége, amelyhez ez a Készlet-cég tartozik (a közös keret ez alapján választ). */
+  portalCompanyId: string | null
 }
 
 /** Négy szerepkör:
@@ -41,6 +43,8 @@ export interface Company {
  * érvényesül, nem csak a UI-n. */
 export type UserRole = 'raktaros' | 'iroda' | 'fo_iroda' | 'tulajdonos'
 
+/** A bejelentkezett felhasználó a KIVÁLASZTOTT cégben: a saját adatai (profiles) és a cégtagsága
+ * (company_members: szerepkör, a raktáros telephelye). Egy felhasználó több cégnek is tagja lehet. */
 export interface Profile {
   id: string
   companyId: string
@@ -117,19 +121,39 @@ export function mapCompanyRow(row: Record<string, unknown>): Company {
     stripeCustomerId: (row.stripe_customer_id as string | null) ?? null,
     stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
     raktarosTetlensegPerc: typeof row.raktaros_tetlenseg_perc === 'number' ? row.raktaros_tetlenseg_perc : null,
+    portalCompanyId: (row.portal_company_id as string | null) ?? null,
   }
 }
 
-export function mapProfileRow(row: Record<string, unknown>): Profile {
+/** Egy cégtagság: a cég és benne a felhasználó szerepköre. */
+export interface CegTagsag {
+  company: Company
+  role: UserRole
+  assignedLocationId: string | null
+  assignedLocationName: string | null
+}
+
+/** Egy company_members sor (a hozzá tartozó companies sorral együtt, `companies(*)`). */
+export function mapTagsagRow(row: Record<string, unknown>): CegTagsag {
+  return {
+    company: mapCompanyRow(row.companies as Record<string, unknown>),
+    role: row.role as UserRole,
+    assignedLocationId: (row.assigned_location_id as string | null) ?? null,
+    assignedLocationName: (row.assigned_location_name as string | null) ?? null,
+  }
+}
+
+/** A profiles sor (a felhasználó saját adatai) és a kiválasztott cég tagsága együtt. */
+export function mapProfileRow(row: Record<string, unknown>, tagsag: CegTagsag): Profile {
   return {
     id: row.id as string,
-    companyId: row.company_id as string,
+    companyId: tagsag.company.id,
     email: row.email as string,
     name: (row.name as string | null) ?? null,
     isPlatformAdmin: Boolean(row.is_platform_admin),
-    role: (row.role as UserRole) ?? 'iroda',
-    assignedLocationId: (row.assigned_location_id as string | null) ?? null,
-    assignedLocationName: (row.assigned_location_name as string | null) ?? null,
+    role: tagsag.role,
+    assignedLocationId: tagsag.assignedLocationId,
+    assignedLocationName: tagsag.assignedLocationName,
     createdAt: row.created_at as string,
   }
 }

@@ -1,48 +1,20 @@
-// A friss projekthez futtatandó supabase/schema.sql és a meglévő projekthez futtatandó migráció
-// nem térhet el egymástól.
-import { readFileSync } from 'node:fs'
+// Egyetlen, egységes séma (AWEBOLDAL TERV.md F24 KS4): a friss projekthez futtatandó supabase/schema.sql és az
+// egyetlen migráció ugyanaz; régi, lépésenkénti migráció nincs, és a régi (egycéges) szerkezet sem maradt benne.
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const olvas = (ut: string) => readFileSync(new URL(`../../${ut}`, import.meta.url), 'utf8')
 
 describe('séma', () => {
-  it('a schema.sql szó szerint tartalmazza a 2026-10-23-i migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-23_szerveroldali_adatok.sql'))
+  it('egyetlen migráció van, és szó szerint azonos a schema.sql-lel', () => {
+    expect(readdirSync(new URL('../../supabase/migrations', import.meta.url))).toEqual(['2026-11-06_tiszta_alap.sql'])
+    expect(olvas('supabase/migrations/2026-11-06_tiszta_alap.sql')).toBe(olvas('supabase/schema.sql'))
   })
 
-  it('a schema.sql szó szerint tartalmazza a 2026-10-29-i (integrációs) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-29_integracio.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-10-31-i (Könyvelőből érkező tételek) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-31_integracio_bejovo.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-10-31-i (számladátumok) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-31_szamla_datumok.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-10-31-i (beküldött áfaidőszak) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-31_afa_idoszak.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-10-31-i (egyeztetés) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-10-31_egyeztetes.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-11-01-i (közös Teendők) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-01_kozos_teendok.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-11-01-i (a Könyvelő nyitott tételei) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-01_konyvelo_nyitott_tetelek.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-11-02-i (raktári bejelentés) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-02_raktari_bejelentes.sql'))
-  })
-
-  it('a schema.sql szó szerint tartalmazza a 2026-11-04-i (30 napos próba) migrációt', () => {
-    expect(olvas('supabase/schema.sql')).toContain(olvas('supabase/migrations/2026-11-04_proba_30_nap.sql'))
+  it('a cégtagság a company_members táblában van; a profiles-on nincs cég vagy szerepkör', () => {
+    const s = olvas('supabase/schema.sql')
+    expect(s).toContain('create table if not exists public.company_members')
+    expect(s).not.toMatch(/alter table public\.profiles\s+add column/)
+    expect(s).not.toMatch(/profiles \(id, company_id/)
   })
 })

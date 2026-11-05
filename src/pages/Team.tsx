@@ -90,17 +90,24 @@ export function Team() {
 
   async function reload() {
     if (!supabase || !company) return
-    const { data } = await supabase.from('profiles').select('*').eq('company_id', company.id)
+    // A kiválasztott cég tagjai (company_members) a profiljukkal (AWEBOLDAL TERV.md F24 KS4).
+    const { data } = await supabase
+      .from('company_members')
+      .select('role, assigned_location_name, profiles(id, email, name, is_platform_admin)')
+      .eq('company_id', company.id)
     if (data) {
       setUsers(
-        data.map((row) => ({
-          id: row.id as string,
-          email: row.email as string,
-          name: (row.name as string | null) ?? null,
-          role: (row.role as UserRole) ?? 'iroda',
-          assignedLocationName: (row.assigned_location_name as string | null) ?? null,
-          isPlatformAdmin: Boolean(row.is_platform_admin),
-        })),
+        data.map((row) => {
+          const p = row.profiles as unknown as Record<string, unknown>
+          return {
+            id: p.id as string,
+            email: p.email as string,
+            name: (p.name as string | null) ?? null,
+            role: row.role as UserRole,
+            assignedLocationName: (row.assigned_location_name as string | null) ?? null,
+            isPlatformAdmin: Boolean(p.is_platform_admin),
+          }
+        }),
       )
     }
   }

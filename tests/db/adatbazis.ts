@@ -47,7 +47,7 @@ export async function ujCeg(pool: pg.Pool, cegnev = 'Teszt Kft.'): Promise<Teszt
     `${id}@teszt.example`,
     { company_name: cegnev, name: 'Fő Iroda' },
   ])
-  const { rows } = await pool.query('select company_id from public.profiles where id = $1', [id])
+  const { rows } = await pool.query('select company_id from public.company_members where user_id = $1', [id])
   const companyId = rows[0].company_id as string
   const loc = await pool.query('select id from public.locations where company_id = $1', [companyId])
   return { id, companyId, locationId: loc.rows[0]?.id ?? null }
@@ -72,13 +72,15 @@ export async function ujCsapattag(
   return { id, companyId: ceg.companyId, locationId: role === 'raktaros' ? ceg.locationId : null }
 }
 
-/** A megadott felhasználó nevében futtat egy tranzakciót (mint a Supabase API-n át érkező kérés). */
-export async function nevebenFut<T>(pool: pg.Pool, felhasznaloId: string, fn: (db: pg.PoolClient) => Promise<T>): Promise<T> {
+/** A megadott felhasználó nevében futtat egy tranzakciót (mint a Supabase API-n át érkező kérés). A `ceg` a
+ * böngésző x-keszlet-ceg fejléce (a kiválasztott cég); ha nincs megadva, a felhasználó egyetlen cége számít. */
+export async function nevebenFut<T>(pool: pg.Pool, felhasznaloId: string, fn: (db: pg.PoolClient) => Promise<T>, ceg?: string): Promise<T> {
   const db = await pool.connect()
   try {
     await db.query('begin')
     await db.query('set local role authenticated')
     await db.query("select set_config('request.jwt.claim.sub', $1, true)", [felhasznaloId])
+    await db.query("select set_config('request.headers', $1, true)", [JSON.stringify(ceg ? { 'x-keszlet-ceg': ceg } : {})])
     const eredmeny = await fn(db)
     await db.query('commit')
     return eredmeny
@@ -92,11 +94,11 @@ export async function nevebenFut<T>(pool: pg.Pool, felhasznaloId: string, fn: (d
 
 export type Valtozas = { tabla: string; sor: Record<string, unknown> }
 
-export async function ment(pool: pg.Pool, felhasznaloId: string, kotegId: string, valtozasok: Valtozas[]) {
+export async function ment(pool: pg.Pool, felhasznaloId: string, kotegId: string, valtozasok: Valtozas[], ceg?: string) {
   return nevebenFut(pool, felhasznaloId, async (db) => {
     const { rows } = await db.query('select public.keszlet_mentes($1, $2) as eredmeny', [kotegId, JSON.stringify(valtozasok)])
     return rows[0].eredmeny as { tabla: string; id: string; version: number }[]
-  })
+  }, ceg)
 }
 
 /** A hiba SQLSTATE kódja (pl. 'KF409' ütközés, '42501' jogosultság). */

@@ -76,6 +76,7 @@ describe('előfizetés állapota', () => {
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     raktarosTetlensegPerc: null,
+    portalCompanyId: null,
     ...overrides,
   })
 

@@ -25,6 +25,24 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 // redirect URL, which would corrupt/replace whatever "#/route" the
 // HashRouter was using - see AuthGate.tsx for how the "?code=" is detected
 // on load, independent of the current hash route.
+// A kiválasztott cég (AWEBOLDAL TERV.md F24 KS4): egy felhasználó több cégnek is tagja lehet. Minden kérés
+// az x-keszlet-ceg fejlécben viszi, melyik cégben dolgozik; az adatbázis jogosultsági szabályai (RLS) csak
+// ennek a cégnek az adatait engedik, és csak akkor, ha a felhasználó tagja.
+let kivalasztottCeg: string | null = null
+export const kivalasztottCegBeallitas = (cegId: string | null) => {
+  kivalasztottCeg = cegId
+}
+export const kivalasztottCegAzonosito = () => kivalasztottCeg
+
+/** A fetch, amely minden kéréshez hozzáteszi a kiválasztott cég fejlécét (exportálva a teszthez). */
+export function cegesFetch(alap: typeof fetch = fetch): typeof fetch {
+  return (input, init) => {
+    const fejlec = new Headers(init?.headers)
+    if (kivalasztottCeg) fejlec.set('x-keszlet-ceg', kivalasztottCeg)
+    return alap(input, { ...init, headers: fejlec })
+  }
+}
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl as string, supabaseAnonKey as string, { auth: { flowType: 'pkce' } })
+  ? createClient(supabaseUrl as string, supabaseAnonKey as string, { auth: { flowType: 'pkce' }, global: { fetch: cegesFetch() } })
   : null

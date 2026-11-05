@@ -54,7 +54,7 @@ function ConfiguredAuthGate({
   passwordRecoveryHandled: boolean
   setPasswordRecoveryHandled: (v: boolean) => void
 }) {
-  const { loading, session, profile, company, dataLoadError, reloadData, signOut, mfa } = useAuth()
+  const { loading, session, profile, company, dataLoadError, reloadData, signOut, mfa, nincsCeg, cegValtasFolyamatban } = useAuth()
 
   if (hasPasswordRecoveryCode && !passwordRecoveryHandled) {
     return <ResetPassword onDone={() => setPasswordRecoveryHandled(true)} />
@@ -93,6 +93,16 @@ function ConfiguredAuthGate({
             </button>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  if (nincsCeg) return <NincsCeg />
+
+  if (cegValtasFolyamatban) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-[var(--color-text-muted)]" role="status">
+        A kiválasztott cég adatainak betöltése…
       </div>
     )
   }
@@ -201,4 +211,54 @@ function MunkamenetFigyelo({ children }: { children: ReactNode }) {
   }, [perc, signOut])
 
   return <>{children}</>
+}
+
+/** Be van lépve, de még egyetlen Készlet-cégnek sem tagja (pl. a portálon regisztrált): itt hozhat létre egyet. */
+function NincsCeg() {
+  const { ujCeg, signOut } = useAuth()
+  const [nev, setNev] = useState('')
+  const [hiba, setHiba] = useState<string | null>(null)
+  const [fut, setFut] = useState(false)
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <form
+        className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          setFut(true)
+          setHiba((await ujCeg(nev)).error)
+          setFut(false)
+        }}
+      >
+        <h1 className="mb-2 text-lg font-bold text-[var(--color-text)]">Még nincs Készletkezelő-céged</h1>
+        <p className="mb-4 text-sm text-[var(--color-text-muted)]">
+          Hozz létre egyet: te leszel a fő irodája, és egy alapértelmezett telephely is létrejön. Ha egy meglévő céghez
+          csatlakoznál, kérd meg annak fő irodáját, hogy vegyen fel a Csapat oldalon.
+        </p>
+        {hiba && (
+          <p className="mb-3 rounded-lg bg-[var(--color-danger-bg)] p-2 text-sm text-[var(--color-danger)]" role="alert">
+            {hiba}
+          </p>
+        )}
+        <label className="mb-1 block text-sm font-medium text-[var(--color-text)]" htmlFor="uj-ceg-nev">
+          Cégnév
+        </label>
+        <input
+          id="uj-ceg-nev"
+          className="mb-4 w-full rounded-lg border border-[var(--color-border)] px-3 py-2"
+          value={nev}
+          onChange={(e) => setNev(e.target.value)}
+          required
+        />
+        <div className="flex gap-2">
+          <button type="submit" disabled={fut || !nev.trim()} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 font-semibold text-white disabled:opacity-50">
+            Cég létrehozása
+          </button>
+          <button type="button" onClick={() => void signOut()} className="rounded-lg px-4 py-2 text-[var(--color-text-muted)]">
+            Kijelentkezés
+          </button>
+        </div>
+      </form>
+    </div>
+  )
 }

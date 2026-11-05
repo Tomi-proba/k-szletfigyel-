@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { belepesIdeje, belepesIdejeMentes, jegyHiba, jegyTartalom, kozosBelepes, kozosBelepesMentes, lejart, ssoAdatok, tetlensegPerc } from '../lib/kozosBelepes'
@@ -115,12 +116,15 @@ function ConfiguredAuthGate({
 function SsoAtvetel({ onKesz }: { onKesz: () => void }) {
   const [hiba, setHiba] = useState<string | null>(null)
   const elinditva = useRef(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (elinditva.current || !portalBelepes || !supabase) return
     elinditva.current = true
     const sb = supabase
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/`)
+    // A jegy és a tokenek eltűnnek a címsorból. Az útválasztón át, hogy a HashRouter is a kezdőoldalt lássa
+    // (a közvetlen history.replaceState-et nem veszi észre, és üres oldal maradna).
+    navigate('/', { replace: true })
     void (async () => {
       if (!portalBelepes.at || !portalBelepes.rt) {
         setHiba('A közös belépés a Készletkezelőbe a közös Supabase-projekttel működik. Addig lépj be a Készletkezelő saját belépésével.')
@@ -143,7 +147,7 @@ function SsoAtvetel({ onKesz }: { onKesz: () => void }) {
       belepesIdejeMentes(Date.now())
       onKesz()
     })()
-  }, [onKesz])
+  }, [onKesz, navigate])
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm">

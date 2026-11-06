@@ -1,7 +1,7 @@
 {
   "forras": "Tomi-proba/AWEBOLDAL packages/{felulet,modulok,arak,dizajn}",
-  "commit": "dda2845bf6699075e090e4c8df58da97258a71da",
-  "masolva": "2026-11-06T08:20:04.849Z",
+  "commit": "9576d421c091b94f35febf61be5dcec70b1ce5d5",
+  "masolva": "2026-11-06T08:41:00.124Z",
   "fajlok": {
     "felulet/package.json": "e2b7b1f473ff2ae0f73cbb1f2b29b0e15b1a94825833163ae1b91b40b0ad7349",
     "felulet/src/ablak.tsx": "da11304f23161f3a11a6794a10d51208109f9ee93462638566784258a630af27",

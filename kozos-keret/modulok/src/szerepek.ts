@@ -68,3 +68,17 @@ export function modulSzerepCim(modul: ModulKod, kod: string | null): string {
   if (!kod) return 'Nincs hozzáférés'
   return MODUL_SZEREPEK[modul].find((s) => s.kod === kod)?.cim ?? kod
 }
+
+/**
+ * Kiegészítő jogok a szerepkör mellé (F26). eÁFA: a „második jóváhagyó” (APPROVER) – a könyvelő is jóváhagyhatja más
+ * bevallását, ha az irodában be van kapcsolva a második jóváhagyás; a beküldéshez akkor is két különböző ember kell.
+ */
+export const MODUL_JOGOK: Partial<Record<ModulKod, readonly { kod: string; cim: string; szerepekhez: readonly string[] }[]>> = {
+  afa: [{ kod: 'APPROVER', cim: 'Második jóváhagyó', szerepekhez: ['ACCOUNTANT'] }],
+}
+
+/** A hatályos kiegészítő jogok: csak a megengedett szerepkörökhöz. */
+export function hatalyosModulJogok(modul: ModulKod, szerep: string | null, jogok: readonly string[]): string[] {
+  if (!szerep) return []
+  return (MODUL_JOGOK[modul] ?? []).filter((j) => jogok.includes(j.kod) && j.szerepekhez.includes(szerep)).map((j) => j.kod)
+}

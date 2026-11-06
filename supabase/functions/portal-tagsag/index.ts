@@ -44,6 +44,20 @@ Deno.serve(async (req: Request) => {
       if (!r.ok) throw new Error(`portal_tagsag_igazitas: ${r.status} ${await r.text()}`)
       return await r.json()
     },
+    kivonatKeres: async (token) => {
+      // Szerverről szerverre, a felhasználó saját tokenjével (a portál ugyanazt a Supabase-belépést fogadja el).
+      const r = await fetch(`${kiado}/api/v1/tagsag-kivonat?modul=keszlet`, { headers: { authorization: `Bearer ${token}` } })
+      return r.ok ? ((await r.json()).kivonat ?? null) : null
+    },
+    kivonat: async (email, cegek, jti, lejar) => {
+      const r = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_tagsag_kivonat`, {
+        method: 'POST',
+        headers: { apikey: service, authorization: `Bearer ${service}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ p_email: email, p_cegek: cegek, p_jti: jti, p_lejar: lejar.toISOString() }),
+      })
+      if (!r.ok) throw new Error(`portal_tagsag_kivonat: ${r.status} ${await r.text()}`)
+      return await r.json()
+    },
   }).catch((e) => ({ statusz: 500, adat: { hiba: 'belso-hiba', uzenet: String(e?.message ?? e) } }))
   return new Response(JSON.stringify(v.adat), { status: v.statusz, headers: { ...cors, 'content-type': 'application/json' } })
 })

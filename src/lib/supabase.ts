@@ -64,6 +64,21 @@ export const keretJegyBeallitas = (fn: () => Promise<string>) => {
  * a portal-tagsag Edge Function a portál szerint létrehozza, igazítja vagy megszünteti a tagságot. Ha nem érhető
  * el (pl. még nincs telepítve), a meglévő tagsággal megyünk tovább; a portál jelzése később igazít.
  */
+/**
+ * Önálló (nem a keretből) belépéskor (AWEBOLDAL TERV.md F26): a portal-tagsag függvény a felhasználó tokenjével
+ * lekéri a portál tagsági kivonatát, és a portálról kezelt tagságokat aszerint igazítja – ahogy a Könyvelő is
+ * belépéskor igazodik. Ha nincs portál (önálló telepítés) vagy a függvény nem érhető el, nincs változás.
+ */
+export async function portalTagsagOnalloIgazitas(): Promise<void> {
+  if (!supabase || keretToken) return
+  try {
+    const { error } = await supabase.functions.invoke('portal-tagsag', { body: { onallo: true } })
+    if (error) console.warn('A tagság igazítása a portál szerint nem sikerült:', error.message)
+  } catch (e) {
+    console.warn('A tagság igazítása a portál szerint nem sikerült:', e)
+  }
+}
+
 export async function portalTagsagIgazitas(): Promise<string | null> {
   if (!supabase || !keretJegy) return null
   try {

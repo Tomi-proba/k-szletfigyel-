@@ -83,4 +83,21 @@ leiras('portál tagság-igazítás (F25)', () => {
     const naplo = (await pool.query("select action from public.audit_log where entity_type = 'csapat' and entity_id = $1 order by event_timestamp desc limit 1", [tagId])).rows
     expect(naplo[0].action).toBe('delete')
   })
+
+  it('F26: önálló belépéskor a kivonat szerint – a kivonatban lévő cégben igazít, a kimaradtban megszünteti', async () => {
+    const kiv = async (cegek: unknown[], jti = randomUUID()) =>
+      (await pool.query("select public.portal_tagsag_kivonat($1, $2, $3, now() + interval '5 minutes') as e", [tagEmail, JSON.stringify(cegek), jti])).rows[0].e
+    const jti = randomUUID()
+    expect((await kiv([{ id: portalCeg, modulSzerep: 'raktaros' }, { id: randomUUID(), modulSzerep: 'iroda' }], jti)).eredmeny).toBe('igazitva')
+    expect((await tagsag())[0]).toMatchObject({ role: 'raktaros', portal_kezeli: true })
+    expect((await kiv([], jti)).eredmeny).toBe('mar-felhasznalt')
+    expect((await tagsag())[0].role).toBe('raktaros')
+    // A portálon eltávolították: a cég már nincs a kivonatban → a portálról kapott tagság megszűnik.
+    await kiv([])
+    expect(await tagsag()).toEqual([])
+    const kod = await hibakod(
+      nevebenFut(pool, tulaj.id, (db) => db.query("select public.portal_tagsag_kivonat($1, '[]'::jsonb, $2, now())", [tagEmail, randomUUID()])),
+    )
+    expect(kod).toBe('42501')
+  })
 })

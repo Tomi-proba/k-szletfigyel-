@@ -7,7 +7,9 @@
 //     elküldi a felhasználó hatályos Készlet-szerepét (null = nincs hozzáférés).
 //  2. A keret belépéskor: { jegy } + a felhasználó Supabase-tokenje – a portál belépési jegye (kétlépcsős,
 //     egyszer használható); a jegyben lévő e-mail-címnek egyeznie kell a token felhasználójáéval.
-// Mindkét esetben a portál a forrás: a tagság a portál szerint jön létre, változik vagy szűnik meg.
+//  3. Önálló belépéskor (F26): { onallo: true } + a felhasználó Supabase-tokenje – a függvény a felhasználó tokenjével
+//     szerverről kéri a portál aláírt tagsági kivonatát (minden portál-cég Készlet-szerepe), és aszerint igazít.
+// Mindegyik esetben a portál a forrás: a tagság a portál szerint jön létre, változik vagy szűnik meg.
 
 export const TAGSAG_CIMZETT = 'eafa-csomag:tagsag:keszlet'
 export const BELEPESI_CIMZETT = 'eafa-csomag:modul:keszlet'
@@ -21,6 +23,10 @@ export interface Fuggosegek {
   felhasznaloEmail(accessToken: string): Promise<string | null>
   /** public.portal_tagsag_igazitas (service role). */
   igazit(portalCeg: string, email: string, szerep: string | null, jti: string, lejar: Date): Promise<string>
+  /** A portál tagsági kivonata a felhasználó tokenjével (null: a portál nem adott, pl. nem portál-felhasználó). */
+  kivonatKeres(accessToken: string): Promise<string | null>
+  /** public.portal_tagsag_kivonat (service role). */
+  kivonat(email: string, cegek: Array<{ id: string; modulSzerep: string | null }>, jti: string, lejar: Date): Promise<unknown>
 }
 
 export interface Valasz {
@@ -71,6 +77,28 @@ export async function kezel(torzs: unknown, authorization: string | null, d: Fug
     const eredmeny = await d.igazit(a.ceg, a.email, a.szerep, a.jti, a.lejar)
     if (eredmeny === 'mar-felhasznalt') return hiba(401, 'mar-felhasznalt', 'Ezt a belépési jegyet már felhasználták.')
     return { statusz: 200, adat: { eredmeny, szerep: a.szerep } }
+  }
+  if (b && (b as { onallo?: unknown }).onallo === true) {
+    const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]
+    if (!token) return hiba(401, 'nincs-belepes', 'Lépj be újra.')
+    const jwt = await d.kivonatKeres(token)
+    if (!jwt) return { statusz: 200, adat: { eredmeny: 'nincs-portal' } }
+    let p: Record<string, unknown>
+    try {
+      p = await d.ellenoriz(jwt, TAGSAG_CIMZETT)
+    } catch {
+      return hiba(502, 'ervenytelen-kivonat', 'A portál kivonata nem ellenőrizhető.')
+    }
+    const cegek = Array.isArray(p.cegek) ? (p.cegek as Array<Record<string, unknown>>) : null
+    if (p.esemeny !== 'kivonat' || typeof p.email !== 'string' || typeof p.jti !== 'string' || typeof p.exp !== 'number' || !cegek)
+      return hiba(502, 'ervenytelen-kivonat', 'A portál kivonata hibás.')
+    const lista = cegek.filter((c) => typeof c.id === 'string' && UUID.test(c.id)).map((c) => ({
+      id: c.id as string,
+      modulSzerep: typeof c.modulSzerep === 'string' && SZEREPEK.includes(c.modulSzerep) ? c.modulSzerep : null,
+    }))
+    const email = await d.felhasznaloEmail(token)
+    if (!email || email.toLowerCase() !== p.email.toLowerCase()) return hiba(403, 'mas-felhasznalo', 'A kivonat nem ehhez a fiókhoz tartozik.')
+    return { statusz: 200, adat: { eredmeny: await d.kivonat(p.email, lista, p.jti, new Date(p.exp * 1000)) } }
   }
   return hiba(400, 'hianyzo-adat', 'Jelzés vagy belépési jegy kell.')
 }

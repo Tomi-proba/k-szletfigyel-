@@ -5,7 +5,7 @@
 // subscription state layered on top.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { isSupabaseConfigured, keretTokenForras, kivalasztottCegBeallitas, portalTagsagIgazitas, supabase, tokenTartalom } from '../lib/supabase'
+import { isSupabaseConfigured, keretTokenForras, kivalasztottCegBeallitas, portalTagsagIgazitas, portalTagsagOnalloIgazitas, supabase, tokenTartalom } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
 import { mapProfileRow, mapTagsagRow, type CegTagsag, type Company, type Profile, type UserRole } from '../types/auth'
 import { fetchBusinessData } from '../lib/remoteSync'
@@ -202,6 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profilSor.current = profileRow
     // A keretben a portál az egyetlen hely (F25): a kiválasztott portál-cégben a tagság a portál szerint igazodik.
     if (keretTok && portalCeg.current) await portalTagsagIgazitas()
+    // Önálló belépéskor is a portálhoz igazodik a szerep (F26), nem csak a portál jelzéséből.
+    else if (!keretTok) await portalTagsagOnalloIgazitas()
     // A felhasználó cégei (AWEBOLDAL TERV.md F24 KS4): a cégválasztóhoz mindet látja, az adatokat csak a
     // kiválasztott cégben (az x-keszlet-ceg fejléc szerint, lásd lib/supabase.ts).
     const { data: tagSorok, error: tagHiba } = await supabase

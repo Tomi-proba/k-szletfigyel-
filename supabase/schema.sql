@@ -924,30 +924,16 @@ create table if not exists public.portal_jelzes_jti (
 );
 alter table public.portal_jelzes_jti enable row level security;
 
-create or replace function public.portal_tagsag_igazitas(p_portal_ceg uuid, p_email text, p_szerep text, p_jti text, p_lejar timestamptz)
+-- A tagság a portál szerint egy cégben (közös rész): létrehozás, szerepváltás vagy megszüntetés, audit naplóval.
+create or replace function public.portal_tagsag_alkalmaz(v_ceg uuid, v_user uuid, p_szerep text)
 returns text language plpgsql security definer set search_path = public as $$
 declare
-  v_ceg uuid;
-  v_user uuid;
   v_regi public.company_members%rowtype;
   v_telephely uuid;
   v_telephely_nev text;
 begin
-  delete from public.portal_jelzes_jti where lejar < now() - interval '1 hour';
-  insert into public.portal_jelzes_jti (jti, lejar) values (p_jti, p_lejar) on conflict do nothing;
-  if not found then
-    return 'mar-felhasznalt';
-  end if;
   if p_szerep is not null and p_szerep not in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos') then
     raise exception 'Ismeretlen szerepkör: %', p_szerep using errcode = '22023';
-  end if;
-  select id into v_ceg from public.companies where portal_company_id = p_portal_ceg;
-  if v_ceg is null then
-    return 'nincs-ceg';
-  end if;
-  select id into v_user from public.profiles where lower(email) = lower(btrim(p_email)) limit 1;
-  if v_user is null then
-    return 'nincs-felhasznalo';
   end if;
   select * into v_regi from public.company_members where company_id = v_ceg and user_id = v_user;
   if p_szerep is null then
@@ -980,8 +966,78 @@ begin
   return 'igazitva';
 end;
 $$;
+revoke all on function public.portal_tagsag_alkalmaz(uuid, uuid, text) from public, anon, authenticated;
+
+-- Egy cég: a portál jelzése vagy a keret belépési jegye (egyszer használható azonosítóval).
+create or replace function public.portal_tagsag_igazitas(p_portal_ceg uuid, p_email text, p_szerep text, p_jti text, p_lejar timestamptz)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_ceg uuid;
+  v_user uuid;
+begin
+  delete from public.portal_jelzes_jti where lejar < now() - interval '1 hour';
+  insert into public.portal_jelzes_jti (jti, lejar) values (p_jti, p_lejar) on conflict do nothing;
+  if not found then
+    return 'mar-felhasznalt';
+  end if;
+  if p_szerep is not null and p_szerep not in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos') then
+    raise exception 'Ismeretlen szerepkör: %', p_szerep using errcode = '22023';
+  end if;
+  select id into v_ceg from public.companies where portal_company_id = p_portal_ceg;
+  if v_ceg is null then
+    return 'nincs-ceg';
+  end if;
+  select id into v_user from public.profiles where lower(email) = lower(btrim(p_email)) limit 1;
+  if v_user is null then
+    return 'nincs-felhasznalo';
+  end if;
+  return public.portal_tagsag_alkalmaz(v_ceg, v_user, p_szerep);
+end;
+$$;
 revoke all on function public.portal_tagsag_igazitas(uuid, text, text, text, timestamptz) from public, anon, authenticated;
 grant execute on function public.portal_tagsag_igazitas(uuid, text, text, text, timestamptz) to service_role;
+
+-- Önálló belépés (F26): a portál tagsági kivonata a felhasználó összes portál-cégéről. Ahol a cég a Készletben
+-- össze van rendelve, a tagság a kivonat szerint igazodik; a portálról kapott (portal_kezeli) tagság megszűnik
+-- azokban a portál-cégekben, amelyek már nincsenek a kivonatban (a portálon eltávolították).
+create or replace function public.portal_tagsag_kivonat(p_email text, p_cegek jsonb, p_jti text, p_lejar timestamptz)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_user uuid;
+  v_sor jsonb;
+  v_ceg uuid;
+  v_eredmeny jsonb := '[]'::jsonb;
+  v_tag record;
+begin
+  delete from public.portal_jelzes_jti where lejar < now() - interval '1 hour';
+  insert into public.portal_jelzes_jti (jti, lejar) values (p_jti, p_lejar) on conflict do nothing;
+  if not found then
+    return jsonb_build_object('eredmeny', 'mar-felhasznalt');
+  end if;
+  select id into v_user from public.profiles where lower(email) = lower(btrim(p_email)) limit 1;
+  if v_user is null then
+    return jsonb_build_object('eredmeny', 'nincs-felhasznalo');
+  end if;
+  for v_sor in select * from jsonb_array_elements(coalesce(p_cegek, '[]'::jsonb)) loop
+    select id into v_ceg from public.companies where portal_company_id = (v_sor ->> 'id')::uuid;
+    if v_ceg is not null then
+      v_eredmeny := v_eredmeny || jsonb_build_array(jsonb_build_object('ceg', v_ceg, 'eredmeny',
+        public.portal_tagsag_alkalmaz(v_ceg, v_user, nullif(v_sor ->> 'modulSzerep', ''))));
+    end if;
+  end loop;
+  for v_tag in
+    select m.company_id from public.company_members m join public.companies c on c.id = m.company_id
+     where m.user_id = v_user and m.portal_kezeli and c.portal_company_id is not null
+       and not exists (select 1 from jsonb_array_elements(coalesce(p_cegek, '[]'::jsonb)) e where (e ->> 'id')::uuid = c.portal_company_id)
+  loop
+    v_eredmeny := v_eredmeny || jsonb_build_array(jsonb_build_object('ceg', v_tag.company_id, 'eredmeny',
+      public.portal_tagsag_alkalmaz(v_tag.company_id, v_user, null)));
+  end loop;
+  return jsonb_build_object('eredmeny', 'igazitva', 'cegek', v_eredmeny);
+end;
+$$;
+revoke all on function public.portal_tagsag_kivonat(text, jsonb, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.portal_tagsag_kivonat(text, jsonb, text, timestamptz) to service_role;
 
 -- --- Név módosítása - KIZÁRÓLAG fő iroda jogosultság ------------------------
 -- Szándékosan NINCS általános UPDATE policy a profiles táblán (lásd fentebb

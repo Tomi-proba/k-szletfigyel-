@@ -11,6 +11,8 @@ let idegenKulcs: CryptoKey
 let jwk: JWK
 const ceg = randomUUID()
 let hivasok: Array<{ ceg: string; email: string; szerep: string | null; jti: string }>
+let kivonatHivasok: Array<{ email: string; cegek: Array<{ id: string; modulSzerep: string | null }> }> = []
+let portalKivonat: string | null = null
 const felhasznalt = new Set<string>()
 
 function fuggosegek(email: string | null = 'rita@pelda.hu'): Fuggosegek {
@@ -24,6 +26,8 @@ function fuggosegek(email: string | null = 'rita@pelda.hu'): Fuggosegek {
       felhasznalt.add(jti)
       return sz === null ? 'eltavolitva' : 'igazitva'
     },
+    kivonatKeres: async (t) => (t === 'jo-token' ? portalKivonat : null),
+    kivonat: async (e, cegek) => (kivonatHivasok.push({ email: e, cegek }), 'igazitva'),
   }
 }
 
@@ -76,5 +80,24 @@ describe('portal-tagsag (F25)', () => {
 
   it('üres kérés: 400', async () => {
     expect((await kezel({}, null, fuggosegek())).statusz).toBe(400)
+  })
+  it('F26: önálló belépéskor a portál aláírt kivonata szerint igazít; hamis vagy más fiókra szóló kivonat nem jó', async () => {
+    const ceg2 = randomUUID()
+    const kiv = (email = 'rita@pelda.hu', k: CryptoKey = kulcs) =>
+      alair({ esemeny: 'kivonat', email, cegek: [{ id: ceg, modulSzerep: 'raktaros', modulJogok: [] }, { id: ceg2, modulSzerep: null, modulJogok: [] }] }, TAGSAG_CIMZETT, k)
+    kivonatHivasok = []
+    portalKivonat = await kiv()
+    expect(await kezel({ onallo: true }, 'Bearer jo-token', fuggosegek())).toEqual({ statusz: 200, adat: { eredmeny: 'igazitva' } })
+    expect(kivonatHivasok).toEqual([{ email: 'rita@pelda.hu', cegek: [{ id: ceg, modulSzerep: 'raktaros' }, { id: ceg2, modulSzerep: null }] }])
+    // Token nélkül nincs; nem portál-felhasználó: nincs változás.
+    expect((await kezel({ onallo: true }, null, fuggosegek())).statusz).toBe(401)
+    portalKivonat = null
+    expect(await kezel({ onallo: true }, 'Bearer jo-token', fuggosegek())).toEqual({ statusz: 200, adat: { eredmeny: 'nincs-portal' } })
+    // Hamis aláírás, más fiókra szóló kivonat: elutasítva.
+    portalKivonat = await kiv('rita@pelda.hu', idegenKulcs)
+    expect((await kezel({ onallo: true }, 'Bearer jo-token', fuggosegek())).statusz).toBe(502)
+    portalKivonat = await kiv('masik@pelda.hu')
+    expect((await kezel({ onallo: true }, 'Bearer jo-token', fuggosegek())).statusz).toBe(403)
+    expect(kivonatHivasok).toHaveLength(1)
   })
 })

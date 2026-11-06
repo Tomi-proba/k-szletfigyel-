@@ -33,6 +33,7 @@ export const MODUL_SZEREPEK: Record<ModulKod, readonly ModulSzerepLeiras[]> = {
     { kod: 'ADMIN', cim: 'Adminisztrátor', admin: true },
     { kod: 'ACCOUNTANT', cim: 'Könyvelő' },
     { kod: 'APPROVER', cim: 'Jóváhagyó' },
+    { kod: 'VIEWER', cim: 'Megtekintő' },
     { kod: 'TAXPAYER', cim: 'Adózó (csak lát)' },
   ],
 }

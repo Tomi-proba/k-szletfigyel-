@@ -189,3 +189,31 @@ export function modulokParameterbol(ertek: string | null | undefined): ModulKod[
 export function modulokParameterbe(modulok: readonly ModulKod[]): string {
   return rendezettModulok(modulok).join(',')
 }
+
+// --- Irodai előfizetés (TERV.md F26a) -------------------------------------------------------------------
+// Könyvelőirodánál minden ügyfél külön cég. Ügyfelenként eldönthető (és később adatvesztés nélkül átállítható),
+// hogy az iroda fizet-e érte, vagy az ügyfél maga. Ha az iroda fizet, az ügyfél csomagjának díja a kedvezmény
+// szerint: a küszöb FELETT az iroda által fizetett ÖSSZES ügyfél díja a csomagár meghatározott része. A pontos
+// értékek üzleti döntés: itt egy helyen állíthatók (kiindulás: 10 ügyfél felett a csomagár 70%-a).
+export const IRODAI_KEDVEZMENY = {
+  /** Ennél több irodai fizetésű ügyfélnél jár a kedvezmény. */
+  kuszobUgyfelszam: 10,
+  /** A csomagár ennyi része (0–1) a küszöb felett. */
+  arany: 0.7,
+} as const
+
+export interface IrodaiKedvezmeny {
+  kuszobUgyfelszam: number
+  arany: number
+}
+
+/** Egy irodai fizetésű ügyfél havidíja (nettó, egész forintra kerekítve). */
+export function irodaiUgyfelDij(cs: Csomag, irodaiUgyfelSzam: number, k: IrodaiKedvezmeny = IRODAI_KEDVEZMENY): number {
+  return irodaiUgyfelSzam > k.kuszobUgyfelszam ? Math.round(cs.havidijNetto * k.arany) : cs.havidijNetto
+}
+
+/** Az iroda havi elszámolása: a fizetett ügyfelek díja és összege. */
+export function irodaiElszamolas(ugyfelek: ReadonlyArray<{ id: string; csomag: Csomag }>, k: IrodaiKedvezmeny = IRODAI_KEDVEZMENY) {
+  const tetelek = ugyfelek.map((u) => ({ id: u.id, csomag: u.csomag.kod, listaar: u.csomag.havidijNetto, dij: irodaiUgyfelDij(u.csomag, ugyfelek.length, k) }))
+  return { tetelek, osszesen: tetelek.reduce((s, t) => s + t.dij, 0), kedvezmenyes: ugyfelek.length > k.kuszobUgyfelszam }
+}

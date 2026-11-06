@@ -25,3 +25,19 @@ describe('programfüggetlen hivatkozás (I6)', () => {
     }
   })
 })
+
+describe('hivatkozás a közös keretben (F26)', () => {
+  it('a keret útvonala, ugyanazon a felületen: a Készlet saját útvonala előtaggal, a többi program a keret előtagjával', async () => {
+    const { keretModBeallitas } = await import('../src/keret/futas')
+    keretModBeallitas('/keszlet')
+    try {
+      expect(modulHivatkozas({ module: 'konyvelo', path: '/konyveles/1' })).toBe('/konyvelo/konyveles/1')
+      expect(modulHivatkozas({ module: 'eafa', path: '#/bevallas/9' })).toBe('/afa/bevallas/9')
+      expect(modulHivatkozas({ module: 'keszlet', path: '#/mozgasnaplo' })).toBe('/keszlet/mozgasnaplo')
+      expect(modulHivatkozas({ module: 'konyvelo', path: '//idegen.example/x' })).toBeNull()
+    } finally {
+      keretModBeallitas('')
+    }
+  })
+})
+

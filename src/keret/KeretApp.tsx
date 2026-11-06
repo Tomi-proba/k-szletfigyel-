@@ -34,10 +34,22 @@ export function KeretKepernyok({ alapUtvonal }: { alapUtvonal: string }) {
   }
   keretSupabaseBeallitas(k.supabaseToken)
   keretJegyBeallitas(() => k.jegyKeres('keszlet'))
+  // A más programra mutató hivatkozások (pl. a Könyvelő bizonylata) a keret útválasztójával nyílnak: ugyanazon a
+  // felületen, új ablak és újratöltés nélkül (F26). A Készlet saját hivatkozásait a saját útválasztója kezeli.
+  const kattintas = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    const a = (e.target as HTMLElement).closest('a')
+    const cel = a?.getAttribute('href')
+    if (!a || !cel || a.target === '_blank' || !cel.startsWith('/') || cel.startsWith('//')) return
+    e.preventDefault()
+    k.navigal(cel)
+  }
   return (
-    <AuthProvider>
-      <KeretKeszlet />
-    </AuthProvider>
+    <div onClick={kattintas} className="contents">
+      <AuthProvider>
+        <KeretKeszlet />
+      </AuthProvider>
+    </div>
   )
 }
 

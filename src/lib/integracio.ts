@@ -6,6 +6,7 @@ import { supabase } from './supabase'
 import { integracioFrissites, useStore } from '../store/useStore'
 import type { Movement } from '../types'
 import type { KonyveloNyitott } from './egyIgazsag'
+import { keretben, ut } from '../keret/futas'
 
 export type IntegracioTeendo = {
   id: string
@@ -83,6 +84,13 @@ const MODUL_CIMEK: Record<ModulHivatkozas['module'], string | undefined> = {
  */
 export function modulHivatkozas(h: ModulHivatkozas | null | undefined, cimek: Partial<Record<ModulHivatkozas['module'], string | undefined>> = MODUL_CIMEK): string | null {
   if (!h || !/^(\/|#\/)/.test(h.path) || h.path.startsWith('//')) return null
+  // A közös keretben (F26): a keret útvonala, ugyanazon a felületen (a keret kiválasztott cégénél).
+  if (keretben()) {
+    const p = h.path.replace(/^#/, '')
+    if (h.module === 'keszlet') return ut(p)
+    const elotag = ({ konyvelo: '/konyvelo', eafa: '/afa' } as Record<string, string>)[h.module]
+    return elotag ? `${elotag}${p}` : null
+  }
   if (h.module === 'keszlet') return h.path.startsWith('#') ? h.path : `#${h.path}`
   const alap = cimek[h.module]?.trim().replace(/\/+$/, '')
   if (!alap) return null

@@ -1,4 +1,4 @@
-# Készletfigyelő
+# Készletkezelő
 
 Készletkezelő webalkalmazás kisebb kereskedéseknek (ajtó-ablak, építőanyag,
 vasáru stb.). Segít naponta gyorsan vezetni a készletmozgásokat, kezeli a

@@ -4,3 +4,4 @@ export * from "./kliens.ts";
 export * from "./egyeztetes.ts";
 export * from "./teendok.ts";
 export * from "./nyitott.ts";
+export * from "./belepes.ts";

@@ -1,4 +1,4 @@
-# A Készletfigyelő integrációs szolgáltatása
+# A Készletkezelő integrációs szolgáltatása
 
 A Készlet és az integrációs központ (Tomi-proba/AWEBOLDAL `apps/kozpont`) közötti kapocs (TERV.md F15.2,
 DOCUMENTATION.md 23.). A Készlet nélküle is teljes értékűen működik; csak összekapcsolt cégnél van szerepe.

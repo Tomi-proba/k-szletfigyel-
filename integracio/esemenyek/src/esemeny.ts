@@ -20,7 +20,7 @@ export type Module = (typeof MODULES)[number];
 
 export const MODULE_LABELS: Record<Module, string> = {
   konyvelo: "Könyvelő",
-  keszlet: "Készletfigyelő",
+  keszlet: "Készletkezelő",
   eafa: "eÁFA",
 };
 

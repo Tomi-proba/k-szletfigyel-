@@ -2,7 +2,7 @@
   "name": "keszletfigyelo-desktop",
   "version": "1.0.0",
   "description": "Keszletkezelo alkalmazas kisebb kereskedeseknek",
-  "author": "Keszletfigyelo",
+  "author": "Keszletkezelo",
   "private": true,
   "main": "main.js",
   "devDependencies": {
@@ -33,7 +33,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "Keszletfigyelo-Setup.exe"
+      "artifactName": "Keszletkezelo-Setup.exe",
+      "shortcutName": "Készletkezelő",
+      "uninstallDisplayName": "Készletkezelő"
     }
   }
 }

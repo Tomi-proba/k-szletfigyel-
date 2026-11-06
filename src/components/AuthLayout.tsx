@@ -10,7 +10,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
     <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="text-xl font-bold text-[var(--color-text)]">Készletfigyelő</div>
+          <div className="text-xl font-bold text-[var(--color-text)]">Készletkezelő</div>
         </div>
         <Card>
           <h1 className="mb-1 text-lg font-semibold text-[var(--color-text)]">{title}</h1>

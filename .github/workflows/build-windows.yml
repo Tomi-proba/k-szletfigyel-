@@ -56,6 +56,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Keszletfigyelo-Windows-Setup
+          name: Keszletkezelo-Windows-Setup
           path: electron/dist-electron/*.exe
           retention-days: 30

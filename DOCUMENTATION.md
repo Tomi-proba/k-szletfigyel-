@@ -1,4 +1,4 @@
-# Készletfigyelő — működési és technikai dokumentáció
+# Készletkezelő — működési és technikai dokumentáció
 
 Ez a dokumentum az alkalmazás teljes működését írja le: mire való, hogyan van felépítve, milyen üzleti szabályok vezérlik, és hol található a kódban minden fontosabb logika. Célja, hogy bárki — beleértve a jövőbeli fejlesztőt vagy Claude-munkamenetet is — gyorsan tájékozódni tudjon anélkül, hogy a teljes kódbázist végig kellene olvasnia.
 
@@ -8,7 +8,7 @@ Ez a dokumentum az alkalmazás teljes működését írja le: mire való, hogyan
 
 ## 1. Mi ez az alkalmazás?
 
-A **Készletfigyelő** egy magyar nyelvű, kisvállalkozásoknak (elsősorban egy építőanyag/vasáru-kereskedésnek) szánt készletnyilvántartó és egyszerű vállalkozásirányítási (mini-ERP) alkalmazás. Fő funkciói:
+A **Készletkezelő** egy magyar nyelvű, kisvállalkozásoknak (elsősorban egy építőanyag/vasáru-kereskedésnek) szánt készletnyilvántartó és egyszerű vállalkozásirányítási (mini-ERP) alkalmazás. Fő funkciói:
 
 - termékek és készletszintek nyilvántartása, telephelyenként
 - beszerzések (bejövő mozgások) és eladások (kimenő mozgások) rögzítése, valós FIFO/súlyozott átlagár költségszámítással

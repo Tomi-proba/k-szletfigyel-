@@ -470,14 +470,14 @@ export function Layout() {
         >
           <Menu size={22} />
         </button>
-        <span className="font-semibold text-[var(--color-text)]">Készletfigyelő</span>
+        <span className="font-semibold text-[var(--color-text)]">Készletkezelő</span>
         <div className="w-9" />
       </header>
 
       <div className="mx-auto flex max-w-7xl">
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface)] p-4 md:flex">
           <Link to="/" className="mb-6 px-2 text-lg font-bold text-[var(--color-text)]">
-            Készletfigyelő
+            Készletkezelő
           </Link>
           <CegValaszto />
           {navLinks()}
@@ -497,7 +497,7 @@ export function Layout() {
             <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
             <div className="relative flex h-full w-72 flex-col overflow-y-auto bg-[var(--color-surface)] p-4 shadow-xl">
               <div className="mb-6 flex items-center justify-between px-2">
-                <span className="text-lg font-bold text-[var(--color-text)]">Készletfigyelő</span>
+                <span className="text-lg font-bold text-[var(--color-text)]">Készletkezelő</span>
                 <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Bezárás" className="rounded-lg p-2 hover:bg-black/5">
                   <X size={20} />
                 </button>

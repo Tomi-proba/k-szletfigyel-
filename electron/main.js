@@ -1,4 +1,4 @@
-// Electron main process for the Készletfigyelő desktop build.
+// Electron main process for the Készletkezelő desktop build.
 //
 // A felületet egy saját, ÁLLANDÓ címről szolgáljuk ki (app://keszletfigyelo). Korábban minden
 // indításkor véletlen porton futó helyi webszerverről jött; a böngészőmotor a helyi tárolót címenként
@@ -122,7 +122,7 @@ function createWindow() {
     height: 880,
     minWidth: 380,
     minHeight: 560,
-    title: 'Készletfigyelő',
+    title: 'Készletkezelő',
     backgroundColor: '#f4f5f7',
     icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {

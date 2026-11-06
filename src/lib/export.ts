@@ -26,7 +26,7 @@ function triggerDownload(blob: Blob, filename: string) {
 export async function exportToExcel<T>(filename: string, sheetName: string, columns: ExportColumn<T>[], rows: T[]): Promise<void> {
   const { default: ExcelJS } = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = 'Készletfigyelő'
+  workbook.creator = 'Készletkezelő'
   workbook.created = new Date()
 
   const sheet = workbook.addWorksheet(sheetName)

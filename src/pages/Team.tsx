@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
+import { keretben } from '../keret/futas'
 import { useStore } from '../store/useStore'
 import type { UserRole } from '../types/auth'
 import { Button, Card, EmptyState, Field, Input, PageHeader, Select } from '../components/ui'
@@ -23,6 +24,8 @@ interface CompanyUserRow {
   role: UserRole
   assignedLocationName: string | null
   isPlatformAdmin: boolean
+  /** A tag szerepét a portál adja (AWEBOLDAL TERV.md F25). */
+  portalKezeli: boolean
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -93,7 +96,7 @@ export function Team() {
     // A kiválasztott cég tagjai (company_members) a profiljukkal (AWEBOLDAL TERV.md F24 KS4).
     const { data } = await supabase
       .from('company_members')
-      .select('role, assigned_location_name, profiles(id, email, name, is_platform_admin)')
+      .select('role, assigned_location_name, portal_kezeli, profiles(id, email, name, is_platform_admin)')
       .eq('company_id', company.id)
     if (data) {
       setUsers(
@@ -106,6 +109,7 @@ export function Team() {
             role: row.role as UserRole,
             assignedLocationName: (row.assigned_location_name as string | null) ?? null,
             isPlatformAdmin: Boolean(p.is_platform_admin),
+            portalKezeli: Boolean(row.portal_kezeli),
           }
         }),
       )
@@ -153,6 +157,7 @@ export function Team() {
         role,
         assignedLocationId: role === 'raktaros' ? locationId : null,
         assignedLocationName: role === 'raktaros' ? (location?.name ?? null) : null,
+        portalKezeli: false,
       },
     })
     setBusy(false)
@@ -169,8 +174,17 @@ export function Team() {
 
   return (
     <div>
-      <PageHeader title="Csapat" subtitle="Új felhasználó létrehozása és telephelyhez rendelése" />
+      <PageHeader title="Csapat" subtitle={keretben() ? 'A cég felhasználói' : 'Új felhasználó létrehozása és telephelyhez rendelése'} />
 
+      {/* A közös keretben a felhasználókat egy helyen, a portálon kezelik (AWEBOLDAL TERV.md F25); önállóan a régi. */}
+      {keretben() ? (
+        <Card className="mb-5" data-portalon-kezelik>
+          <p className="text-sm">
+            A felhasználókat és a szerepköröket a portálon kezeled: <strong>Előfizetés → Tagok és hozzáférés</strong>. Ott meghívott munkatárs külön
+            felvétel nélkül, a megadott szerepkörrel lép be a Készletkezelőbe; a változás itt azonnal érvényes.
+          </p>
+        </Card>
+      ) : (
       <Card className="mb-5">
         <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Új felhasználó létrehozása</h2>
         <p className="mb-3 text-xs text-[var(--color-text-muted)]">
@@ -239,6 +253,7 @@ export function Team() {
           </div>
         )}
       </Card>
+      )}
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Felhasználók</h2>
@@ -308,7 +323,10 @@ export function Team() {
                     <td className="py-2">
                       {u.email} {u.isPlatformAdmin && <span className="text-xs text-[var(--color-text-muted)]">(üzemeltető)</span>}
                     </td>
-                    <td className="py-2">{ROLE_LABELS[u.role] ?? u.role}</td>
+                    <td className="py-2">
+                      {ROLE_LABELS[u.role] ?? u.role}
+                      {u.portalKezeli && <span className="ml-1 text-xs text-[var(--color-text-muted)]">(a portálon kezelik)</span>}
+                    </td>
                     <td className="py-2">{u.assignedLocationName ?? '—'}</td>
                   </tr>
                 ))}

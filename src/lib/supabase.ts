@@ -53,6 +53,33 @@ export let supabase: SupabaseClient | null = isSupabaseConfigured
 let keretToken: (() => Promise<string | null>) | null = null
 export const keretTokenForras = () => keretToken
 
+/** A keret belépési jegye a Készletnek (a kiválasztott portál-céghez): a tagság a portál szerint igazodik (F25). */
+let keretJegy: (() => Promise<string>) | null = null
+export const keretJegyBeallitas = (fn: () => Promise<string>) => {
+  keretJegy = fn
+}
+
+/**
+ * Felhasználókezelés egy helyen (AWEBOLDAL TERV.md F25): a keretben belépéskor és cégváltáskor a portál jegyével
+ * a portal-tagsag Edge Function a portál szerint létrehozza, igazítja vagy megszünteti a tagságot. Ha nem érhető
+ * el (pl. még nincs telepítve), a meglévő tagsággal megyünk tovább; a portál jelzése később igazít.
+ */
+export async function portalTagsagIgazitas(): Promise<string | null> {
+  if (!supabase || !keretJegy) return null
+  try {
+    const jegy = await keretJegy()
+    const { data, error } = await supabase.functions.invoke('portal-tagsag', { body: { jegy } })
+    if (error) {
+      console.warn('A tagság igazítása a portál szerint nem sikerült:', error.message)
+      return null
+    }
+    return (data as { eredmeny?: string } | null)?.eredmeny ?? null
+  } catch (e) {
+    console.warn('A tagság igazítása a portál szerint nem sikerült:', e)
+    return null
+  }
+}
+
 /**
  * A közös keretben a Készlet a keret Supabase-munkamenetét HASZNÁLJA: minden kéréshez a keret adja a hozzáférési
  * tokent (a keret frissíti), a Készlet saját munkamenetet nem tárol és nem frissít – így a két program frissítő

@@ -5,7 +5,7 @@
 // subscription state layered on top.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { isSupabaseConfigured, keretTokenForras, kivalasztottCegBeallitas, supabase, tokenTartalom } from '../lib/supabase'
+import { isSupabaseConfigured, keretTokenForras, kivalasztottCegBeallitas, portalTagsagIgazitas, supabase, tokenTartalom } from '../lib/supabase'
 import { computeIsReadOnly } from '../lib/subscription'
 import { mapProfileRow, mapTagsagRow, type CegTagsag, type Company, type Profile, type UserRole } from '../types/auth'
 import { fetchBusinessData } from '../lib/remoteSync'
@@ -200,6 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     profilSor.current = profileRow
+    // A keretben a portál az egyetlen hely (F25): a kiválasztott portál-cégben a tagság a portál szerint igazodik.
+    if (keretTok && portalCeg.current) await portalTagsagIgazitas()
     // A felhasználó cégei (AWEBOLDAL TERV.md F24 KS4): a cégválasztóhoz mindet látja, az adatokat csak a
     // kiválasztott cégben (az x-keszlet-ceg fejléc szerint, lásd lib/supabase.ts).
     const { data: tagSorok, error: tagHiba } = await supabase
@@ -462,7 +464,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       portalCeg.current = portalCegId
       if (!session) return
       const t = tagsagok.find((x) => x.company.portalCompanyId === portalCegId)
-      if (t && profilSor.current) {
+      // A keretben cégváltáskor is a portál szerint igazítunk (F25): ha a tagság változott, teljes újratöltés.
+      const igazitas = keretTokenForras() ? await portalTagsagIgazitas() : null
+      if (t && profilSor.current && (igazitas === null || igazitas === 'mar-felhasznalt')) {
         await cegValasztas(t.company.id)
         return
       }

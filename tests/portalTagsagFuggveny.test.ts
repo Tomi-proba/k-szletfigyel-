@@ -1,0 +1,80 @@
+// A portal-tagsag Edge Function logikája (AWEBOLDAL TERV.md F25): csak a portál aláírt, a Készletnek szóló
+// jelzése és kétlépcsős belépési jegye fogadható el; a jegy csak a saját fiókra érvényes.
+import { randomUUID } from 'node:crypto'
+import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, type CryptoKey, type JWK } from 'jose'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { BELEPESI_CIMZETT, TAGSAG_CIMZETT, kezel, type Fuggosegek } from '../supabase/functions/portal-tagsag/logika'
+
+const KIADO = 'http://portal.teszt'
+let kulcs: CryptoKey
+let idegenKulcs: CryptoKey
+let jwk: JWK
+const ceg = randomUUID()
+let hivasok: Array<{ ceg: string; email: string; szerep: string | null; jti: string }>
+const felhasznalt = new Set<string>()
+
+function fuggosegek(email: string | null = 'rita@pelda.hu'): Fuggosegek {
+  const kulcsok = createLocalJWKSet({ keys: [jwk] })
+  return {
+    ellenoriz: async (t, cimzett) => (await jwtVerify(t, kulcsok, { issuer: KIADO, audience: cimzett, algorithms: ['ES256'] })).payload,
+    felhasznaloEmail: async (t) => (t === 'jo-token' ? email : null),
+    igazit: async (c, e, sz, jti) => {
+      hivasok.push({ ceg: c, email: e, szerep: sz, jti })
+      if (felhasznalt.has(jti)) return 'mar-felhasznalt'
+      felhasznalt.add(jti)
+      return sz === null ? 'eltavolitva' : 'igazitva'
+    },
+  }
+}
+
+const alair = (payload: Record<string, unknown>, cimzett: string, k: CryptoKey = kulcs) =>
+  new SignJWT(payload).setProtectedHeader({ alg: 'ES256', kid: 'k1' }).setIssuer(KIADO).setAudience(cimzett).setSubject('portal-sub').setJti(randomUUID()).setIssuedAt().setExpirationTime('120s').sign(k)
+
+const jelzes = (modulSzerep: string | null, cimzett = TAGSAG_CIMZETT, k?: CryptoKey) =>
+  alair({ esemeny: 'tagsag', email: 'rita@pelda.hu', name: 'Raktár Rita', ceg: { id: ceg, nev: 'Minta Kft.' }, modulSzerep }, cimzett, k)
+const jegy = (modulSzerep: string | null, aal = 'aal2') =>
+  alair({ sid: 'sid-1', email: 'Rita@Pelda.hu', name: 'Raktár Rita', aal, tetlenseg_perc: 480, ceg: { id: ceg, nev: 'Minta Kft.', szerep: 'munkatars', modulSzerep, csakOlvashato: false } }, BELEPESI_CIMZETT)
+
+beforeAll(async () => {
+  const p = await generateKeyPair('ES256', { extractable: true })
+  kulcs = p.privateKey
+  jwk = { ...(await exportJWK(p.publicKey)), kid: 'k1', alg: 'ES256' }
+  idegenKulcs = (await generateKeyPair('ES256')).privateKey
+})
+
+describe('portal-tagsag (F25)', () => {
+  it('a portál jelzése a tagságot a portál szerint igazítja, eltávolításkor is', async () => {
+    hivasok = []
+    expect(await kezel({ jelzes: await jelzes('raktaros') }, null, fuggosegek())).toEqual({ statusz: 200, adat: { eredmeny: 'igazitva' } })
+    expect(await kezel({ jelzes: await jelzes(null) }, null, fuggosegek())).toEqual({ statusz: 200, adat: { eredmeny: 'eltavolitva' } })
+    expect(hivasok.map((h) => [h.ceg, h.email, h.szerep])).toEqual([
+      [ceg, 'rita@pelda.hu', 'raktaros'],
+      [ceg, 'rita@pelda.hu', null],
+    ])
+  })
+
+  it('hamis aláírás, más modulnak szóló jelzés, ismeretlen szerep: elutasítva, semmi nem változik', async () => {
+    hivasok = []
+    expect((await kezel({ jelzes: await jelzes('raktaros', TAGSAG_CIMZETT, idegenKulcs) }, null, fuggosegek())).statusz).toBe(401)
+    expect((await kezel({ jelzes: await jelzes('raktaros', 'eafa-csomag:tagsag:konyvelo') }, null, fuggosegek())).statusz).toBe(401)
+    expect((await kezel({ jelzes: await jelzes('fonok') }, null, fuggosegek())).statusz).toBe(400)
+    // A belépési jegy nem jelzés.
+    expect((await kezel({ jelzes: await jegy('raktaros') }, null, fuggosegek())).statusz).toBe(401)
+    expect(hivasok).toEqual([])
+  })
+
+  it('belépéskor a jegy a saját fiókra igazít; más fiók tokenjével, kétlépcsős nélkül vagy kétszer nem', async () => {
+    hivasok = []
+    const j = await jegy('raktaros')
+    expect(await kezel({ jegy: j }, null, fuggosegek())).toMatchObject({ statusz: 401 })
+    expect(await kezel({ jegy: j }, 'Bearer jo-token', fuggosegek('masik@pelda.hu'))).toMatchObject({ statusz: 403, adat: { hiba: 'mas-felhasznalo' } })
+    expect(await kezel({ jegy: j }, 'Bearer jo-token', fuggosegek())).toEqual({ statusz: 200, adat: { eredmeny: 'igazitva', szerep: 'raktaros' } })
+    expect(await kezel({ jegy: j }, 'Bearer jo-token', fuggosegek())).toMatchObject({ statusz: 401, adat: { hiba: 'mar-felhasznalt' } })
+    expect(await kezel({ jegy: await jegy('raktaros', 'aal1') }, 'Bearer jo-token', fuggosegek())).toMatchObject({ statusz: 401, adat: { hiba: 'nem-ketlepcsos' } })
+    expect(hivasok.map((h) => h.szerep)).toEqual(['raktaros', 'raktaros'])
+  })
+
+  it('üres kérés: 400', async () => {
+    expect((await kezel({}, null, fuggosegek())).statusz).toBe(400)
+  })
+})

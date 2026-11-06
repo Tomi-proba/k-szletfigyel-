@@ -9,7 +9,7 @@ import { ariaFelirat, feliratok } from '@aweboldal/modulok'
 import { AuthProvider, useAuth } from '../hooks/useAuth'
 import { useAlerts } from '../hooks/useAlerts'
 import { useHydrated } from '../hooks/useHydrated'
-import { keretSupabaseBeallitas } from '../lib/supabase'
+import { keretJegyBeallitas, keretSupabaseBeallitas } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import { Utvonalak } from '../Utvonalak'
 import { MentesJelzo } from '../components/MentesJelzo'
@@ -33,6 +33,7 @@ export function KeretKepernyok({ alapUtvonal }: { alapUtvonal: string }) {
     )
   }
   keretSupabaseBeallitas(k.supabaseToken)
+  keretJegyBeallitas(() => k.jegyKeres('keszlet'))
   return (
     <AuthProvider>
       <KeretKeszlet />

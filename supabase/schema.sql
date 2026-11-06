@@ -181,6 +181,8 @@ create table if not exists public.company_members (
   assigned_location_id uuid references public.locations (id),
   assigned_location_name text,
   created_at timestamptz not null default now(),
+  -- A tag szerepét a portál adja (AWEBOLDAL TERV.md F25: felhasználókezelés egy helyen); lásd portal_tagsag_igazitas.
+  portal_kezeli boolean not null default false,
   primary key (company_id, user_id),
   check (role <> 'raktaros' or assigned_location_id is not null)
 );
@@ -910,6 +912,76 @@ revoke all on function public.ceg_portal_osszerendeles(uuid) from public, anon;
 revoke all on function public.meghivo_elfogadasa(text, text) from public, anon, authenticated;
 grant execute on function public.ceg_letrehozasa(text, uuid) to authenticated;
 grant execute on function public.ceg_portal_osszerendeles(uuid) to authenticated;
+
+-- --- Felhasználókezelés egy helyen: a portál tagság-igazítása (AWEBOLDAL TERV.md F25) -----------------
+-- A portál a tagság minden változásáról (meghívás, szerepváltás, eltávolítás) aláírt jelzést küld, a keret
+-- pedig belépéskor a portál jegyét adja át: mindkettőt a portal-tagsag Edge Function ellenőrzi (a portál
+-- nyilvános kulcsával), és ezt a függvényt hívja a service role kulccsal. A böngészőből nem hívható.
+-- Hozzáférés nélkül (p_szerep null) a tagság megszűnik: az RLS-szabályok azonnal elzárják a cég adatait.
+create table if not exists public.portal_jelzes_jti (
+  jti text primary key,
+  lejar timestamptz not null
+);
+alter table public.portal_jelzes_jti enable row level security;
+
+create or replace function public.portal_tagsag_igazitas(p_portal_ceg uuid, p_email text, p_szerep text, p_jti text, p_lejar timestamptz)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_ceg uuid;
+  v_user uuid;
+  v_regi public.company_members%rowtype;
+  v_telephely uuid;
+  v_telephely_nev text;
+begin
+  delete from public.portal_jelzes_jti where lejar < now() - interval '1 hour';
+  insert into public.portal_jelzes_jti (jti, lejar) values (p_jti, p_lejar) on conflict do nothing;
+  if not found then
+    return 'mar-felhasznalt';
+  end if;
+  if p_szerep is not null and p_szerep not in ('raktaros', 'iroda', 'fo_iroda', 'tulajdonos') then
+    raise exception 'Ismeretlen szerepkör: %', p_szerep using errcode = '22023';
+  end if;
+  select id into v_ceg from public.companies where portal_company_id = p_portal_ceg;
+  if v_ceg is null then
+    return 'nincs-ceg';
+  end if;
+  select id into v_user from public.profiles where lower(email) = lower(btrim(p_email)) limit 1;
+  if v_user is null then
+    return 'nincs-felhasznalo';
+  end if;
+  select * into v_regi from public.company_members where company_id = v_ceg and user_id = v_user;
+  if p_szerep is null then
+    delete from public.company_members where company_id = v_ceg and user_id = v_user;
+    if v_regi.user_id is not null then
+      insert into public.audit_log (company_id, entity_type, entity_id, entity_label, action, description, created_by, created_by_name, created_by_email)
+      select v_ceg, 'csapat', v_user::text, coalesce(p.name, p.email), 'delete', 'Hozzáférés megszűnt (a portálon kezelik)', null, 'Portál', null
+        from public.profiles p where p.id = v_user;
+    end if;
+    perform public.tagsag_gyorsitotar_torlese();
+    return 'eltavolitva';
+  end if;
+  -- A raktárosnak telephely kell: a meglévőt megtartjuk, különben a cég első telephelye.
+  v_telephely := v_regi.assigned_location_id;
+  v_telephely_nev := v_regi.assigned_location_name;
+  if p_szerep = 'raktaros' and v_telephely is null then
+    select id, name into v_telephely, v_telephely_nev from public.locations where company_id = v_ceg order by created_at limit 1;
+  end if;
+  insert into public.company_members (company_id, user_id, role, assigned_location_id, assigned_location_name, portal_kezeli)
+  values (v_ceg, v_user, p_szerep, case when p_szerep = 'raktaros' then v_telephely end, case when p_szerep = 'raktaros' then v_telephely_nev end, true)
+  on conflict (company_id, user_id) do update
+    set role = excluded.role, assigned_location_id = excluded.assigned_location_id, assigned_location_name = excluded.assigned_location_name, portal_kezeli = true;
+  if v_regi.user_id is null or v_regi.role is distinct from p_szerep then
+    insert into public.audit_log (company_id, entity_type, entity_id, entity_label, action, description, created_by, created_by_name, created_by_email)
+    select v_ceg, 'csapat', v_user::text, coalesce(p.name, p.email), case when v_regi.user_id is null then 'create' else 'update' end,
+           'Szerepkör a portál szerint: ' || coalesce(v_regi.role || ' → ', '') || p_szerep, null, 'Portál', null
+      from public.profiles p where p.id = v_user;
+  end if;
+  perform public.tagsag_gyorsitotar_torlese();
+  return 'igazitva';
+end;
+$$;
+revoke all on function public.portal_tagsag_igazitas(uuid, text, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.portal_tagsag_igazitas(uuid, text, text, text, timestamptz) to service_role;
 
 -- --- Név módosítása - KIZÁRÓLAG fő iroda jogosultság ------------------------
 -- Szándékosan NINCS általános UPDATE policy a profiles táblán (lásd fentebb

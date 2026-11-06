@@ -174,3 +174,4 @@ export function csomagKod(modulok: readonly ModulKod[]): CsomagKod | null {
 
 export * from './idoszak.ts'
 export * from './gyorsbillentyuk.ts'
+export * from './szerepek.ts'

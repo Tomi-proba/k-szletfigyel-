@@ -13,7 +13,9 @@ import { asztali } from './asztali'
 // Az asztali programban a szerver címe a felhasználó mappájában lévő beállítófájlból jön
 // (keszletfigyelo-beallitas.json), nem a telepítőbe fordítva: így a szolgáltató cseréje nem igényel új
 // telepítőt. A webes változatban a build-környezetváltozók adják, mint eddig.
-const supabaseUrl = (asztali?.beallitas.supabaseUrl || import.meta.env.VITE_SUPABASE_URL) as string | undefined
+// „sajat-cim": a Supabase ugyanazon a címen érhető el, mint a felület (a közös keret átjáróján át; bemutató).
+const beallitottUrl = (asztali?.beallitas.supabaseUrl || import.meta.env.VITE_SUPABASE_URL) as string | undefined
+const supabaseUrl = beallitottUrl === 'sajat-cim' && typeof window !== 'undefined' ? window.location.origin : beallitottUrl
 const supabaseAnonKey = (asztali?.beallitas.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)

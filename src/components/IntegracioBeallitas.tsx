@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { integracioAllapot, kapcsolodasiKodKeszitese, valtozasKihagyasa, type EgyeztetesEredmeny, type IntegracioAllapot, type IntegracioTeendo } from '../lib/integracio'
 import { formatDate, formatDateTime } from '../lib/format'
+import { keretben } from '../keret/futas'
 
 export function IntegracioBeallitas({ foIroda }: { foIroda: boolean }) {
   const remote = useStore((s) => s.dataMode === 'remote')
@@ -91,7 +92,14 @@ export function IntegracioBeallitas({ foIroda }: { foIroda: boolean }) {
         )
       )}
 
-      {foIroda && (
+      {foIroda && keretben() && !allapot?.osszekapcsolva && (
+        // A közös felületen (F27 K) a portál magától kapcsolja össze a programokat: kódot nem kell készíteni.
+        <p className="card card-muted muted text-sm" data-automatikus-osszekapcsolas>
+          Az összekapcsolás magától történik: kódot nem kell készíteni. Az állapotot a közös felület <strong>Beállítások</strong> oldalán látja.
+        </p>
+      )}
+
+      {foIroda && !keretben() && (
         <div className="card card-muted flex flex-col gap-2">
           <h3 className="font-semibold">Kapcsolódási kód</h3>
           <p className="muted text-sm">

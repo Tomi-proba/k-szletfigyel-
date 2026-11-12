@@ -9,10 +9,13 @@
 //     egyszer használható); a jegyben lévő e-mail-címnek egyeznie kell a token felhasználójáéval.
 //  3. Önálló belépéskor (F26): { onallo: true } + a felhasználó Supabase-tokenje – a függvény a felhasználó tokenjével
 //     szerverről kéri a portál aláírt tagsági kivonatát (minden portál-cég Készlet-szerepe), és aszerint igazít.
+//  4. A portál kérése (F27 K, szerverről szerverre): { keres } – a programok automatikus összekapcsolása: kapcsolódási
+//     kód a központhoz a portál cégéhez rendelt cégre, a felhasználónak nem kell kódot másolnia.
 // Mindegyik esetben a portál a forrás: a tagság a portál szerint jön létre, változik vagy szűnik meg.
 
 export const TAGSAG_CIMZETT = 'eafa-csomag:tagsag:keszlet'
 export const BELEPESI_CIMZETT = 'eafa-csomag:modul:keszlet'
+export const KERES_CIMZETT = 'eafa-csomag:keres:keszlet'
 const SZEREPEK = ['raktaros', 'iroda', 'fo_iroda', 'tulajdonos']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -25,6 +28,8 @@ export interface Fuggosegek {
   igazit(portalCeg: string, email: string, szerep: string | null, jti: string, lejar: Date): Promise<string>
   /** A portál tagsági kivonata a felhasználó tokenjével (null: a portál nem adott, pl. nem portál-felhasználó). */
   kivonatKeres(accessToken: string): Promise<string | null>
+  /** public.portal_kapcsolodasi_kod (service role): { kod, lejar } vagy { hiba: 'nincs-ceg' | 'mar-felhasznalt' }. */
+  kapcsolodasiKod(portalCeg: string, adoszam: string, jti: string, lejar: Date): Promise<{ kod?: string; lejar?: string; hiba?: string }>
   /** public.portal_tagsag_kivonat (service role). */
   kivonat(email: string, cegek: Array<{ id: string; modulSzerep: string | null }>, jti: string, lejar: Date): Promise<unknown>
 }
@@ -46,7 +51,24 @@ function adatok(p: Record<string, unknown>) {
 }
 
 export async function kezel(torzs: unknown, authorization: string | null, d: Fuggosegek): Promise<Valasz> {
-  const b = (torzs ?? {}) as { jelzes?: unknown; jegy?: unknown }
+  const b = (torzs ?? {}) as { jelzes?: unknown; jegy?: unknown; keres?: unknown }
+  if (typeof b.keres === 'string') {
+    let p: Record<string, unknown>
+    try {
+      p = await d.ellenoriz(b.keres, KERES_CIMZETT)
+    } catch {
+      return hiba(401, 'ervenytelen-keres', 'Érvénytelen portál-kérés.')
+    }
+    const ceg = p.ceg as Record<string, unknown> | undefined
+    if (p.esemeny !== 'kapcsolat' || typeof p.jti !== 'string' || typeof p.exp !== 'number' || !ceg || typeof ceg.id !== 'string' || !UUID.test(ceg.id))
+      return hiba(400, 'ervenytelen-keres', 'Érvénytelen portál-kérés.')
+    if (p.feladat !== 'kozpont-kod') return hiba(422, 'ismeretlen-feladat', 'Ezt a kérést a Készletkezelő nem szolgálja ki.')
+    const v = await d.kapcsolodasiKod(ceg.id, String(ceg.adoszam ?? ''), p.jti, new Date(p.exp * 1000))
+    if (v.hiba === 'mar-felhasznalt') return hiba(401, 'mar-felhasznalt', 'Ezt a kérést már felhasználták.')
+    if (v.hiba === 'nincs-ceg') return hiba(409, 'nincs-ceg', 'A Készletkezelő még nincs megnyitva ennél a cégnél.')
+    if (!v.kod) return hiba(500, 'belso-hiba', 'A kód nem készült el.')
+    return { statusz: 200, adat: { kod: v.kod, lejar: v.lejar } }
+  }
   if (typeof b.jelzes === 'string') {
     let p: Record<string, unknown>
     try {

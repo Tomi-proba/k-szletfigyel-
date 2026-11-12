@@ -101,3 +101,23 @@ leiras('portál tagság-igazítás (F25)', () => {
     expect(kod).toBe('42501')
   })
 })
+
+leiras('a portál kérése: kapcsolódási kód (F27 K)', () => {
+  const kod = async (ceg: string, jti = randomUUID()) =>
+    (await pool.query("select public.portal_kapcsolodasi_kod($1, '10773381-2-44', $2, now() + interval '1 minute') as v", [ceg, jti])).rows[0].v
+  it('a portál cégéhez rendelt cégre egyszer használható kód készül (a korábbi érvényét veszti); ismeretlen cégnél nincs-ceg', async () => {
+    const v = await kod(portalCeg)
+    expect(v.kod).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+    await kod(portalCeg)
+    const { rows } = await pool.query('select count(*)::int as n from integracio.kapcsolodasi_kodok where company_id = $1 and felhasznalva is null and visszavonva is null', [tulaj.companyId])
+    expect(rows[0].n).toBe(1)
+    expect(await kod(randomUUID())).toEqual({ hiba: 'nincs-ceg' })
+    const jti = randomUUID()
+    await kod(portalCeg, jti)
+    expect(await kod(portalCeg, jti)).toEqual({ hiba: 'mar-felhasznalt' })
+  })
+  it('böngészőből (bejelentkezett felhasználóként) nem hívható', async () => {
+    expect(await hibakod(nevebenFut(pool, tulaj.id, (c) => c.query("select public.portal_kapcsolodasi_kod($1, '10773381-2-44', $2, now())", [portalCeg, randomUUID()])))).toBe('42501')
+  })
+})
+

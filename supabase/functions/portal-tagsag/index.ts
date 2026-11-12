@@ -49,6 +49,15 @@ Deno.serve(async (req: Request) => {
       const r = await fetch(`${kiado}/api/v1/tagsag-kivonat?modul=keszlet`, { headers: { authorization: `Bearer ${token}` } })
       return r.ok ? ((await r.json()).kivonat ?? null) : null
     },
+    kapcsolodasiKod: async (portalCeg, adoszam, jti, lejar) => {
+      const r = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_kapcsolodasi_kod`, {
+        method: 'POST',
+        headers: { apikey: service, authorization: `Bearer ${service}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ p_portal_ceg: portalCeg, p_adoszam: adoszam, p_jti: jti, p_lejar: lejar.toISOString() }),
+      })
+      if (!r.ok) throw new Error(`portal_kapcsolodasi_kod: ${r.status} ${await r.text()}`)
+      return await r.json()
+    },
     kivonat: async (email, cegek, jti, lejar) => {
       const r = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_tagsag_kivonat`, {
         method: 'POST',

@@ -16,10 +16,18 @@ export const kilepesiCimzett = (modul: JegyModul) => `eafa-csomag:kilepes:${modu
 /** A tagság-jelzés címzettje (F25): a portálon változott a felhasználó hozzáférése a modulhoz. */
 export const tagsagCimzett = (modul: JegyModul) => `eafa-csomag:tagsag:${modul}`;
 
+/**
+ * A portál kérésének címzettje (F27 K): a portál a háttérben, szerverről szerverre kéri a modult a programok
+ * összekapcsolására (kapcsolódási kód a központhoz, a NAV-hozzáférés kódja vagy beváltása). Felhasználó nem
+ * másol kódot: a portál aláírása bizonyítja, hogy a kérés a cég portál-párjáról szól.
+ */
+export const keresCimzett = (modul: JegyModul) => `eafa-csomag:keres:${modul}`;
+
 /** A belépési jegy élettartama (másodperc): csak az átadásra elég. */
 export const BELEPESI_JEGY_MP = 120;
 export const KILEPESI_JEGY_MP = 300;
 export const TAGSAG_JELZES_MP = 300;
+export const PORTAL_KERES_MP = 60;
 /** Megengedett óraeltérés az ellenőrzéskor (másodperc). */
 export const ORA_TURES_MP = 30;
 
@@ -112,6 +120,30 @@ export const tagsagKivonatSchema = z.object({
 });
 export type TagsagKivonat = z.infer<typeof tagsagKivonatSchema>;
 
+/** A portál kérései (F27 K). */
+export const PORTAL_KERES_FELADATOK = [
+  /** Kapcsolódási kód a központhoz (a modul a saját, a portál cégéhez rendelt cégére). */
+  "kozpont-kod",
+  /** eÁFA: kapcsolódási kód a Könyvelő NAV-hozzáféréséhez. */
+  "nav-kod",
+  /** Könyvelő: a NAV-hozzáférés állapota; `kod`-dal: összekapcsolás az eÁFA kódjával. */
+  "nav-kapcsolas",
+] as const;
+export type PortalKeresFeladat = (typeof PORTAL_KERES_FELADATOK)[number];
+
+export const portalKeresSchema = z.object({
+  iss: z.string(),
+  jti: z.string().min(8),
+  esemeny: z.literal("kapcsolat"),
+  feladat: z.enum(PORTAL_KERES_FELADATOK),
+  exp: z.number(),
+  iat: z.number(),
+  ceg: z.object({ id: z.string().uuid(), nev: z.string(), adoszam: z.string() }),
+  /** A Könyvelő NAV-összekapcsolásához: az eÁFA kódja. */
+  kod: z.string().max(60).optional(),
+});
+export type PortalKeres = z.infer<typeof portalKeresSchema>;
+
 export class JegyHiba extends Error {
   constructor(
     readonly kod: "ervenytelen" | "lejart" | "nem-ketlepcsos" | "mar-felhasznalt" | "rossz-cimzett",
@@ -187,6 +219,18 @@ export async function tagsagKivonatEllenorzes(
   const r = tagsagKivonatSchema.safeParse(payload);
   if (!r.success) throw new JegyHiba("ervenytelen", "Érvénytelen tagsági kivonat.");
   if (!(await opts.felhasznal(r.data.jti, new Date(r.data.exp * 1000)))) throw new JegyHiba("mar-felhasznalt", "Ezt a kivonatot már felhasználták.");
+  return r.data;
+}
+
+/** A portál kérésének ellenőrzése a modulban (F27 K): aláírás, kiadó, címzett, lejárat, egyszeri felhasználás. */
+export async function portalKeresEllenorzes(
+  jegy: string,
+  opts: { kulcsok: JWTVerifyGetKey; kiado: string; modul: JegyModul; felhasznal: (jti: string, lejar: Date) => Promise<boolean> },
+): Promise<PortalKeres> {
+  const payload = await ellenoriz(jegy, opts.kulcsok, opts.kiado, keresCimzett(opts.modul), PORTAL_KERES_MP);
+  const r = portalKeresSchema.safeParse(payload);
+  if (!r.success) throw new JegyHiba("ervenytelen", "Érvénytelen portál-kérés.");
+  if (!(await opts.felhasznal(r.data.jti, new Date(r.data.exp * 1000)))) throw new JegyHiba("mar-felhasznalt", "Ezt a kérést már felhasználták.");
   return r.data;
 }
 

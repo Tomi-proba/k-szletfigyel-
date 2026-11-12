@@ -1846,6 +1846,54 @@ begin
 end;
 $$;
 
+-- A portál kérése (AWEBOLDAL TERV.md F27 K: a programok automatikus összekapcsolása, kód másolása nélkül): a portál
+-- aláírt kérésére (a portal-tagsag Edge Function ellenőrzi) kapcsolódási kód a portál cégéhez rendelt cégre. Csak a
+-- service role hívhatja; a kérés azonosítója (jti) egyszer használható. Ha a cég még nincs meg (a tulajdonos még nem
+-- nyitotta meg a Készletkezelőt), 'nincs-ceg'; ha már össze van kapcsolva, 'mar-kapcsolva'.
+create or replace function public.portal_kapcsolodasi_kod(p_portal_ceg uuid, p_adoszam text, p_jti text, p_lejar timestamptz)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, integracio, extensions
+as $$
+declare
+  v_ceg uuid;
+  v_szamjegyek text := regexp_replace(coalesce(p_adoszam, ''), '\D', '', 'g');
+  v_abc constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  v_bajtok bytea := gen_random_bytes(16);
+  v_kod text := '';
+  v_lejar timestamptz := now() + interval '24 hours';
+begin
+  delete from public.portal_jelzes_jti where lejar < now() - interval '1 hour';
+  insert into public.portal_jelzes_jti (jti, lejar) values (p_jti, p_lejar) on conflict do nothing;
+  if not found then
+    return jsonb_build_object('hiba', 'mar-felhasznalt');
+  end if;
+  select id into v_ceg from public.companies where portal_company_id = p_portal_ceg;
+  if v_ceg is null then
+    return jsonb_build_object('hiba', 'nincs-ceg');
+  end if;
+  if length(v_szamjegyek) <> 11 then
+    raise exception using errcode = '22023', message = 'A portál cégének adószáma hiányos.';
+  end if;
+  for i in 0..15 loop
+    v_kod := v_kod || substr(v_abc, (get_byte(v_bajtok, i) % length(v_abc)) + 1, 1);
+  end loop;
+  update integracio.kapcsolodasi_kodok set visszavonva = now()
+   where company_id = v_ceg and felhasznalva is null and visszavonva is null;
+  insert into integracio.kapcsolodasi_kodok (company_id, kod_hash, adoszam, lejar, letrehozta)
+  values (v_ceg, encode(digest(v_kod, 'sha256'), 'hex'), v_szamjegyek, v_lejar, null);
+  insert into public.audit_log (company_id, entity_type, entity_id, entity_label, action, description, created_by_name, created_by_email)
+  values (v_ceg, 'integracio', v_ceg::text, 'Integráció', 'create', 'Kapcsolódási kód készült a portál kérésére (automatikus összekapcsolás)', 'Portál', null);
+  return jsonb_build_object(
+    'kod', substr(v_kod, 1, 4) || '-' || substr(v_kod, 5, 4) || '-' || substr(v_kod, 9, 4) || '-' || substr(v_kod, 13, 4),
+    'lejar', v_lejar
+  );
+end;
+$$;
+revoke all on function public.portal_kapcsolodasi_kod(uuid, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.portal_kapcsolodasi_kod(uuid, text, text, timestamptz) to service_role;
+
 -- Az integráció állapota a felületnek (az iroda-szintű szerepköröknek): összekapcsolás, hány esemény
 -- vár és mióta, mi nem állítható össze, és a nyitott Teendők.
 create or replace function public.integracio_allapot()

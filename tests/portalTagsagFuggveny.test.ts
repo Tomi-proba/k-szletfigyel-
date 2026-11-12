@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, type CryptoKey, type JWK } from 'jose'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { BELEPESI_CIMZETT, TAGSAG_CIMZETT, kezel, type Fuggosegek } from '../supabase/functions/portal-tagsag/logika'
+import { BELEPESI_CIMZETT, KERES_CIMZETT, TAGSAG_CIMZETT, kezel, type Fuggosegek } from '../supabase/functions/portal-tagsag/logika'
 
 const KIADO = 'http://portal.teszt'
 let kulcs: CryptoKey
@@ -28,8 +28,15 @@ function fuggosegek(email: string | null = 'rita@pelda.hu'): Fuggosegek {
     },
     kivonatKeres: async (t) => (t === 'jo-token' ? portalKivonat : null),
     kivonat: async (e, cegek) => (kivonatHivasok.push({ email: e, cegek }), 'igazitva'),
+    kapcsolodasiKod: async (c, adoszam, jti) => {
+      kodHivasok.push({ ceg: c, adoszam })
+      if (felhasznalt.has(jti)) return { hiba: 'mar-felhasznalt' }
+      felhasznalt.add(jti)
+      return c === ceg ? { kod: 'ABCD-EFGH-JKMN-PQRS', lejar: '2026-11-13T00:00:00Z' } : { hiba: 'nincs-ceg' }
+    },
   }
 }
+const kodHivasok: Array<{ ceg: string; adoszam: string }> = []
 
 const alair = (payload: Record<string, unknown>, cimzett: string, k: CryptoKey = kulcs) =>
   new SignJWT(payload).setProtectedHeader({ alg: 'ES256', kid: 'k1' }).setIssuer(KIADO).setAudience(cimzett).setSubject('portal-sub').setJti(randomUUID()).setIssuedAt().setExpirationTime('120s').sign(k)
@@ -99,5 +106,29 @@ describe('portal-tagsag (F25)', () => {
     portalKivonat = await kiv('masik@pelda.hu')
     expect((await kezel({ onallo: true }, 'Bearer jo-token', fuggosegek())).statusz).toBe(403)
     expect(kivonatHivasok).toHaveLength(1)
+  })
+})
+
+describe('a portál kérése (F27 K): kapcsolódási kód a központhoz kód másolása nélkül', () => {
+  const keres = (c = ceg, cimzett = KERES_CIMZETT, k?: CryptoKey, feladat = 'kozpont-kod') =>
+    alair({ esemeny: 'kapcsolat', feladat, ceg: { id: c, nev: 'Minta Kft.', adoszam: '10773381-2-44' } }, cimzett, k)
+
+  it('a portál aláírt, a Készletnek szóló kérésére kódot ad a portál cégéhez rendelt cégre', async () => {
+    const v = await kezel({ keres: await keres() }, null, fuggosegek())
+    expect(v).toEqual({ statusz: 200, adat: { kod: 'ABCD-EFGH-JKMN-PQRS', lejar: '2026-11-13T00:00:00Z' } })
+    expect(kodHivasok.at(-1)).toEqual({ ceg, adoszam: '10773381-2-44' })
+  })
+
+  it('amíg a cég nincs meg a Készletben: 409 nincs-ceg (a portál később újra próbálja)', async () => {
+    expect((await kezel({ keres: await keres(randomUUID()) }, null, fuggosegek())).statusz).toBe(409)
+  })
+
+  it('ismételt, idegen kulccsal aláírt, más címzettnek szóló vagy ismeretlen feladatú kérés nem jó', async () => {
+    const j = await keres()
+    expect((await kezel({ keres: j }, null, fuggosegek())).statusz).toBe(200)
+    expect((await kezel({ keres: j }, null, fuggosegek())).statusz).toBe(401)
+    expect((await kezel({ keres: await keres(ceg, KERES_CIMZETT, idegenKulcs) }, null, fuggosegek())).statusz).toBe(401)
+    expect((await kezel({ keres: await keres(ceg, TAGSAG_CIMZETT) }, null, fuggosegek())).statusz).toBe(401)
+    expect((await kezel({ keres: await keres(ceg, KERES_CIMZETT, undefined, 'nav-kod') }, null, fuggosegek())).statusz).toBe(422)
   })
 })

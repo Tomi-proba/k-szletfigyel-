@@ -107,6 +107,8 @@ function KeretCegOsszerendeles() {
     if (r.error) setHiba(r.error)
     else k.ertesit(`A Készletkezelő-cég össze van rendelve: ${k.ceg.nev}.`, 'siker')
   }
+  // Aki most vásárolt (tulajdonos, nincs összerendelhető Készlet-cége): a cég a portál cégadataival magától létrejön.
+  if (k.ceg.szerep === 'tulajdonos' && valaszthato.length === 0 && !hiba) return <AutomatikusCeg onHiba={setHiba} />
   if (k.ceg.szerep !== 'tulajdonos' && valaszthato.length === 0) {
     return (
       <div className="keszlet-keret keszlet-keret--keskeny" data-keszlet-osszerendeles="nem-tulajdonos">
@@ -176,6 +178,23 @@ function KeretCegOsszerendeles() {
       )}
     </div>
   )
+}
+
+/** Első megnyitás meglévő Készlet-cég nélkül: a Készletkezelő-cég (alapértelmezett telephellyel) magától létrejön. */
+function AutomatikusCeg({ onHiba }: { onHiba: (uzenet: string) => void }) {
+  const k = useKeret()
+  const { ujCeg, session } = useAuth()
+  const elindult = useRef(false)
+  useEffect(() => {
+    // A belépés (munkamenet) után indul, egyszer.
+    if (elindult.current || !session) return
+    elindult.current = true
+    void ujCeg(k.ceg.nev, k.ceg.id).then((r) => {
+      if (r.error) onHiba(r.error)
+      else k.ertesit(`A Készletkezelő elkészült (${k.ceg.nev})`, 'siker')
+    })
+  }, [k, ujCeg, session, onHiba])
+  return <Uzenet>A Készletkezelő előkészítése a cég adataival…</Uzenet>
 }
 
 /** A keretbeli elrendezés: a fejléc és a főmenü a kereté; itt a jelzők, az oldalon belüli fülsor és a „+” gomb. */

@@ -61,19 +61,19 @@ export function LedgerEntryForm({ entry, initialCategory, onDone }: LedgerEntryF
     e.preventDefault()
     setError(null)
 
-    if (!effectiveCategory) return setError(isCustomCategory ? 'Add meg az új kategória nevét.' : 'Válassz kategóriát.')
+    if (!effectiveCategory) return setError(isCustomCategory ? 'Adja meg az új kategória nevét.' : 'Válasszon kategóriát.')
     if (!description.trim()) return setError('A megnevezést kötelező megadni.')
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) return setError('Az összegnek pozitív számnak kell lennie.')
     if (currency !== 'HUF' && (!Number.isFinite(exchangeRateNumber) || (exchangeRateNumber ?? 0) <= 0)) {
-      return setError('Add meg az árfolyamot (1 egység hány forint).')
+      return setError('Adja meg az árfolyamot (1 egység hány forint).')
     }
     const vatRateNumber = Number(vatRatePercent)
     if (isVat && (!Number.isFinite(vatRateNumber) || vatRateNumber < 0)) {
-      return setError('Az ÁFA kulcsa nem lehet negatív.')
+      return setError('Az áfakulcs nem lehet negatív.')
     }
     const trackingDueDate = type === 'expense' && trackDueDate
     if (trackingDueDate && !dueDate) {
-      return setError('Add meg a fizetési határidőt, vagy kapcsold ki a nyomon követést.')
+      return setError('Adja meg a fizetési határidőt, vagy kapcsolja ki a nyomon követést.')
     }
 
     const payload = {
@@ -189,10 +189,10 @@ export function LedgerEntryForm({ entry, initialCategory, onDone }: LedgerEntryF
       </FieldGroup>
 
       {isVat && (
-        <FieldGroup label="ÁFA részletek">
+        <FieldGroup label="Áfarészletek">
           <div className="mb-3 grid grid-cols-2 gap-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-[var(--color-text)]">ÁFA kulcsa (%)</span>
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Áfakulcs (%)</span>
               <Input type="number" min={0} max={100} value={vatRatePercent} onChange={(e) => setVatRatePercent(e.target.value)} />
             </label>
             <div>

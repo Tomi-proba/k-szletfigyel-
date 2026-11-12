@@ -53,7 +53,7 @@ export function RaktarosTetlensegBeallitas() {
       <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Raktáros tétlenségi ideje</h2>
       <p className="mb-3 text-sm text-[var(--color-text-muted)]">
         Ennyi tétlenség után a raktáros munkamenete lejár (alapból 30 perc). A raktáros telefonról, munka közben dolgozik, ezért hosszabbra is
-        állíthatod, legfeljebb 12 órára. A kétlépcsős azonosítás ettől függetlenül mindig kötelező.
+        állíthatja, legfeljebb 12 órára. A kétlépcsős azonosítás ettől függetlenül mindig kötelező.
       </p>
       <Select
         aria-label="Raktáros tétlenségi ideje"

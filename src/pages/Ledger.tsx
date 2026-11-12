@@ -130,7 +130,7 @@ export function Ledger() {
     { header: 'Megnevezés', accessor: (r) => r.description, width: 30 },
     { header: 'Eredeti összeg', accessor: (r) => r.amountOriginal, width: 16 },
     { header: 'Összeg (Ft)', accessor: (r) => r.amountHuf, width: 14 },
-    { header: 'ÁFA', accessor: (r) => r.vat, width: 22 },
+    { header: 'Áfa', accessor: (r) => r.vat, width: 22 },
     { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },
   ]
 
@@ -213,7 +213,7 @@ export function Ledger() {
           <div className="text-sm text-[var(--color-text-muted)]">Összes bevétel</div>
           <div className="text-2xl font-bold text-[var(--color-success)]">{formatCurrency(summary.totalIncome)}</div>
           <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-            ebből napló: {formatCurrency(summary.ledgerIncomeTotal)} · készlet: {formatCurrency(summary.inventoryRevenue)} · automatikus ÁFA:{' '}
+            ebből napló: {formatCurrency(summary.ledgerIncomeTotal)} · készlet: {formatCurrency(summary.inventoryRevenue)} · automatikus áfa:{' '}
             {formatCurrency(summary.autoVatIncome)}
           </div>
         </Card>
@@ -221,7 +221,7 @@ export function Ledger() {
           <div className="text-sm text-[var(--color-text-muted)]">Összes kiadás</div>
           <div className="text-2xl font-bold text-[var(--color-danger)]">{formatCurrency(summary.totalExpense)}</div>
           <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-            ebből napló: {formatCurrency(summary.ledgerExpenseTotal)} · beszerzés: {formatCurrency(summary.inventoryCost)} · automatikus ÁFA:{' '}
+            ebből napló: {formatCurrency(summary.ledgerExpenseTotal)} · beszerzés: {formatCurrency(summary.inventoryCost)} · automatikus áfa:{' '}
             {formatCurrency(summary.autoVatExpense)}
           </div>
         </Card>
@@ -236,17 +236,17 @@ export function Ledger() {
 
       <Card className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg és tételek</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Áfaegyenleg és tételek</h2>
           <p className="text-sm text-[var(--color-text-muted)]">
-            A fenti bevétel/kiadás már tartalmazza az automatikus ÁFA-t is (lásd "automatikus ÁFA" a kártyákon). A teljes
-            befizetendő/visszaigényelhető egyenleg és a tételes bontás a dedikált ÁFA oldalon tekinthető meg.
+            A fenti bevétel/kiadás már tartalmazza az automatikus áfát is (lásd "automatikus áfa" a kártyákon). A teljes
+            befizetendő/visszaigényelhető egyenleg és a tételes bontás a dedikált Áfa oldalon tekinthető meg.
           </p>
         </div>
         <Link
           to="/afa"
           className="shrink-0 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] hover:opacity-90"
         >
-          Ugrás az ÁFA oldalra
+          Ugrás az Áfa oldalra
         </Link>
       </Card>
 
@@ -279,9 +279,9 @@ export function Ledger() {
                 </tr>
                 <tr className="font-semibold">
                   <td className="py-2 pr-4">
-                    Automatikus ÁFA (beszerzés / eladás)
+                    Automatikus áfa (beszerzés / eladás)
                     <div className="text-xs font-normal text-[var(--color-text-muted)]">
-                      visszaigényelhető beszerzési ÁFA bevételként, értékesítési ÁFA kiadásként - részletek az ÁFA oldalon
+                      visszaigényelhető beszerzési áfa bevételként, értékesítési áfa kiadásként - részletek az Áfa oldalon
                     </div>
                   </td>
                   <td className="py-2 pr-4 text-right text-[var(--color-success)]">{formatCurrency(summary.autoVatIncome)}</td>
@@ -422,7 +422,7 @@ export function Ledger() {
         </div>
 
         {visibleRecurring.length === 0 ? (
-          <EmptyState>Nincs ismétlődő tétel beállítva.</EmptyState>
+          <EmptyState teendo={!isReadOnlyViewer && 'Az „Új ismétlődő tétel” gombbal vehet fel.'}>Még nincs ismétlődő tétel.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
@@ -555,7 +555,7 @@ export function Ledger() {
       {deletingRecurring && (
         <Modal title="Ismétlődő tétel törlése" onClose={() => setDeletingRecurring(null)}>
           <p className="mb-4 text-sm text-[var(--color-text)]">
-            Biztosan törlöd a(z) "{deletingRecurring.description}" ismétlődő tételt? A már korábban ebből legenerált napló tételek megmaradnak -
+            Biztosan törli a(z) "{deletingRecurring.description}" ismétlődő tételt? A már korábban ebből legenerált napló tételek megmaradnak -
             csak a jövőbeni, automatikus könyvelés áll le.
           </p>
           <div className="flex justify-end gap-2">

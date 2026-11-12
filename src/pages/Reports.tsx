@@ -234,7 +234,7 @@ function ShippingReportSection() {
     totalHuf: Math.round(r.totalHuf),
   }))
   const supplierColumns: ExportColumn<SupplierRow>[] = [
-    { header: 'Beszállító', accessor: (r) => r.supplierName, width: 26 },
+    { header: 'Szállító', accessor: (r) => r.supplierName, width: 26 },
     { header: 'Tételek száma', accessor: (r) => r.batchCount, width: 14 },
     { header: 'Áru érték', accessor: (r) => r.goodsValueHuf, width: 16 },
     { header: 'Szállítási költség', accessor: (r) => r.shippingHuf, width: 16 },
@@ -271,9 +271,9 @@ function ShippingReportSection() {
           </label>
           {suppliers.length > 1 && (
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-[var(--color-text)]">Beszállító</span>
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Szállító</span>
               <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-                <option value="">Összes beszállító</option>
+                <option value="">Összes szállító</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -313,17 +313,17 @@ function ShippingReportSection() {
 
       <div className="mb-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-[var(--color-text)]">Beszállítónkénti bontás</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Szállítónkénti bontás</h2>
           <div className="flex gap-2">
             <Button
               variant="secondary"
-              onClick={() => exportToExcel(`szallitas_beszallitonkent_${from}_${to}.xlsx`, 'Szállítás beszállítónként', supplierColumns, supplierRows)}
+              onClick={() => exportToExcel(`szallitas_beszallitonkent_${from}_${to}.xlsx`, 'Szállítás szállítónként', supplierColumns, supplierRows)}
             >
               <FileSpreadsheet size={16} /> Excel
             </Button>
             <Button
               variant="secondary"
-              onClick={() => exportToPdf(`szallitas_beszallitonkent_${from}_${to}.pdf`, 'Szállítási költség beszállítónként', supplierColumns, supplierRows)}
+              onClick={() => exportToPdf(`szallitas_beszallitonkent_${from}_${to}.pdf`, 'Szállítási költség szállítónként', supplierColumns, supplierRows)}
             >
               <FileText size={16} /> PDF
             </Button>
@@ -336,7 +336,7 @@ function ShippingReportSection() {
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
-                  <th className="px-4 py-3 font-medium">Beszállító</th>
+                  <th className="px-4 py-3 font-medium">Szállító</th>
                   <th className="px-4 py-3 text-right font-medium">Tételek</th>
                   <th className="px-4 py-3 text-right font-medium">Áru érték</th>
                   <th className="px-4 py-3 text-right font-medium">Szállítás</th>

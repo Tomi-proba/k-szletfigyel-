@@ -170,8 +170,8 @@ describe('hibák besorolása és üzenetek', () => {
 
   it('érthető magyar üzenetet ad minden állapotra', () => {
     expect(allapotUzenet({ fajta: 'mentve' })).toBe('Minden változás elmentve.')
-    expect(allapotUzenet({ fajta: 'ujraprobalas', fuggo: 3, ok: 'halozat', probalkozas: 1, kovetkezo: 0 })).toContain('3 nem mentett változásod biztonságban van')
-    expect(allapotUzenet({ fajta: 'elakadt', ok: 'jogosultsag', elveszett: ['Termék létrehozva'], technikai: '42501' })).toContain('nincs jogosultságod')
+    expect(allapotUzenet({ fajta: 'ujraprobalas', fuggo: 3, ok: 'halozat', probalkozas: 1, kovetkezo: 0 })).toContain('3 nem mentett változása biztonságban van')
+    expect(allapotUzenet({ fajta: 'elakadt', ok: 'jogosultsag', elveszett: ['Termék létrehozva'], technikai: '42501' })).toContain('nincs jogosultsága')
     expect(allapotUzenet({ fajta: 'elakadt', ok: 'ervenytelen', elveszett: [], technikai: '23503: fk' })).toContain('23503: fk')
   })
 })

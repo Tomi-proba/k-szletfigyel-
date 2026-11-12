@@ -7,8 +7,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 
 function hibaSzoveg(uzenet: string): string {
-  if (/invalid|expired/i.test(uzenet)) return 'A kód nem megfelelő vagy lejárt. Írd be a hitelesítő alkalmazásban éppen látható kódot.'
-  if (/rate|too many/i.test(uzenet)) return 'Túl sok próbálkozás. Várj egy kicsit, majd próbáld újra.'
+  if (/invalid|expired/i.test(uzenet)) return 'A kód nem megfelelő vagy lejárt. Írja be a hitelesítő alkalmazásban éppen látható kódot.'
+  if (/rate|too many/i.test(uzenet)) return 'Túl sok próbálkozás. Várjon egy kicsit, majd próbálja újra.'
   return uzenet
 }
 
@@ -82,12 +82,12 @@ export function Ketlepcsos({ beallitas }: { beallitas: boolean }) {
         <form onSubmit={ellenoriz}>
           {uj && (
             <div className="mb-3 text-sm">
-              <p className="mb-2">1. Olvasd be a QR-kódot a hitelesítő alkalmazással:</p>
+              <p className="mb-2">1. Olvassa be a QR-kódot a hitelesítő alkalmazással:</p>
               <img src={uj.qr} alt="QR-kód a hitelesítő alkalmazáshoz" width={200} height={200} className="mx-auto bg-white p-2" />
               <p className="mt-2 text-[var(--color-text-muted)]">
-                Ha nem tudod beolvasni, írd be kézzel ezt a kulcsot: <code data-totp-titok>{uj.titok}</code>
+                Ha nem tudja beolvasni, írja be kézzel ezt a kulcsot: <code data-totp-titok>{uj.titok}</code>
               </p>
-              <p className="mt-2">2. Írd be az alkalmazás által mutatott kódot:</p>
+              <p className="mt-2">2. Írja be az alkalmazás által mutatott kódot:</p>
             </div>
           )}
           {kodMezo}
@@ -103,7 +103,7 @@ export function Ketlepcsos({ beallitas }: { beallitas: boolean }) {
       )}
       {!beallitas && (
         <p className="mt-3 text-xs text-[var(--color-text-muted)]">
-          Elveszett a telefonod? Szólj az üzemeltetőnek: ő törölheti a régi beállítást, és belépéskor újra beállíthatod.
+          Elveszett a telefonja? Szóljon az üzemeltetőnek: ő törölheti a régi beállítást, és belépéskor újra beállíthatja.
         </p>
       )}
       <div className="mt-4 text-center text-sm">

@@ -69,13 +69,13 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
 
     if (!name.trim()) return setError('A termék nevét kötelező megadni.')
     if (!category.trim()) return setError('A kategóriát kötelező megadni.')
-    if (!locationId) return setError('Válassz telephelyet.')
+    if (!locationId) return setError('Válasszon telephelyet.')
     if ([stockNum, minNum, purchaseNum, saleNum].some((n) => !Number.isFinite(n) || n < 0)) {
       return setError('A készlet, a küszöb és az árak nem lehetnek negatívak.')
     }
     const vatNum = defaultVatRatePercent.trim() === '' ? undefined : Number(defaultVatRatePercent)
     if (vatNum !== undefined && (!Number.isFinite(vatNum) || vatNum < 0)) {
-      return setError('Az ÁFA kulcs nem lehet negatív.')
+      return setError('Az áfakulcs nem lehet negatív.')
     }
 
     const payload = {
@@ -165,7 +165,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
             <p className="-mt-2 mb-3 text-xs text-[var(--color-text-muted)]">
               {costingMethod === 'fifo'
                 ? 'Minden bejövő mozgásnál az ott megadott árra frissül (a FIFO költségszámítás a tételes előzményekből dolgozik, lásd lent).'
-                : 'Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat adsz meg (súlyozott átlag).'}
+                : 'Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat ad meg (súlyozott átlag).'}
             </p>
           )}
         </div>
@@ -174,7 +174,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
         </Field>
       </div>
 
-      <Field label="Alapértelmezett ÁFA kulcs (%, opcionális)">
+      <Field label="Alapértelmezett áfakulcs (%, opcionális)">
         <Input
           type="number"
           min={0}
@@ -184,12 +184,12 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
           placeholder="pl. 27"
         />
         <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-          Ez jelenik meg felajánlva beszerzés/eladás rögzítésekor - tételenként felülírható. Üresen hagyva a rendszer nem számol ÁFA-t
-          automatikusan, amíg a tételnél meg nem adod.
+          Ez jelenik meg felajánlva beszerzés/eladás rögzítésekor - tételenként felülírható. Üresen hagyva a rendszer nem számol áfát
+          automatikusan, amíg a tételnél meg nem adja.
         </span>
       </Field>
 
-      <Field label="Beszállító (opcionális)">
+      <Field label="Szállító (opcionális)">
         <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
           <option value="">Nincs megadva</option>
           {supplierOptions.map((s) => (
@@ -215,7 +215,7 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
                   <th className="px-3 py-2 text-right font-medium">Szállítás</th>
                   <th className="px-3 py-2 text-right font-medium">Egységköltség</th>
                   <th className="px-3 py-2 text-left font-medium">Fizetés</th>
-                  <th className="px-3 py-2 text-left font-medium">ÁFA</th>
+                  <th className="px-3 py-2 text-left font-medium">Áfa</th>
                 </tr>
               </thead>
               <tbody>

@@ -38,7 +38,7 @@ export function Login({ onSwitchToRegister, onSwitchToForgotPassword }: { onSwit
           Elfelejtett jelszó?
         </button>
         <p className="text-[var(--color-text-muted)]">
-          Még nincs fiókod?{' '}
+          Még nincs fiókja?{' '}
           <button type="button" onClick={onSwitchToRegister} className="font-medium text-[var(--color-primary)] hover:underline">
             Regisztrálj
           </button>

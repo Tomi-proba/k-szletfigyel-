@@ -62,10 +62,10 @@ export function jegyTartalom(jegy: string): JegyTartalom | null {
 
 /** Hiba szövege, ha a jegy nem ennek a modulnak szól, lejárt, nem kétlépcsős, vagy más felhasználóé; különben null. */
 export function jegyHiba(t: JegyTartalom | null, munkamenetEmail: string | null | undefined, mostMs: number): string | null {
-  if (!t) return 'Érvénytelen belépési jegy. Nyisd meg a Készletkezelőt újra a portálról.'
+  if (!t) return 'Érvénytelen belépési jegy. Nyissa meg a Készletkezelőt újra a portálról.'
   const aud = Array.isArray(t.aud) ? t.aud : [t.aud]
   if (!aud.includes(KESZLET_CIMZETT)) return 'Ez a belépési jegy nem a Készletkezelőnek szól.'
-  if (t.exp * 1000 + 30_000 < mostMs) return 'A belépési jegy lejárt. Nyisd meg a Készletkezelőt újra a portálról.'
+  if (t.exp * 1000 + 30_000 < mostMs) return 'A belépési jegy lejárt. Nyissa meg a Készletkezelőt újra a portálról.'
   if (t.aal !== 'aal2') return 'A belépéshez kétlépcsős azonosítás szükséges.'
   if (!munkamenetEmail || munkamenetEmail.toLowerCase() !== t.email.toLowerCase()) return 'A belépési jegy és a munkamenet nem ugyanahhoz a felhasználóhoz tartozik.'
   return null

@@ -83,9 +83,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: 'beszallitok',
-    label: 'Beszállítók',
+    label: 'Szállítók',
     icon: Truck,
-    items: [{ to: '/beszallitok', label: 'Beszállítók' }],
+    items: [{ to: '/beszallitok', label: 'Szállítók' }],
   },
   {
     key: 'penzugy',
@@ -310,7 +310,7 @@ export function Layout() {
     if (
       fuggo > 0 &&
       !window.confirm(
-        `${fuggo} változás még nincs elmentve a szerverre. Ha most kijelentkezel, ezen az eszközön megmaradnak, és a következő bejelentkezéskor mentjük őket. Biztosan kijelentkezel?`,
+        `${fuggo} változás még nincs elmentve a szerverre. Ha most kijelentkezik, ezen az eszközön megmaradnak, és a következő bejelentkezéskor mentjük őket. Biztosan kijelentkezik?`,
       )
     )
       return
@@ -521,14 +521,14 @@ export function Layout() {
           {!isSupabaseConfigured && isWarehouseUser && (
             <div className="mb-5 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-info-bg)] p-3 text-sm text-[var(--color-primary)]">
               DEMO MÓD: ideiglenes "raktáros" nézet-szimuláció (`?demo_szerepkor=raktaros`), Supabase-bejelentkezés nélkül - ez nem valódi
-              jogosultság-ellenőrzés, csak a felület kipróbálásához. Töröld ezt a szakaszt, ha már nincs rá szükség.
+              jogosultság-ellenőrzés, csak a felület kipróbálásához. Törölje ezt a szakaszt, ha már nincs rá szükség.
             </div>
           )}
           {isReadOnly && (
             <div className="mb-5 flex items-start gap-2 rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
               <AlertTriangle size={18} className="mt-0.5 shrink-0" />
               <span>
-                Az előfizetésed lejárt vagy le lett mondva - az alkalmazás jelenleg csak megtekintésre szolgál, új rögzítés nem
+                Az előfizetése lejárt vagy le lett mondva – az alkalmazás jelenleg csak megtekintésre szolgál, új rögzítés nem
                 lehetséges.{' '}
                 <Link to="/elofizetes" className="font-semibold underline">
                   Előfizetés kezelése

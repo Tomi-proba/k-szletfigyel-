@@ -33,7 +33,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   function doApprove(allowNegativeStock = false) {
     setError(null)
     if (vatRate.trim() !== '' && (!Number.isFinite(vatRateNumber) || (vatRateNumber ?? 0) < 0)) {
-      return setError('Az ÁFA kulcs nem lehet negatív.')
+      return setError('Az áfakulcs nem lehet negatív.')
     }
     const result = approveSalePrep(
       movement.id,
@@ -50,7 +50,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
 
   function doReject() {
     setError(null)
-    if (!rejectReason.trim()) return setError('Add meg az elutasítás indokát.')
+    if (!rejectReason.trim()) return setError('Adja meg az elutasítás indokát.')
     const result = rejectSalePrep(movement.id, rejectReason)
     if (!result.ok) return setError(result.reason === 'forbidden' ? 'Ezt csak a fő iroda utasíthatja el.' : 'Az elutasítás nem sikerült.')
     onClose()
@@ -74,7 +74,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
         <>
           {eladas && (
             <>
-              <Field label="ÁFA kulcs (%, opcionális)">
+              <Field label="Áfakulcs (%, opcionális)">
                 <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
               </Field>
 
@@ -133,7 +133,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
             <div className="mt-4 rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
               <p className="mb-2">
                 Ez a mozgás {Math.abs(pendingNegative.resultingStock)} {product?.unit ?? ''} hiányba vinné a készletet - a raktáros
-                előkészítése óta megváltozott a készlet. Biztosan jóváhagyod?
+                előkészítése óta megváltozott a készlet. Biztosan jóváhagyja?
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => setPendingNegative(null)}>

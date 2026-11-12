@@ -55,7 +55,7 @@ export function Admin() {
     return (
       <div>
         <PageHeader title="Admin" />
-        <EmptyState>Ehhez az oldalhoz nincs jogosultságod.</EmptyState>
+        <EmptyState>Ehhez az oldalhoz nincs jogosultsága.</EmptyState>
       </div>
     )
   }

@@ -20,8 +20,8 @@ export function RoleGate({ roles, children }: { roles: UserRole[]; children: Rea
 
   return (
     <div>
-      <PageHeader title="Nincs jogosultságod" />
-      <EmptyState>Ehhez az oldalhoz a szerepköröd (raktáros) nem fér hozzá - ezt csak iroda-jogosultsággal lehet elérni.</EmptyState>
+      <PageHeader title="Nincs jogosultsága" />
+      <EmptyState>Ehhez az oldalhoz a szerepköre (raktáros) nem fér hozzá – ezt csak iroda-jogosultsággal lehet elérni.</EmptyState>
     </div>
   )
 }

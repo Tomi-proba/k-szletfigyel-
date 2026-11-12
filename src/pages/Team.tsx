@@ -135,15 +135,15 @@ export function Team() {
     setError(null)
     setCreated(null)
     if (!name.trim()) {
-      setError('Add meg a felhasználó nevét.')
+      setError('Adja meg a felhasználó nevét.')
       return
     }
     if (!email.trim()) {
-      setError('Add meg az email címet.')
+      setError('Adja meg az e-mail-címet.')
       return
     }
     if (role === 'raktaros' && !locationId) {
-      setError('Válassz telephelyet a raktáros felhasználóhoz.')
+      setError('Válasszon telephelyet a raktáros felhasználóhoz.')
       return
     }
     const location = locations.find((l) => l.id === locationId)
@@ -162,7 +162,7 @@ export function Team() {
     })
     setBusy(false)
     if (invokeError || data?.error) {
-      setError(data?.error ?? invokeError?.message ?? 'Ismeretlen hiba.')
+      setError(data?.error ?? invokeError?.message ?? 'Váratlan hiba történt.')
       return
     }
     setCreated({ email: email.trim(), password })
@@ -180,7 +180,7 @@ export function Team() {
       {keretben() ? (
         <Card className="mb-5" data-portalon-kezelik>
           <p className="text-sm">
-            A felhasználókat és a szerepköröket a portálon kezeled: <strong>Előfizetés → Tagok és hozzáférés</strong>. Ott meghívott munkatárs külön
+            A felhasználókat és a szerepköröket a portálon kezeli: <strong>Előfizetés → Tagok és hozzáférés</strong>. Ott meghívott munkatárs külön
             felvétel nélkül, a megadott szerepkörrel lép be a Készletkezelőbe; a változás itt azonnal érvényes.
           </p>
         </Card>
@@ -214,7 +214,7 @@ export function Team() {
                 </div>
               ) : (
                 <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-                  <option value="">Válassz…</option>
+                  <option value="">Válasszon…</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -232,7 +232,7 @@ export function Team() {
         {created && (
           <div className="mt-4 rounded-lg bg-[var(--color-info-bg)] p-3 text-sm text-[var(--color-primary)]">
             <p className="mb-2">
-              Létrejött a fiók — add át ezt a két adatot a felhasználónak (ezt a jelszót csak most látod, később nem kereshető vissza):
+              Létrejött a fiók – adja át ezt a két adatot a felhasználónak (ezt a jelszót csak most látja, később nem kereshető vissza):
             </p>
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">

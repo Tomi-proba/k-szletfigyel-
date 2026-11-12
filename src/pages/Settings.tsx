@@ -85,7 +85,7 @@ export function Settings() {
       .filter(Boolean)
       .map(Number)
     if (reminderDays.length === 0 || reminderDays.some((n) => !Number.isInteger(n) || n <= 0)) {
-      setError('A fizetési emlékeztetők napjait pozitív egész számokkal add meg, vesszővel elválasztva (pl. 7, 3, 1).')
+      setError('A fizetési emlékeztetők napjait pozitív egész számokkal adja meg, vesszővel elválasztva (pl. 7, 3, 1).')
       return
     }
     const paymentReminderDaysBefore = Array.from(new Set(reminderDays)).sort((a, b) => b - a)
@@ -127,7 +127,7 @@ export function Settings() {
         <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Jelszó módosítása</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            Ezt a jelszót fogod ezután használni a bejelentkezéshez.
+            Ezt a jelszót fogja ezután használni a bejelentkezéshez.
           </p>
           <form onSubmit={handleChangePassword} className="flex flex-wrap items-end gap-3">
             <Field label="Új jelszó">
@@ -149,8 +149,8 @@ export function Settings() {
         <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Saját nevem</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            Ez a név jelenik meg az audit naplóban, ha módosítasz valamit - "ki csinálta?". Más csapattag nevét a Csapat oldalon
-            módosíthatod.
+            Ez a név jelenik meg az audit naplóban, ha módosít valamit – „ki csinálta?”. Más csapattag nevét a Csapat oldalon
+            módosíthatja.
           </p>
           <form onSubmit={handleSaveName} className="flex flex-wrap items-end gap-3">
             <Field label="Név">
@@ -181,7 +181,7 @@ export function Settings() {
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Beszerzési költség számítása</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
             Ez határozza meg, hogy a termék beszerzési ára és az eladások önköltsége (haszonkulcs kimutatás) hogyan számolódik, amikor
-            ugyanabból a termékből több tételt is eltérő áron vettél.
+            ugyanabból a termékből több tételt is eltérő áron vett.
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
@@ -228,7 +228,7 @@ export function Settings() {
             <Input type="number" min={0} {...num('safetyStockDays')} />
           </Field>
           <p className="-mt-2 mb-3 text-xs text-[var(--color-text-muted)]">
-            A beszállító szállítási idejéhez adott extra puffer, mielőtt a rendszer rendelést javasol.
+            A szállító szállítási idejéhez adott extra puffer, mielőtt a rendszer rendelést javasol.
           </p>
 
           <Field label="Rendelési célidőszak (nap)">
@@ -260,7 +260,7 @@ export function Settings() {
         <Card className="mb-5">
           <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Fizetési határidő emlékeztetők</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            A kimenő fizetési kötelezettségek (beszállítói számlák, bérleti díj, egyéb kiadások) ennyi nappal a határidő előtt jelennek
+            A kimenő fizetési kötelezettségek (szállítói számlák, bérleti díj, egyéb kiadások) ennyi nappal a határidő előtt jelennek
             meg "közelgő" riasztásként. A lejárt, ki nem fizetett tételek mindig megjelennek, függetlenül ettől.
           </p>
           <Field label="Emlékeztető napok (vesszővel elválasztva, pl. 7, 3, 1)">
@@ -280,12 +280,12 @@ export function Settings() {
         </Card>
 
         <Card className="mb-5">
-          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">ÁFA</h2>
+          <h2 className="mb-2 text-base font-semibold text-[var(--color-text)]">Áfa</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            Ez a kulcs jelenik meg felajánlva, amikor új terméket veszel fel - termékenként, majd tételenként (beszerzés/eladás
+            Ez a kulcs jelenik meg felajánlva, amikor új terméket vesz fel – termékenként, majd tételenként (beszerzés/eladás
             rögzítésekor) is felülírható.
           </p>
-          <Field label="Alapértelmezett ÁFA kulcs új termékeknél (%)">
+          <Field label="Alapértelmezett áfakulcs új termékeknél (%)">
             <Input type="number" min={0} {...num('defaultVatRatePercentForNewProducts')} />
           </Field>
         </Card>
@@ -328,7 +328,7 @@ export function Settings() {
       {confirmDemo && (
         <ConfirmDialog
           title="Demó adatok visszaállítása"
-          message="Ez felülírja az összes jelenlegi terméket, beszállítót, telephelyet és mozgást a beépített minta adatokkal. Biztosan folytatod?"
+          message="Ez felülírja az összes jelenlegi terméket, szállítót, telephelyet és mozgást a beépített minta adatokkal. Biztosan folytatja?"
           confirmLabel="Visszaállítás"
           danger
           onConfirm={() => {
@@ -344,7 +344,7 @@ export function Settings() {
       {confirmClear && (
         <ConfirmDialog
           title="Összes adat törlése"
-          message="Ez véglegesen törli az összes terméket, beszállítót, mozgást és extra telephelyet. Biztosan folytatod?"
+          message="Ez véglegesen törli az összes terméket, szállítót, mozgást és extra telephelyet. Biztosan folytatja?"
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

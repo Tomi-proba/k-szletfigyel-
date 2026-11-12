@@ -151,7 +151,7 @@ function friendlyAuthError(message: string): string {
   // its own text or wrapped in Supabase's generic "Database error saving new
   // user", depending on the Supabase version, so both are mapped.
   if (message.includes('Érvénytelen vagy lejárt meghívó') || message.includes('Database error saving new user')) {
-    return 'Ez a meghívó érvénytelen, lejárt, vagy már felhasználásra került. Kérj újat attól, aki meghívott.'
+    return 'Ez a meghívó érvénytelen, lejárt, vagy már felhasználásra került. Kérjen újat attól, aki meghívta.'
   }
   return message
 }
@@ -193,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // bejelentkező/regisztrációs képernyőt.
       // A keretben nincs saját munkamenet, amiből ki lehetne lépni: érthető hibaüzenet.
       if (keretTok) {
-        setDataLoadError('A felhasználói profil nem tölthető be. Lépj be újra a portálon.')
+        setDataLoadError('A felhasználói profil nem tölthető be. Lépjen be újra a portálon.')
         return
       }
       await supabase.auth.signOut()
@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('role, assigned_location_id, assigned_location_name, companies(*)')
       .eq('user_id', userId)
     if (tagHiba) {
-      setDataLoadError('Nem sikerült betölteni a cégeidet a szerverről. Ellenőrizd az internetkapcsolatot, majd próbáld újra.')
+      setDataLoadError('Nem sikerült betölteni a cégeit a szerverről. Ellenőrizze az internetkapcsolatot, majd próbálja újra.')
       return
     }
     const lista = (tagSorok ?? []).map((r) => mapTagsagRow(r as Record<string, unknown>)).sort((a, b) => a.company.name.localeCompare(b.company.name, 'hu'))
@@ -257,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('[useAuth] failed to load business data from Supabase', err)
       setDataLoadError(
-        'Nem sikerült betölteni az adatokat a szerverről. Ellenőrizd az internetkapcsolatot, majd próbáld újra. Az adataid a szerveren biztonságban vannak.',
+        'Nem sikerült betölteni az adatokat a szerverről. Ellenőrizze az internetkapcsolatot, majd próbálja újra. Az adatai a szerveren biztonságban vannak.',
       )
       return
     }

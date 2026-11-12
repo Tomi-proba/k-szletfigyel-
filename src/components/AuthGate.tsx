@@ -110,7 +110,7 @@ function ConfiguredAuthGate({
   if (!profile || !company) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-[var(--color-text-muted)]">
-        A fiókod előkészítése folyamatban van - ha ez a képernyő sokáig nem tűnik el, jelentkezz be újra, vagy vedd fel a kapcsolatot az
+        A fiókja előkészítése folyamatban van – ha ez a képernyő sokáig nem tűnik el, jelentkezzen be újra, vagy vegye fel a kapcsolatot az
         üzemeltetővel.
       </div>
     )
@@ -137,12 +137,12 @@ function SsoAtvetel({ onKesz }: { onKesz: () => void }) {
     navigate('/', { replace: true })
     void (async () => {
       if (!portalBelepes.at || !portalBelepes.rt) {
-        setHiba('A közös belépés a Készletkezelőbe a közös Supabase-projekttel működik. Addig lépj be a Készletkezelő saját belépésével.')
+        setHiba('A közös belépés a Készletkezelőbe a közös Supabase-projekttel működik. Addig lépjen be a Készletkezelő saját belépésével.')
         return
       }
       const { data, error } = await sb.auth.setSession({ access_token: portalBelepes.at, refresh_token: portalBelepes.rt })
       if (error || !data.session) {
-        setHiba('A belépés nem sikerült. Nyisd meg a Készletkezelőt újra a portálról.')
+        setHiba('A belépés nem sikerült. Nyissa meg a Készletkezelőt újra a portálról.')
         return
       }
       const t = jegyTartalom(portalBelepes.jegy)
@@ -230,10 +230,10 @@ function NincsCeg() {
           setFut(false)
         }}
       >
-        <h1 className="mb-2 text-lg font-bold text-[var(--color-text)]">Még nincs Készletkezelő-céged</h1>
+        <h1 className="mb-2 text-lg font-bold text-[var(--color-text)]">Még nincs Készletkezelő-cége</h1>
         <p className="mb-4 text-sm text-[var(--color-text-muted)]">
-          Hozz létre egyet: te leszel a fő irodája, és egy alapértelmezett telephely is létrejön. Ha egy meglévő céghez
-          csatlakoznál, kérd meg annak fő irodáját, hogy vegyen fel a Csapat oldalon.
+          Hozzon létre egyet: Ön lesz a fő irodája, és egy alapértelmezett telephely is létrejön. Ha egy meglévő céghez
+          csatlakozna, kérje meg annak fő irodáját, hogy vegye fel a Csapat oldalon.
         </p>
         {hiba && (
           <p className="mb-3 rounded-lg bg-[var(--color-danger-bg)] p-2 text-sm text-[var(--color-danger)]" role="alert">

@@ -160,7 +160,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   function trySubmit(allowNegativeStock = false, kettosEllenorzesNelkul = false) {
     setError(null)
     if (!productId) {
-      setError('Válassz terméket.')
+      setError('Válasszon terméket.')
       return
     }
     if (!quantity || !Number.isFinite(qtyNumber) || qtyNumber <= 0) {
@@ -168,7 +168,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       return
     }
     if (!date) {
-      setError('Add meg a dátumot.')
+      setError('Adja meg a dátumot.')
       return
     }
     if (unitPrice.trim() !== '' && (!Number.isFinite(unitPriceNumber) || (unitPriceNumber ?? 0) < 0)) {
@@ -180,19 +180,19 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       return
     }
     if (type === 'in' && unitPrice.trim() !== '' && currency !== 'HUF' && (!Number.isFinite(exchangeRateNumber) || (exchangeRateNumber ?? 0) <= 0)) {
-      setError('Add meg az árfolyamot (1 egység hány forint).')
+      setError('Adja meg az árfolyamot (1 egység hány forint).')
       return
     }
     if (type === 'out' && trackCustomer && !customerId) {
-      setError('Válassz vevőt, vagy kapcsold ki a vevőhöz rögzítést.')
+      setError('Válasszon vevőt, vagy kapcsolja ki a vevőhöz rögzítést.')
       return
     }
     if (type === 'in' && trackDueDate && !dueDate) {
-      setError('Add meg a fizetési határidőt, vagy kapcsold ki a nyomon követést.')
+      setError('Adja meg a fizetési határidőt, vagy kapcsolja ki a nyomon követést.')
       return
     }
     if (vatRate.trim() !== '' && (!Number.isFinite(vatRateNumber) || (vatRateNumber ?? 0) < 0)) {
-      setError('Az ÁFA kulcs nem lehet negatív.')
+      setError('Az áfakulcs nem lehet negatív.')
       return
     }
 
@@ -203,7 +203,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       if (r.reason === 'insufficient-stock') return setSzabadHiany(r.available ?? 0)
       setError(
         r.reason === 'note-required'
-          ? 'Írd be a megjegyzésbe, mi történt (leltári eltérésnél és selejtnél kötelező).'
+          ? 'Írja be a megjegyzésbe, mi történt (leltári eltérésnél és selejtnél kötelező).'
           : r.reason === 'invalid-reason'
             ? 'Ez az ok ehhez az irányhoz nem választható.'
             : 'A bejelentés nem küldhető el.',
@@ -254,7 +254,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       result.reason === 'invalid-reason'
         ? 'Ez az ok ehhez az irányhoz nem választható.'
         : result.reason === 'forbidden'
-          ? 'Raktárosként bejelentést tehetsz; a mozgást a fő iroda fogadja el.'
+          ? 'Raktárosként bejelentést tehet; a mozgást a fő iroda fogadja el.'
           : 'A mozgás nem menthető.',
     )
   }
@@ -312,7 +312,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           ))}
         </Select>
         {leltar && isWarehouseUser && (
-          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Írd be a megjegyzésbe, mi történt. A fő iroda fogadja el.</span>
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">Írja be a megjegyzésbe, mi történt. A fő iroda fogadja el.</span>
         )}
         {leltar && !isWarehouseUser && (
           <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
@@ -443,10 +443,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       )}
 
       {type === 'in' && !isWarehouseUser && !leltar && (
-        <FieldGroup label="ÁFA (opcionális)">
+        <FieldGroup label="Áfa (opcionális)">
           <div className="grid grid-cols-2 gap-3">
             <label className="mb-3 block text-sm">
-              <span className="mb-1 block font-medium text-[var(--color-text)]">ÁFA kulcs (%)</span>
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Áfakulcs (%)</span>
               <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
             </label>
             {vatRate.trim() !== '' && (
@@ -481,14 +481,14 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </div>
           {vatRate.trim() !== '' && !vatReclaimable && (
             <span className="block text-xs text-[var(--color-text-muted)]">
-              A nem visszaigényelhető ÁFA hozzáadódik a termék egységköltségéhez, mivel az valós, meg nem térülő kiadás.
+              A nem visszaigényelhető áfa hozzáadódik a termék egységköltségéhez, mivel az valós, meg nem térülő kiadás.
             </span>
           )}
         </FieldGroup>
       )}
 
       {type === 'in' && !isWarehouseUser && !leltar && (
-        <FieldGroup label="Beszállítói számla fizetési határideje">
+        <FieldGroup label="Szállítói számla fizetési határideje">
           <Checkbox
             label="Fizetési határidő nyomon követése (kimenő kötelezettség)"
             checked={trackDueDate}
@@ -543,10 +543,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       )}
 
       {type === 'out' && !isWarehouseUser && !leltar && (
-        <Field label="ÁFA kulcs (%, opcionális)">
+        <Field label="Áfakulcs (%, opcionális)">
           <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
           <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-            Minden eladásra vonatkozik, nem csak a vevőhöz rögzítettekre - mindig befizetendő ÁFA-ként kerül a pénzügyi naplóba.
+            Minden eladásra vonatkozik, nem csak a vevőhöz rögzítettekre - mindig befizetendő áfaként kerül a pénzügyi naplóba.
           </span>
         </Field>
       )}
@@ -572,7 +572,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
                 <span className="mb-1 block font-medium text-[var(--color-text)]">Vevő</span>
                 {activeCustomers.length === 0 ? (
                   <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
-                    Még nincs rögzített vevő - vedd fel a Vevők oldalon.
+                    Még nincs rögzített vevő – vegye fel a Vevők oldalon.
                   </span>
                 ) : activeCustomers.length === 1 ? (
                   <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text)]">
@@ -580,7 +580,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
                   </div>
                 ) : (
                   <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                    <option value="">Válassz vevőt…</option>
+                    <option value="">Válasszon vevőt…</option>
                     {activeCustomers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -657,7 +657,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
               </li>
             ))}
           </ul>
-          <p className="mb-2">Ha ugyanarról van szó, ne rögzítsd újra: fogadd el a bejelentést, így egyszer szerepel.</p>
+          <p className="mb-2">Ha ugyanarról van szó, ne rögzítse újra: fogadja el a bejelentést, így egyszer szerepel.</p>
           <div className="flex flex-wrap gap-2">
             <Link to="/jovahagyasra-var" className="btn btn-small btn-primary" onClick={() => onDone?.()}>
               Megnyitom a jóváhagyandókat
@@ -683,7 +683,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       {szabadHiany !== null && (
         <ConfirmDialog
           title="Nincs elég szabad készlet"
-          message={`A szabad készlet ${formatNumber(szabadHiany)} ${product?.unit ?? ''} (a még el nem fogadott kiadások már lefoglalták a többit). Ha megszámoltad és tényleg van, elküldheted így is; a fő iroda dönt.`}
+          message={`A szabad készlet ${formatNumber(szabadHiany)} ${product?.unit ?? ''} (a még el nem fogadott kiadások már lefoglalták a többit). Ha megszámolta és tényleg van, elküldheti így is; a fő iroda dönt.`}
           confirmLabel="Megszámoltam, elküldöm"
           danger
           onConfirm={() => trySubmit(true)}
@@ -694,7 +694,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       {pendingNegative && (
         <ConfirmDialog
           title="Negatív készlet"
-          message={`Ez a mozgás ${Math.abs(pendingNegative.resultingStock)} ${product?.unit ?? ''} hiányba vinné a készletet (${pendingNegative.resultingStock}). Biztosan rögzíted?`}
+          message={`Ez a mozgás ${Math.abs(pendingNegative.resultingStock)} ${product?.unit ?? ''} hiányba vinné a készletet (${pendingNegative.resultingStock}). Biztosan rögzíti?`}
           confirmLabel="Igen, rögzítem"
           danger
           onConfirm={() => trySubmit(true)}

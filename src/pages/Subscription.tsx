@@ -61,7 +61,7 @@ export function Subscription() {
       </Card>
 
       <Card className="mb-5 text-sm">
-        A csomagodat (Könyvelő, eÁFA, Készletkezelő és ezek kedvezményes együttesei) a portálon kezeled; ott látod az összes csomag árát és a
+        A csomagját (Könyvelő, eÁFA, Készletkezelő és ezek kedvezményes együttesei) a portálon kezeli; ott látja az összes csomag árát és a
         megtakarítást is.{' '}
         <a className="font-medium text-[var(--color-primary)] underline" href={`${PORTAL_URL}/elofizetes`}>
           Előfizetés a portálon
@@ -116,7 +116,7 @@ export function Subscription() {
           <div className="mb-4 flex items-start gap-2 rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <span>
-              Az előfizetésed lejárt vagy le lett mondva - az alkalmazás jelenleg csak megtekintésre szolgál, új rögzítés nem lehetséges.
+              Az előfizetése lejárt vagy le lett mondva – az alkalmazás jelenleg csak megtekintésre szolgál, új rögzítés nem lehetséges.
               Aktiváld az előfizetést a hozzáférés visszaállításához.
             </span>
           </div>

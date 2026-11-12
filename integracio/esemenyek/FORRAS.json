@@ -1,10 +1,10 @@
 {
   "forras": "Tomi-proba/AWEBOLDAL packages/esemenyek",
-  "commit": "9e5272c27d48de870dc18f5999ca856afe666a80",
-  "masolva": "2026-11-12T17:38:14.204Z",
+  "commit": "0a02252314d71de2cb3015eee9c04f000a8efea5",
+  "masolva": "2026-11-12T20:42:23.209Z",
   "files": {
     "src/alairas.ts": "cd848bc3985a3fa0acc5cce791f806352d66e6714bd2e012bf998c8f813448bd",
-    "src/belepes.ts": "bd139e1e21bd6a7124c84da59ee6bf253a8c7cd33b4c1950d1afbd87ef057596",
+    "src/belepes.ts": "2a5adad532eda3fa866b2471a21651a9b70967fcb00d0ef79b26594e5a72aad1",
     "src/egyeztetes.ts": "aa0cc6b4e5a5a15dd9f0fb49ebf7fed6cbf0fc42725063f4fa2e7c77be81fc8a",
     "src/esemeny.ts": "cc17a758849f28b1325e0eaedb755393ff66e598f0a51ab662518a90c7b30441",
     "src/index.ts": "be3c9b12f27ea9637156f47ee233796b88e632b1d96713a9de41818475a89c08",

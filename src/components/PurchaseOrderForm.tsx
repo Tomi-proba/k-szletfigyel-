@@ -55,14 +55,14 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
   function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!productId) return setError('Válassz terméket.')
+    if (!productId) return setError('Válasszon terméket.')
     if (!quantity || !Number.isFinite(qtyNumber) || qtyNumber <= 0) return setError('A mennyiségnek pozitív számnak kell lennie.')
-    if (!date) return setError('Add meg a dátumot.')
+    if (!date) return setError('Adja meg a dátumot.')
     if (unitPrice.trim() !== '' && (!Number.isFinite(unitPriceNumber) || (unitPriceNumber ?? 0) < 0)) {
       return setError('A várható egységár nem lehet negatív.')
     }
     if (currency !== 'HUF' && unitPrice.trim() !== '' && (!Number.isFinite(exchangeRateNumber) || (exchangeRateNumber ?? 0) <= 0)) {
-      return setError('Add meg a várható árfolyamot (1 egység hány forint).')
+      return setError('Adja meg a várható árfolyamot (1 egység hány forint).')
     }
 
     const result = createPendingPurchaseOrder({
@@ -143,7 +143,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
         )}
       </FieldGroup>
 
-      <Field label="ÁFA kulcs (%, opcionális)">
+      <Field label="Áfakulcs (%, opcionális)">
         <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
       </Field>
 
@@ -180,7 +180,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       )}
 
       <Field label="Megjegyzés (opcionális)">
-        <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. várható beszállító neve…" />
+        <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. várható szállító neve…" />
       </Field>
 
       <p className="mb-3 text-xs text-[var(--color-text-muted)]">

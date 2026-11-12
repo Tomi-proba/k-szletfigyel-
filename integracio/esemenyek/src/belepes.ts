@@ -165,7 +165,7 @@ async function ellenoriz(jegy: string, kulcsok: JWTVerifyGetKey, kiado: string, 
     return payload;
   } catch (e) {
     const kod = (e as { code?: string }).code;
-    if (kod === "ERR_JWT_EXPIRED") throw new JegyHiba("lejart", "A belépési jegy lejárt. Lépj be újra a portálon.");
+    if (kod === "ERR_JWT_EXPIRED") throw new JegyHiba("lejart", "A belépési jegy lejárt. Lépjen be újra a portálon.");
     if (kod === "ERR_JWT_CLAIM_VALIDATION_FAILED" && (e as { claim?: string }).claim === "aud")
       throw new JegyHiba("rossz-cimzett", "Ez a jegy nem ennek a modulnak szól.");
     throw new JegyHiba("ervenytelen", "Érvénytelen belépési jegy.");

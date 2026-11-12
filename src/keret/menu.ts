@@ -44,7 +44,7 @@ export const CSOPORTOK: Record<string, { cim: string; pontok: Array<{ cim: strin
     cim: 'Partnerek',
     pontok: [
       { cim: 'Vevők', utvonal: '/vevok' },
-      { cim: 'Beszállítók', utvonal: '/beszallitok' },
+      { cim: 'Szállítók', utvonal: '/beszallitok' },
     ],
   },
   penzugy: {

@@ -73,7 +73,7 @@ export function AtkoltoztetesAjanlo() {
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-semibold text-[var(--color-text)]">Ebben a böngészőben olyan adat van, ami még nincs a szerveren</p>
             <p className="text-[var(--color-text-muted)]">
-              {terv.osszesen} rekord (például beszállítók, vevők, pénzügyi napló) eddig csak ezen az eszközön volt tárolva. Átköltöztetve
+              {terv.osszesen} rekord (például szállítók, vevők, pénzügyi napló) eddig csak ezen az eszközön volt tárolva. Átköltöztetve
               minden eszközről elérhető lesz, és nem veszhet el a böngésző adataival.
             </p>
           </div>
@@ -190,7 +190,7 @@ function AtkoltoztetesAblak({
         fajta: 'hiba',
         uzenet: `Az ellenőrzés szerint nem érkezett meg minden rekord a szerverre (${hianyzo
           .map(([c, n]) => `${CSOPORT_NEV[c as Csoport]}: ${n}`)
-          .join(', ')}). A böngészőben lévő adatok érintetlenek; próbáld újra az átköltöztetést.`,
+          .join(', ')}). A böngészőben lévő adatok érintetlenek; próbálja újra az átköltöztetést.`,
       })
       return
     }
@@ -223,8 +223,8 @@ function AtkoltoztetesAblak({
             <div className="flex gap-2 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning-bg)] p-3">
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[var(--color-warning)]" />
               <span>
-                Úgy tűnik, ebben a böngészőben csak a <strong>bemutató (kitalált) adatok</strong> vannak. Ezeket valószínűleg nem szeretnéd a
-                céged valódi adatai közé tenni, ezért alapból semmi nincs kiválasztva.
+                Úgy tűnik, ebben a böngészőben csak a <strong>bemutató (kitalált) adatok</strong> vannak. Ezeket valószínűleg nem szeretné a
+                cége valódi adatai közé tenni, ezért alapból semmi nincs kiválasztva.
               </span>
             </div>
           )}

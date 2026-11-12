@@ -11,8 +11,8 @@ import type { Movement } from '../types'
 const HIBA: Record<Exclude<CreateReturnResult, { ok: true }>['reason'], string> = {
   'not-found': 'Az eredeti mozgás nem található.',
   'not-returnable': 'Ehhez a mozgáshoz nem rögzíthető visszáru (visszavont, törölt, vagy maga is visszáru/korrekció).',
-  'invalid-quantity': 'Adj meg 0-nál nagyobb mennyiséget.',
-  'reason-required': 'Írd be az okát (a naplóba és a Könyvelőbe is ez kerül).',
+  'invalid-quantity': 'Adjon meg 0-nál nagyobb mennyiséget.',
+  'reason-required': 'Írja be az okát (a naplóba és a Könyvelőbe is ez kerül).',
   'too-much': 'Ennyit nem lehet: többet, mint amennyi még visszavehető.',
   'not-enough-in-lot': 'Ebből a beszerzésből nincs ennyi a raktárban; a program más tételből nem küld vissza.',
 }

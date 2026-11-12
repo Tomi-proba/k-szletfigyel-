@@ -138,7 +138,7 @@ export function Customers() {
       </div>
 
       {visibleCustomers.length === 0 ? (
-        <EmptyState>Még nincs rögzített vevő.</EmptyState>
+        <EmptyState teendo={!isReadOnlyViewer && 'Az „Új vevő” gombbal vehet fel.'}>Még nincs vevő.</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visibleCustomers.map((c) => {
@@ -200,7 +200,7 @@ export function Customers() {
       {deleting && (
         <ConfirmDialog
           title="Vevő törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" vevőt? A hozzá rögzített eladások megmaradnak a mozgásnaplóban, és a vevő bármikor visszaállítható.`}
+          message={`Biztosan törli a(z) "${deleting.name}" vevőt? A hozzá rögzített eladások megmaradnak a mozgásnaplóban, és a vevő bármikor visszaállítható.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

@@ -33,7 +33,7 @@ export function ResubmitSaleModal({ movement, onClose }: { movement: Movement; o
     if (!result.ok) {
       if (result.reason === 'insufficient-stock') {
         setHiany(true)
-        return setError(`Nincs ennyi szabad készlet (szabad: ${result.available ?? 0} ${product?.unit ?? ''}). Ha megszámoltad, nyomd meg újra.`)
+        return setError(`Nincs ennyi szabad készlet (szabad: ${result.available ?? 0} ${product?.unit ?? ''}). Ha megszámolta, nyomja meg újra.`)
       }
       return setError('A javítás nem sikerült.')
     }

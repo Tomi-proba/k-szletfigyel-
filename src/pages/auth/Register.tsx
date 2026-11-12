@@ -18,9 +18,9 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!isInvite && !companyName.trim()) return setError('Add meg a vállalkozásod nevét.')
-    if (!name.trim()) return setError('Add meg a neved.')
-    if (!email.trim()) return setError('Add meg az email címedet.')
+    if (!isInvite && !companyName.trim()) return setError('Adja meg a vállalkozása nevét.')
+    if (!name.trim()) return setError('Adja meg a nevét.')
+    if (!email.trim()) return setError('Adja meg az e-mail-címét.')
     if (password.length < 6) return setError('A jelszónak legalább 6 karakter hosszúnak kell lennie.')
     if (password !== passwordAgain) return setError('A két jelszó nem egyezik.')
 
@@ -35,8 +35,8 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
     return (
       <AuthLayout title={isInvite ? 'Sikeres csatlakozás' : 'Sikeres regisztráció'}>
         <p className="text-sm text-[var(--color-text)]">
-          Ha a fiókod emailes megerősítést igényel, nézd meg a postaládádat ({email}) - a megerősítő linkre kattintva tudsz majd
-          bejelentkezni. Ha nem, akkor már be is léphetsz.
+          Ha a fiókja e-mailes megerősítést igényel, nézze meg a postaládáját ({email}) – a megerősítő linkre kattintva tud majd
+          bejelentkezni. Ha nem, akkor már be is léphet.
         </p>
         <Button className="mt-4 w-full" onClick={onSwitchToLogin}>
           Ugrás a bejelentkezéshez
@@ -48,7 +48,7 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
   return (
     <AuthLayout
       title={isInvite ? 'Csatlakozás meghívóval' : 'Regisztráció'}
-      subtitle={isInvite ? 'Hozz létre egy jelszót a fiókodhoz - a meghívó már tartalmazza, melyik céghez és milyen szerepkörrel csatlakozol.' : 'Ingyenes próbaidőszak, kártyaadat megadása nélkül.'}
+      subtitle={isInvite ? 'Hozzon létre egy jelszót a fiókjához – a meghívó már tartalmazza, melyik céghez és milyen szerepkörrel csatlakozik.' : 'Ingyenes próbaidőszak, kártyaadat megadása nélkül.'}
     >
       <form onSubmit={handleSubmit}>
         {!isInvite && (
@@ -56,7 +56,7 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
             <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} autoFocus required />
           </Field>
         )}
-        <Field label="Neved">
+        <Field label="Név">
           <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus={isInvite} required />
         </Field>
         <Field label="Email cím">
@@ -74,7 +74,7 @@ export function Register({ onSwitchToLogin, inviteToken }: { onSwitchToLogin: ()
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-[var(--color-text-muted)]">
-        Van már fiókod?{' '}
+        Van már fiókja?{' '}
         <button type="button" onClick={onSwitchToLogin} className="font-medium text-[var(--color-primary)] hover:underline">
           Jelentkezz be
         </button>

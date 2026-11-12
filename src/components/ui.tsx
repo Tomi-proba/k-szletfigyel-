@@ -82,10 +82,15 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
   )
 }
 
-export function EmptyState({ children }: { children: ReactNode }) {
+/**
+ * Üres állapot (AWEBOLDAL TERV.md F27 B4): a három programban egy minta – mi hiányzik, és mi a teendő (a fő gomb
+ * nevével). A keretben a közös `fg-ures` stílus adja a kinézetet, így mindhárom programban egyforma.
+ */
+export function EmptyState({ children, teendo }: { children: ReactNode; teendo?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-text-muted)]">
+    <div className="fg-ures rounded-xl border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-text-muted)]" data-ures-allapot>
       {children}
+      {teendo && <> {teendo}</>}
     </div>
   )
 }

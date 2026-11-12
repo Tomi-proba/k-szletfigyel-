@@ -654,7 +654,7 @@ export function valtozasokKiszamitasa(companyId: string, prev: BusinessSlices, n
 
 const TABLA_LEIRAS: Record<string, string> = {
   locations: 'telephely módosítása',
-  suppliers: 'beszállító módosítása',
+  suppliers: 'szállító módosítása',
   customers: 'vevő módosítása',
   products: 'termék módosítása',
   movements: 'mozgás módosítása',

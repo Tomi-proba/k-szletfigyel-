@@ -173,14 +173,14 @@ export function Movements() {
     ...(isWarehouseUser
       ? []
       : [
-          { header: 'Beszállító', accessor: (r: MovementRow) => r.supplierName, width: 22 },
+          { header: 'Szállító', accessor: (r: MovementRow) => r.supplierName, width: 22 },
           { header: 'Áru egységára', accessor: (r: MovementRow) => r.goodsUnitPrice, width: 14 },
           { header: 'Szállítási költség', accessor: (r: MovementRow) => r.shippingCost, width: 16 },
           { header: 'Pénznem', accessor: (r: MovementRow) => r.currency, width: 10 },
           { header: 'Árfolyam', accessor: (r: MovementRow) => r.exchangeRate, width: 12 },
           { header: 'Egységköltség (Ft)', accessor: (r: MovementRow) => r.unitCost, width: 16 },
           { header: 'Készleten (tételből)', accessor: (r: MovementRow) => r.lotRemaining, width: 18 },
-          { header: 'ÁFA', accessor: (r: MovementRow) => r.vat, width: 16 },
+          { header: 'Áfa', accessor: (r: MovementRow) => r.vat, width: 16 },
           { header: 'Vevő', accessor: (r: MovementRow) => r.customerName, width: 22 },
           { header: 'Fizetve', accessor: (r: MovementRow) => r.paymentStatus, width: 14 },
         ]),
@@ -195,7 +195,7 @@ export function Movements() {
     <div>
       <PageHeader
         title="Mozgásnapló"
-        subtitle="Összes rögzített bejövő és kimenő készletmozgás - kimenő tételekre eladási státusz és vevő szerint is kereshetsz"
+        subtitle="Összes rögzített bejövő és kimenő készletmozgás - kimenő tételekre eladási státusz és vevő szerint is kereshet"
         actions={
           <>
             <Button variant="secondary" onClick={() => exportToExcel(`mozgasnaplo_${from}_${to}.xlsx`, 'Mozgásnapló', columns, rows)}>
@@ -290,7 +290,7 @@ export function Movements() {
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
                 {!isWarehouseUser && <th className="px-4 py-3 font-medium">Beszerzés részletei</th>}
-                {!isWarehouseUser && <th className="px-4 py-3 font-medium">ÁFA</th>}
+                {!isWarehouseUser && <th className="px-4 py-3 font-medium">Áfa</th>}
                 {!isWarehouseUser && <th className="px-4 py-3 font-medium">Vevő</th>}
                 <th className="px-4 py-3 font-medium">Eladási státusz</th>
                 <th className="px-4 py-3 font-medium">Megjegyzés</th>
@@ -536,7 +536,7 @@ export function Movements() {
                             <button
                               type="button"
                               onClick={() => setEditingVat(m)}
-                              aria-label="ÁFA szerkesztése"
+                              aria-label="Áfa szerkesztése"
                               className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5"
                             >
                               <Pencil size={16} />
@@ -607,7 +607,7 @@ export function Movements() {
       {deletingPending && (
         <ConfirmDialog
           title="Tétel törlése"
-          message={`Biztosan törlöd ezt a még jóvá nem hagyott tételt (${productById.get(deletingPending.productId)?.name ?? 'termék'}, ${deletingPending.quantity} db)? Mivel még nem érintette a készletet, egyszerű törlés elég.`}
+          message={`Biztosan törli ezt a még jóvá nem hagyott tételt (${productById.get(deletingPending.productId)?.name ?? 'termék'}, ${deletingPending.quantity} db)? Mivel még nem érintette a készletet, egyszerű törlés elég.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {
@@ -656,7 +656,7 @@ function CancelSaleModal({ movement, product, onClose }: { movement: Movement; p
       {isDelivered && !confirmedDelivered ? (
         <>
           <p className="mb-4 text-sm font-medium text-[var(--color-danger)]">
-            A termék már kézbesítve lett az ügyfélnek - biztosan visszavonod az eladást? Ez valószínűleg egy visszáru/reklamáció esetét jelenti.
+            A termék már kézbesítve lett az ügyfélnek - biztosan visszavonja az eladást? Ez valószínűleg egy visszáru/reklamáció esetét jelenti.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>
@@ -670,7 +670,7 @@ function CancelSaleModal({ movement, product, onClose }: { movement: Movement; p
       ) : (
         <>
           <p className="mb-3 text-sm text-[var(--color-text)]">
-            Biztosan visszavonod a(z) "{product?.name ?? 'termék'}" eladást ({movement.quantity} {product?.unit ?? 'db'})? A készlet
+            Biztosan visszavonja a(z) "{product?.name ?? 'termék'}" eladást ({movement.quantity} {product?.unit ?? 'db'})? A készlet
             automatikusan visszakerül a raktárba.
           </p>
           <Field label="Indoklás (opcionális)">
@@ -705,7 +705,7 @@ function VatEditModal({ movement, lot, onClose }: { movement: Movement; lot: Pur
     setError(null)
     const rateNum = rate.trim() === '' ? undefined : Number(rate.replace(',', '.'))
     if (rateNum !== undefined && (!Number.isFinite(rateNum) || rateNum < 0)) {
-      setError('Az ÁFA kulcs nem lehet negatív.')
+      setError('Az áfakulcs nem lehet negatív.')
       return
     }
     if (movement.type === 'out') {
@@ -717,12 +717,12 @@ function VatEditModal({ movement, lot, onClose }: { movement: Movement; lot: Pur
   }
 
   return (
-    <Modal title="ÁFA szerkesztése" onClose={onClose}>
+    <Modal title="Áfa szerkesztése" onClose={onClose}>
       {missingLot ? (
         <p className="mb-3 text-sm text-[var(--color-text-muted)]">Ehhez a mozgáshoz nem található beszerzési tétel.</p>
       ) : (
         <>
-          <Field label="ÁFA kulcs (%, üresen hagyva törlöd a nyomon követést ennél a tételnél)">
+          <Field label="Áfakulcs (%, üresen hagyva törli a nyomon követést ennél a tételnél)">
             <Input inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="pl. 27" autoFocus />
           </Field>
           {movement.type === 'in' && rate.trim() !== '' && (

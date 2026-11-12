@@ -91,7 +91,7 @@ export function Vat() {
     { header: 'Forrás', accessor: (r) => r.source, width: 20 },
     { header: 'Kulcs (%)', accessor: (r) => r.vatRatePercent, width: 10 },
     { header: 'Nettó alap (Ft)', accessor: (r) => r.netHuf, width: 16 },
-    { header: 'ÁFA összeg (Ft)', accessor: (r) => r.amountHuf, width: 16 },
+    { header: 'Áfaösszeg (Ft)', accessor: (r) => r.amountHuf, width: 16 },
   ]
 
   const manualExportRows: ManualVatExportRow[] = manualVatEntries.map((e) => ({
@@ -116,11 +116,11 @@ export function Vat() {
   return (
     <div>
       <PageHeader
-        title="ÁFA"
-        subtitle="ÁFA-egyenleg, automatikus (beszerzés/eladás) és kézi tételek egy helyen. A termékenkénti alapértelmezett ÁFA kulcs a termék adatlapján állítható."
+        title="Áfa"
+        subtitle="Áfaegyenleg, automatikus (beszerzés/eladás) és kézi tételek egy helyen. A termékenkénti alapértelmezett áfakulcs a termék adatlapján állítható."
         actions={
           !isReadOnlyViewer && (
-            <FoGomb cim="Új ÁFA tétel" onClick={() => setCreating(true)} />
+            <FoGomb cim="Új áfatétel" onClick={() => setCreating(true)} />
           )
         }
       />
@@ -150,7 +150,7 @@ export function Vat() {
       </Card>
 
       <Card className="mb-5">
-        <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">ÁFA egyenleg</h2>
+        <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Áfaegyenleg</h2>
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <div className="text-sm text-[var(--color-text-muted)]">Befizetendő</div>
@@ -213,18 +213,18 @@ export function Vat() {
 
       <div className="mb-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-[var(--color-text)]">Automatikus ÁFA tételek (beszerzésből és eladásból)</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Automatikus áfatételek (beszerzésből és eladásból)</h2>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => exportToExcel(`afa_automatikus_${from}_${to}.xlsx`, 'Automatikus ÁFA', autoColumns, autoExportRows)}>
+            <Button variant="secondary" onClick={() => exportToExcel(`afa_automatikus_${from}_${to}.xlsx`, 'Automatikus áfa', autoColumns, autoExportRows)}>
               <FileSpreadsheet size={16} /> Excel
             </Button>
-            <Button variant="secondary" onClick={() => exportToPdf(`afa_automatikus_${from}_${to}.pdf`, 'Automatikus ÁFA tételek', autoColumns, autoExportRows)}>
+            <Button variant="secondary" onClick={() => exportToPdf(`afa_automatikus_${from}_${to}.pdf`, 'Automatikus áfatételek', autoColumns, autoExportRows)}>
               <FileText size={16} /> PDF
             </Button>
           </div>
         </div>
         {autoVatRows.length === 0 ? (
-          <EmptyState>Nincs automatikusan nyomon követett ÁFA tétel a kiválasztott időszakban.</EmptyState>
+          <EmptyState>Nincs automatikusan nyomon követett áfatétel a kiválasztott időszakban.</EmptyState>
         ) : (
           <Card className="overflow-x-auto p-0">
             <table className="w-full min-w-[560px] text-sm">
@@ -234,7 +234,7 @@ export function Vat() {
                   <th className="px-4 py-3 font-medium">Megnevezés</th>
                   <th className="px-4 py-3 font-medium">Forrás</th>
                   <th className="px-4 py-3 text-right font-medium">Kulcs</th>
-                  <th className="px-4 py-3 text-right font-medium">ÁFA összeg</th>
+                  <th className="px-4 py-3 text-right font-medium">Áfaösszeg</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,12 +266,12 @@ export function Vat() {
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-[var(--color-text)]">Kézzel felvitt ÁFA tételek</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Kézzel felvitt áfatételek</h2>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => exportToExcel(`afa_kezi_${from}_${to}.xlsx`, 'Kézi ÁFA tételek', manualColumns, manualExportRows)}>
+            <Button variant="secondary" onClick={() => exportToExcel(`afa_kezi_${from}_${to}.xlsx`, 'Kézi áfatételek', manualColumns, manualExportRows)}>
               <FileSpreadsheet size={16} /> Excel
             </Button>
-            <Button variant="secondary" onClick={() => exportToPdf(`afa_kezi_${from}_${to}.pdf`, 'Kézzel felvitt ÁFA tételek', manualColumns, manualExportRows)}>
+            <Button variant="secondary" onClick={() => exportToPdf(`afa_kezi_${from}_${to}.pdf`, 'Kézzel felvitt áfatételek', manualColumns, manualExportRows)}>
               <FileText size={16} /> PDF
             </Button>
           </div>
@@ -280,7 +280,7 @@ export function Vat() {
           <Checkbox label="Törölt tételek megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
         </Card>
         {manualVatEntries.length === 0 ? (
-          <EmptyState>Nincs kézzel felvitt ÁFA tétel a kiválasztott időszakban.</EmptyState>
+          <EmptyState teendo={!isReadOnlyViewer && 'Az „Új áfatétel” gombbal vehet fel.'}>Nincs kézzel felvitt áfatétel a kiválasztott időszakban.</EmptyState>
         ) : (
           <Card className="overflow-x-auto p-0">
             <table className="w-full min-w-[720px] text-sm">
@@ -377,18 +377,18 @@ export function Vat() {
           </Card>
         )}
         <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-          Ezek a tételek a Pénzügyi naplóban is megjelennek (ott minden kategória vegyesen listázva) - itt csak az ÁFA-kategóriájú
-          tételekre szűrve, egy helyen, a teljes ÁFA-képhez.
+          Ezek a tételek a Pénzügyi naplóban is megjelennek (ott minden kategória vegyesen listázva) - itt csak az áfa kategóriájú
+          tételekre szűrve, egy helyen, a teljes áfaképhez.
         </p>
       </div>
 
       {creating && (
-        <Modal title="Új ÁFA tétel" onClose={() => setCreating(false)}>
+        <Modal title="Új áfatétel" onClose={() => setCreating(false)}>
           <LedgerEntryForm initialCategory={VAT_CATEGORY} onDone={() => setCreating(false)} />
         </Modal>
       )}
       {editing && (
-        <Modal title="ÁFA tétel szerkesztése" onClose={() => setEditing(null)}>
+        <Modal title="Áfatétel szerkesztése" onClose={() => setEditing(null)}>
           <LedgerEntryForm entry={editing} onDone={() => setEditing(null)} />
         </Modal>
       )}

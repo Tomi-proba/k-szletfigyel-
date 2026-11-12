@@ -34,7 +34,7 @@ export function ForgotPassword({ onSwitchToLogin }: { onSwitchToLogin: () => voi
   }
 
   return (
-    <AuthLayout title="Elfelejtett jelszó" subtitle="Add meg az email címed, és küldünk egy jelszó-visszaállító linket.">
+    <AuthLayout title="Elfelejtett jelszó" subtitle="Adja meg az e-mail-címét, és küldünk egy jelszó-visszaállító linket.">
       <form onSubmit={handleSubmit}>
         <Field label="Email cím">
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />

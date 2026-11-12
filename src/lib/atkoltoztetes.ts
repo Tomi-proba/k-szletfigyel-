@@ -33,7 +33,7 @@ export type Csoport =
 
 export const CSOPORT_NEV: Record<Csoport, string> = {
   locations: 'Telephelyek',
-  suppliers: 'Beszállítók',
+  suppliers: 'Szállítók',
   customers: 'Vevők',
   products: 'Termékek',
   movements: 'Készletmozgások',

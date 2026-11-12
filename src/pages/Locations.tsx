@@ -141,7 +141,7 @@ export function Locations() {
       {deleting && (
         <ConfirmDialog
           title="Telephely törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" telephelyet?`}
+          message={`Biztosan törli a(z) "${deleting.name}" telephelyet?`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

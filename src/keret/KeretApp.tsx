@@ -29,7 +29,7 @@ export function KeretKepernyok({ alapUtvonal }: { alapUtvonal: string }) {
     return (
       <div className="keszlet-keret__uzenet" role="status" data-keszlet-nincs-supabase>
         A Készletkezelő a keretben a közös (Supabase) belépéssel működik. A portál most saját belépéssel fut, ezért a
-        Készletkezelőt a saját címén nyisd meg.
+        Készletkezelőt a saját címén nyissa meg.
       </div>
     )
   }
@@ -65,7 +65,7 @@ function KeretKeszlet() {
   }, [k.ceg.id, portalCegBeallitas])
 
   if (!hydrated || loading || cegValtasFolyamatban) return <Uzenet>A Készletkezelő megnyitása…</Uzenet>
-  if (mfa && mfa !== 'ok') return <Uzenet>A Készletkezelőhöz kétlépcsős belépés szükséges. Lépj be újra a portálon.</Uzenet>
+  if (mfa && mfa !== 'ok') return <Uzenet>A Készletkezelőhöz kétlépcsős belépés szükséges. Lépjen be újra a portálon.</Uzenet>
   if (dataLoadError) {
     return (
       <div className="keszlet-keret__uzenet" role="alert" data-keszlet-hiba>
@@ -137,7 +137,7 @@ function KeretCegOsszerendeles() {
         <section className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
           <h2 className="mb-2 text-lg font-semibold">Új Készletkezelő-cég a portál cégadataival</h2>
           <p className="mb-3 text-sm text-[var(--color-text-muted)]">
-            Cégnév: <strong>{k.ceg.nev}</strong>. Te leszel a fő irodája; egy alapértelmezett telephely is létrejön.
+            Cégnév: <strong>{k.ceg.nev}</strong>. Ön lesz a fő irodája; egy alapértelmezett telephely is létrejön.
           </p>
           <button
             type="button"

@@ -25,12 +25,12 @@ import { ApproveSaleModal } from '../components/ApproveSaleModal'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
 
 const HIBA: Record<string, string> = {
-  'not-found': 'Ez a tétel már nincs meg (közben törölték?). Frissítsd a listát.',
+  'not-found': 'Ez a tétel már nincs meg (közben törölték?). Frissítse a listát.',
   'not-pending': 'Ezt a tételt közben már elfogadták vagy visszavonták.',
   'already-confirmed': 'Ezt a tételt már visszaigazolták.',
-  'invalid-quantity': 'Adj meg 0-nál nagyobb mennyiséget. Ha semmi nem mozdult, a „Nem …” gombot használd.',
-  'note-required': 'Írd be röviden, mi történt (vagy koppints egy okra).',
-  'reason-required': 'Írd be röviden, miért.',
+  'invalid-quantity': 'Adjon meg 0-nál nagyobb mennyiséget. Ha semmi nem mozdult, a „Nem …” gombot használja.',
+  'note-required': 'Írja be röviden, mi történt (vagy koppintson egy okra).',
+  'reason-required': 'Írja be röviden, miért.',
   'insufficient-stock': 'Nincs ennyi szabad készlet.',
   'insufficient-lot': 'Az eredeti beszerzésből nincs ennyi a raktárban.',
   forbidden: 'Ezt csak a fő iroda fogadhatja el.',
@@ -100,10 +100,10 @@ function Kartya({
   const hibaKiir = (r: { reason: string; available?: number }) => {
     if (r.reason === 'insufficient-stock') {
       setKeszletHiany(true)
-      setHiba(`${HIBA[r.reason]}${r.available !== undefined ? ` Szabad készlet: ${formatNumber(r.available)} ${egyseg}.` : ''} Számold meg a polcot.`)
+      setHiba(`${HIBA[r.reason]}${r.available !== undefined ? ` Szabad készlet: ${formatNumber(r.available)} ${egyseg}.` : ''} Számolja meg a polcot.`)
       return
     }
-    setHiba(HIBA[r.reason] ?? 'Nem sikerült.')
+    setHiba(HIBA[r.reason] ?? 'Váratlan hiba történt.')
   }
 
   // 1. lépés: a raktár visszaigazolja, mi történt.
@@ -139,7 +139,7 @@ function Kartya({
   const kevesebbRogzites = () => {
     const q = Number(mennyiseg.replace(',', '.'))
     if (!Number.isFinite(q) || q <= 0) return setHiba(HIBA['invalid-quantity'])
-    if (!veglegesit && q >= vart) return setHiba(`Ez nem kevesebb a vártnál (${formatNumber(vart)} ${egyseg}). Ha minden megvan, nyomd meg: „${t.rendben}”.`)
+    if (!veglegesit && q >= vart) return setHiba(`Ez nem kevesebb a vártnál (${formatNumber(vart)} ${egyseg}). Ha minden megvan, nyomja meg: „${t.rendben}”.`)
     if (q !== vart && !megjegyzes.trim()) return setHiba(HIBA['note-required'])
     if (veglegesit) elfogad(q, megjegyzes, keszletHiany)
     else visszaigazol(q, megjegyzes, keszletHiany)
@@ -246,7 +246,7 @@ function Kartya({
       ) : (
         <>
           {veglegesit && raktarSzerint === null && (
-            <p className="muted text-sm">A raktár még nem igazolta vissza. Csak akkor fogadd el, ha biztosan tudod, mi történt.</p>
+            <p className="muted text-sm">A raktár még nem igazolta vissza. Csak akkor fogadja el, ha biztosan tudja, mi történt.</p>
           )}
           {veglegesit && raktarSzerint === 0 ? (
             <button type="button" className="btn btn-danger btn-big btn-block" onClick={() => nyit('nem')}>
@@ -277,7 +277,7 @@ function Kartya({
         <div id={`panel-${m.id}`} className="card card-muted flex flex-col gap-3">
           {nyitva === 'kevesebb' && (
             <label className="flex flex-col gap-1">
-              <span className="font-medium">{veglegesit ? 'Mennyit fogadsz el?' : t.kevesebbKerdes}</span>
+              <span className="font-medium">{veglegesit ? 'Mennyit fogad el?' : t.kevesebbKerdes}</span>
               <span className="flex items-center gap-2">
                 <input
                   className="w-32 rounded-lg border border-[var(--szin-keret)] bg-[var(--szin-hatter)] px-3 py-3 text-2xl font-semibold tabular-nums"
@@ -306,7 +306,7 @@ function Kartya({
             <textarea
               className="mt-1 w-full rounded-lg border border-[var(--szin-keret)] bg-[var(--szin-hatter)] px-3 py-2"
               rows={2}
-              placeholder="Vagy írd be röviden…"
+              placeholder="Vagy írja be röviden…"
               value={megjegyzes}
               onChange={(e) => setMegjegyzes(e.target.value)}
               aria-label="Megjegyzés"
@@ -407,7 +407,7 @@ export function Jovahagyando() {
   ).filter((g) => g.elemek.length)
 
   const leiras = szerep.raktaros
-    ? 'Amit rögzítesz, az bejelentés: a készlet csak a fő iroda elfogadásakor változik. Itt igazolod vissza, mi érkezett vagy ment ki ténylegesen.'
+    ? 'Amit rögzít, az bejelentés: a készlet csak a fő iroda elfogadásakor változik. Itt igazolja vissza, mi érkezett vagy ment ki ténylegesen.'
     : szerep.foIroda || szerep.helyi
       ? 'A raktár bejelentései és visszaigazolásai. Elfogadáskor változik a készlet és ekkor megy a Könyvelőbe; nem kell külön rögzíteni.'
       : 'A raktár bejelentései. Elfogadni csak a fő iroda tudja.'

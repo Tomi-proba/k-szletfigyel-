@@ -107,7 +107,7 @@ export function Products() {
     { header: 'Min. szint', accessor: (r) => r.minStock, width: 12 },
     { header: 'Egység', accessor: (r) => r.unit, width: 10 },
     { header: 'Státusz', accessor: (r) => STATUS_LABEL[r.status], width: 14 },
-    { header: 'Beszállító', accessor: (r) => r.supplierName, width: 22 },
+    { header: 'Szállító', accessor: (r) => r.supplierName, width: 22 },
     ...(isWarehouseUser ? [] : [{ header: 'Beszerzési ár', accessor: (r: InventoryRow) => r.purchasePrice, width: 14 }]),
     { header: 'Eladási ár', accessor: (r) => r.salePrice, width: 14 },
   ]
@@ -157,7 +157,7 @@ export function Products() {
           )}
           {suppliers.length > 1 && (
             <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-              <option value="">Összes beszállító</option>
+              <option value="">Összes szállító</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -226,7 +226,7 @@ export function Products() {
                 )}
                 <div className="flex justify-between text-xs text-[var(--color-text-muted)]">
                   <span>Min. szint: {formatNumber(product.minStock)} {product.unit}</span>
-                  <span>Beszállító: {supplierName(product.supplierId)}</span>
+                  <span>Szállító: {supplierName(product.supplierId)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-[var(--color-text-muted)]">
                   {!isWarehouseUser && <span>Beszerzési ár: {formatCurrency(product.purchasePrice)}</span>}
@@ -272,7 +272,7 @@ export function Products() {
       {deleting && (
         <ConfirmDialog
           title="Termék törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" terméket? A mozgásnapló bejegyzései megmaradnak, és a termék bármikor visszaállítható a "Törölt termékek megjelenítése" nézetből.`}
+          message={`Biztosan törli a(z) "${deleting.name}" terméket? A mozgásnapló bejegyzései megmaradnak, és a termék bármikor visszaállítható a "Törölt termékek megjelenítése" nézetből.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

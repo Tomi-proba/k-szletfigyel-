@@ -54,17 +54,17 @@ export function RecurringLedgerEntryForm({ entry, onDone }: RecurringLedgerEntry
     e.preventDefault()
     setError(null)
 
-    if (!effectiveCategory) return setError(isCustomCategory ? 'Add meg az új kategória nevét.' : 'Válassz kategóriát.')
+    if (!effectiveCategory) return setError(isCustomCategory ? 'Adja meg az új kategória nevét.' : 'Válasszon kategóriát.')
     if (!description.trim()) return setError('A megnevezést kötelező megadni.')
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) return setError('Az összegnek pozitív számnak kell lennie.')
     if (currency !== 'HUF' && (!Number.isFinite(exchangeRateNumber) || (exchangeRateNumber ?? 0) <= 0)) {
-      return setError('Add meg az árfolyamot (1 egység hány forint).')
+      return setError('Adja meg az árfolyamot (1 egység hány forint).')
     }
     if (!Number.isInteger(dayOfMonthNumber) || dayOfMonthNumber < 1 || dayOfMonthNumber > 31) {
       return setError('A hónap napjának 1 és 31 között kell lennie.')
     }
-    if (!startDate) return setError('Add meg, mely hónaptól induljon.')
-    if (hasEndDate && !endDate) return setError('Add meg az utolsó napot, vagy kapcsold ki a végdátumot.')
+    if (!startDate) return setError('Adja meg, mely hónaptól induljon.')
+    if (hasEndDate && !endDate) return setError('Adja meg az utolsó napot, vagy kapcsolja ki a végdátumot.')
     if (hasEndDate && endDate < startDate) return setError('A végdátum nem lehet korábbi, mint a kezdő dátum.')
 
     const payload = {

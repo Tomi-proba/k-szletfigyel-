@@ -85,7 +85,7 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
       <p className="mb-3 text-sm text-[var(--color-text-muted)]">
         {movement.raktarVisszaigazolva
           ? `A raktár szerint ${movement.raktarMennyiseg ?? movement.quantity} ${product?.unit ?? ''} érkezett${movement.raktarMegjegyzes ? ` (${movement.raktarMegjegyzes})` : ''}.`
-          : 'A raktár még nem igazolta vissza, mennyi érkezett. Csak akkor fogadd el, ha biztosan tudod.'}
+          : 'A raktár még nem igazolta vissza, mennyi érkezett. Csak akkor fogadja el, ha biztosan tudja.'}
       </p>
 
       <Field label={`Ténylegesen beérkezett mennyiség${product ? ` (${product.unit})` : ''}`}>

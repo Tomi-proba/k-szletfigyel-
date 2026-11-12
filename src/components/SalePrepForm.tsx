@@ -27,7 +27,7 @@ export function SalePrepForm({ onDone }: { onDone?: () => void }) {
   function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!productId) return setError('Válassz terméket.')
+    if (!productId) return setError('Válasszon terméket.')
     if (!quantity || !Number.isFinite(qtyNumber) || qtyNumber <= 0) return setError('A mennyiségnek pozitív számnak kell lennie.')
 
     const result = createPendingSalePrep({ productId, quantity: qtyNumber, date, customerId: customerId || undefined, note }, { allowNegativeStock: hiany })
@@ -35,7 +35,7 @@ export function SalePrepForm({ onDone }: { onDone?: () => void }) {
       // A még el nem fogadott kiadások lefoglalják a készletet (DOCUMENTATION.md 31. fejezet).
       if (result.reason === 'insufficient-stock') {
         setHiany(true)
-        return setError('Nincs ennyi szabad készlet (a még el nem fogadott kiadások lefoglalták). Ha megszámoltad és tényleg van, nyomd meg újra.')
+        return setError('Nincs ennyi szabad készlet (a még el nem fogadott kiadások lefoglalták). Ha megszámolta és tényleg van, nyomja meg újra.')
       }
       return setError('A kiszállítás nem rögzíthető.')
     }

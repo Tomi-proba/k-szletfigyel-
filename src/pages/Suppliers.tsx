@@ -21,7 +21,7 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const leadNum = Number(leadTimeDays)
-    if (!name.trim()) return setError('A beszállító nevét kötelező megadni.')
+    if (!name.trim()) return setError('A szállító nevét kötelező megadni.')
     if (!Number.isFinite(leadNum) || leadNum < 0) return setError('A szállítási idő nem lehet negatív.')
 
     const payload = { name: name.trim(), phone: phone.trim() || undefined, email: email.trim() || undefined, leadTimeDays: leadNum }
@@ -32,7 +32,7 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
 
   return (
     <form onSubmit={handleSubmit}>
-      <Field label="Beszállító neve">
+      <Field label="Szállító neve">
         <Input value={name} onChange={(e) => setName(e.target.value)} required />
       </Field>
       <Field label="Telefonszám">
@@ -79,21 +79,21 @@ export function Suppliers() {
   return (
     <div>
       <PageHeader
-        title="Beszállítók"
-        subtitle="Beszállítói adatok és szállítási idők"
+        title="Szállítók"
+        subtitle="Szállítói adatok és szállítási idők"
         actions={
           !isReadOnlyViewer && (
-            <FoGomb cim="Új beszállító" onClick={() => setCreating(true)} />
+            <FoGomb cim="Új szállító" onClick={() => setCreating(true)} />
           )
         }
       />
 
       <div className="mb-4">
-        <Checkbox label="Törölt beszállítók megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+        <Checkbox label="Törölt szállítók megjelenítése" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
       </div>
 
       {visibleSuppliers.length === 0 ? (
-        <EmptyState>Még nincs rögzített beszállító.</EmptyState>
+        <EmptyState teendo={!isReadOnlyViewer && 'Az „Új szállító” gombbal vehet fel.'}>Még nincs szállító.</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visibleSuppliers.map((s) => {
@@ -138,19 +138,19 @@ export function Suppliers() {
       )}
 
       {creating && (
-        <Modal title="Új beszállító" onClose={() => setCreating(false)}>
+        <Modal title="Új szállító" onClose={() => setCreating(false)}>
           <SupplierForm onDone={() => setCreating(false)} />
         </Modal>
       )}
       {editing && (
-        <Modal title="Beszállító szerkesztése" onClose={() => setEditing(null)}>
+        <Modal title="Szállító szerkesztése" onClose={() => setEditing(null)}>
           <SupplierForm supplier={editing} onDone={() => setEditing(null)} />
         </Modal>
       )}
       {deleting && (
         <ConfirmDialog
-          title="Beszállító törlése"
-          message={`Biztosan törlöd a(z) "${deleting.name}" beszállítót? A hozzá rendelt termékek megtartják a hivatkozást, és a beszállító bármikor visszaállítható.`}
+          title="Szállító törlése"
+          message={`Biztosan törli a(z) "${deleting.name}" szállítót? A hozzá rendelt termékek megtartják a hivatkozást, és a szállító bármikor visszaállítható.`}
           confirmLabel="Törlés"
           danger
           onConfirm={() => {

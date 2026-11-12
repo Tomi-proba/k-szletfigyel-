@@ -240,15 +240,15 @@ export function allapotUzenet(a: SorAllapot): string {
       return a.fuggo === 1 ? 'Mentés…' : `Mentés… (${a.fuggo} változás)`
     case 'ujraprobalas':
       return a.ok === 'halozat'
-        ? `Nincs kapcsolat a szerverrel. ${a.fuggo} nem mentett változásod biztonságban van ezen az eszközön, és automatikusan elmentjük, amint helyreáll a kapcsolat. Addig ne töröld a böngésző adatait, és ne jelentkezz ki.`
+        ? `Nincs kapcsolat a szerverrel. ${a.fuggo} nem mentett változása biztonságban van ezen az eszközön, és automatikusan elmentjük, amint helyreáll a kapcsolat. Addig ne törölje a böngésző adatait, és ne jelentkezzen ki.`
         : `A szerver átmenetileg nem válaszol. ${a.fuggo} változás vár mentésre; automatikusan újrapróbáljuk.`
     case 'elakadt': {
       const mi = a.elveszett.length ? a.elveszett.map((l) => `„${l}”`).join(', ') : 'a legutóbbi változás'
       if (a.ok === 'utkozes')
-        return `Nem sikerült menteni: ${mi}. Ugyanezt az adatot közben egy másik eszközön módosították, és hogy azt ne írjuk felül, ezt a változást nem mentettük. Frissítsd az adatokat, és ha szükséges, rögzítsd újra.`
+        return `Nem sikerült menteni: ${mi}. Ugyanezt az adatot közben egy másik eszközön módosították, és hogy azt ne írjuk felül, ezt a változást nem mentettük. Frissítse az adatokat, és ha szükséges, rögzítse újra.`
       if (a.ok === 'jogosultsag')
-        return `Nem sikerült menteni: ${mi}. Ehhez a művelethez nincs jogosultságod (vagy közben megváltozott a szerepköröd). Frissítsd az adatokat; ha szerinted ez hiba, keresd a cég fő irodáját.`
-      return `Nem sikerült menteni: ${mi}. A szerver nem fogadta el az adatot. Frissítsd az adatokat, és próbáld újra; ha a hiba ismétlődik, jelezd a következő azonosítóval: ${a.technikai}`
+        return `Nem sikerült menteni: ${mi}. Ehhez a művelethez nincs jogosultsága (vagy közben megváltozott a szerepköre). Frissítse az adatokat; ha szerinte ez hiba, keresse a cég fő irodáját.`
+      return `Nem sikerült menteni: ${mi}. A szerver nem fogadta el az adatot. Frissítse az adatokat, és próbálja újra; ha a hiba ismétlődik, jelezze a következő azonosítóval: ${a.technikai}`
     }
   }
 }

@@ -129,10 +129,10 @@ export function Dashboard() {
               <span className="flex items-center gap-2">
                 <ClipboardCheck size={22} aria-hidden="true" className="text-[var(--szin-figyelmeztetes)]" />
                 <span>
-                  <span className="block font-semibold">{alerts.jovahagyasraVar.length} tétel vár rád</span>
+                  <span className="block font-semibold">{alerts.jovahagyasraVar.length} tétel vár Önre</span>
                   <span className="muted block text-sm">
                     {isWarehouseUser
-                      ? 'Igazold vissza, mi érkezett vagy ment ki; az elutasított bejelentéseidet javítsd'
+                      ? 'Igazolja vissza, mi érkezett vagy ment ki; az elutasított bejelentéseit javítsa'
                       : 'A raktár bejelentései: elfogadásukkor változik a készlet'}
                   </span>
                 </span>

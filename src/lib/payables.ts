@@ -59,7 +59,7 @@ export function computePayableObligations(
         id: l.id,
         sourceType: 'purchase' as const,
         dueDate: l.dueDate,
-        payee: supplier?.name ?? 'Ismeretlen beszállító',
+        payee: supplier?.name ?? 'Ismeretlen szállító',
         description: `${product?.name ?? 'Törölt termék'} - beszerzés (${l.quantity} ${product?.unit ?? 'db'})`,
         // The full invoice amount owed to the supplier - net + VAT (both
         // reclaimable and not), since that's what actually has to be paid,

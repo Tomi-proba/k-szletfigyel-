@@ -31,7 +31,7 @@ export function ResetPassword({ onDone }: { onDone: () => void }) {
   if (done) {
     return (
       <AuthLayout title="Jelszó frissítve">
-        <p className="mb-4 text-sm text-[var(--color-text)]">Az új jelszavaddal már be is vagy jelentkezve.</p>
+        <p className="mb-4 text-sm text-[var(--color-text)]">Az új jelszavával már be is van jelentkezve.</p>
         <Button className="w-full" onClick={onDone}>
           Tovább az alkalmazásba
         </Button>

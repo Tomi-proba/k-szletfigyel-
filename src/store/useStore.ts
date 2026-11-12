@@ -649,7 +649,7 @@ export const useStore = create<AppState>()(
           const supplier: Supplier = { ...input, id: createId() }
           return {
             suppliers: [...state.suppliers, supplier],
-            auditLog: [...state.auditLog, auditEntry('supplier', supplier.id, supplier.name, 'create', `"${supplier.name}" beszállító létrehozva`)],
+            auditLog: [...state.auditLog, auditEntry('supplier', supplier.id, supplier.name, 'create', `"${supplier.name}" szállító létrehozva`)],
           }
         }),
 
@@ -663,7 +663,7 @@ export const useStore = create<AppState>()(
             suppliers: state.suppliers.map((s) => (s.id === id ? updated : s)),
             auditLog:
               changes.length > 0
-                ? [...state.auditLog, auditEntry('supplier', id, updated.name, 'update', `"${updated.name}" beszállító adatai módosultak`, changes)]
+                ? [...state.auditLog, auditEntry('supplier', id, updated.name, 'update', `"${updated.name}" szállító adatai módosultak`, changes)]
                 : state.auditLog,
           }
         }),
@@ -674,7 +674,7 @@ export const useStore = create<AppState>()(
           if (!supplier) return state
           return {
             suppliers: state.suppliers.map((s) => (s.id === id ? { ...s, deletedAt: new Date().toISOString() } : s)),
-            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'delete', `"${supplier.name}" beszállító törölve`)],
+            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'delete', `"${supplier.name}" szállító törölve`)],
           }
         }),
 
@@ -684,7 +684,7 @@ export const useStore = create<AppState>()(
           if (!supplier || !supplier.deletedAt) return state
           return {
             suppliers: state.suppliers.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
-            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'restore', `"${supplier.name}" beszállító visszaállítva`)],
+            auditLog: [...state.auditLog, auditEntry('supplier', id, supplier.name, 'restore', `"${supplier.name}" szállító visszaállítva`)],
           }
         }),
 
@@ -1041,7 +1041,7 @@ export const useStore = create<AppState>()(
                       lotId,
                       product?.name ?? 'Beszerzési tétel',
                       'update',
-                      isPaid ? 'Beszállítói számla megjelölve kifizetettként' : 'Beszállítói számla megjelölve kifizetetlenként',
+                      isPaid ? 'Szállítói számla megjelölve kifizetettként' : 'Szállítói számla megjelölve kifizetetlenként',
                       changes,
                     ),
                   ]
@@ -1092,7 +1092,7 @@ export const useStore = create<AppState>()(
               changes.length > 0
                 ? [
                     ...state.auditLog,
-                    auditEntry('lot', lotId, product?.name ?? 'Beszerzési tétel', 'update', 'Beszerzési tétel ÁFA adatai módosultak', changes),
+                    auditEntry('lot', lotId, product?.name ?? 'Beszerzési tétel', 'update', 'Beszerzési tétel áfaadatai módosultak', changes),
                   ]
                 : state.auditLog,
           }
@@ -1108,7 +1108,7 @@ export const useStore = create<AppState>()(
             movements: state.movements.map((m) => (m.id === movementId ? { ...m, vatRatePercent } : m)),
             auditLog:
               changes.length > 0
-                ? [...state.auditLog, auditEntry('movement', movementId, product?.name ?? 'Mozgás', 'update', 'Mozgás ÁFA kulcsa módosult', changes)]
+                ? [...state.auditLog, auditEntry('movement', movementId, product?.name ?? 'Mozgás', 'update', 'Mozgás áfakulcsa módosult', changes)]
                 : state.auditLog,
           }
         }),

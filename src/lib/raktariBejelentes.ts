@@ -65,7 +65,7 @@ export function allapota(m: Movement): Allapot {
 export const ALLAPOT_SZOVEG: Record<Exclude<Allapot, null>, string> = {
   raktarra_var: 'A raktár visszaigazolására vár',
   fo_irodara_var: 'A fő iroda elfogadására vár',
-  elutasitva: 'Elutasítva – javítsd és küldd újra',
+  elutasitva: 'Elutasítva – javítsa és küldje újra',
 }
 
 function napKulonbseg(a: string, b: string): number {

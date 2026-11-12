@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCircle2, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { Button, Card, Checkbox, EmptyState, Field, Input, PageHeader } from '../components/ui'
 import { formatCurrency, formatDate } from '../lib/format'
+import { FoGomb } from '../keret/FoGomb'
 
 function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () => void }) {
   const addCustomer = useStore((s) => s.addCustomer)
@@ -92,9 +93,7 @@ export function Customers() {
         subtitle="Névre rögzített eladások és fizetési állapotuk nyomon követése"
         actions={
           !isReadOnlyViewer && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új vevő
-            </Button>
+            <FoGomb cim="Új vevő" onClick={() => setCreating(true)} />
           )
         }
       />

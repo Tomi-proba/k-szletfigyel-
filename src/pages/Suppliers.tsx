@@ -1,4 +1,4 @@
-import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
@@ -7,6 +7,7 @@ import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { Button, Card, Checkbox, EmptyState, Field, Input, PageHeader } from '../components/ui'
+import { FoGomb } from '../keret/FoGomb'
 
 function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () => void }) {
   const addSupplier = useStore((s) => s.addSupplier)
@@ -82,9 +83,7 @@ export function Suppliers() {
         subtitle="Beszállítói adatok és szállítási idők"
         actions={
           !isReadOnlyViewer && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új beszállító
-            </Button>
+            <FoGomb cim="Új beszállító" onClick={() => setCreating(true)} />
           )
         }
       />

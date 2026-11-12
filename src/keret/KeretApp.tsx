@@ -19,6 +19,7 @@ import { MovementForm } from '../components/MovementForm'
 import { keretModBeallitas, sajatUtvonal, ut } from './futas'
 import { CSOPORTOK, aktivCsoport, csoportPontjai, keszletMenu } from './menu'
 import { Link } from './router'
+import { FoGombKontextus, type FoMuvelet } from './FoGomb'
 
 /** A modul képernyői a keretben: ezt adja a csomag `Kepernyok`-ként. */
 export function KeretKepernyok({ alapUtvonal }: { alapUtvonal: string }) {
@@ -197,7 +198,7 @@ function AutomatikusCeg({ onHiba }: { onHiba: (uzenet: string) => void }) {
   return <Uzenet>A Készletkezelő előkészítése a cég adataival…</Uzenet>
 }
 
-/** A keretbeli elrendezés: a fejléc és a főmenü a kereté; itt a jelzők, az oldalon belüli fülsor és a „+” gomb. */
+/** A keretbeli elrendezés: a fejléc és a főmenü a kereté; itt a jelzők és az eszközsor: az oldalon belüli fülsor és mellette, jobb fent, az oldal egyetlen fő gombja. */
 function KeretLayout() {
   const k = useKeret()
   const gy = useGyorsbillentyuk()
@@ -210,7 +211,14 @@ function KeretLayout() {
   const sajat = sajatUtvonal(pathname)
   const ujTetel = keretBillentyu('uj-tetel')
   const irhat = !isReadOnly && !isReadOnlyViewer
-  useGyorsbillentyu(irhat ? ujTetel : undefined, () => setGyorsMozgas(true))
+  // Egy fő gomb (F27 B3): az oldalé, ha megadott ilyet (pl. „Új termék”), különben az „Új mozgás”; a kezdőlapon nincs.
+  const [foMuvelet, setFoMuvelet] = useState<FoMuvelet | null | undefined>(undefined)
+  const fo: FoMuvelet | null = !irhat
+    ? null
+    : foMuvelet === null
+      ? null
+      : (foMuvelet ?? (sajat !== '/' ? { cim: 'Új mozgás', onClick: () => setGyorsMozgas(true) } : null))
+  useGyorsbillentyu(fo ? ujTetel : undefined, () => fo?.onClick())
 
   const isFoIroda = effectiveRole === 'fo_iroda'
   const modositasiKerelmek = pendingChanges.filter((c) => c.status === 'pending').length
@@ -251,28 +259,36 @@ function KeretLayout() {
           Az előfizetés lejárt vagy le lett mondva: a Készletkezelő most csak megtekintésre szolgál.
         </div>
       )}
-      {csoport && (
-        <nav className="keszlet-keret__fulek" aria-label={`${CSOPORTOK[csoport]!.cim} almenü`} data-keszlet-fulek={csoport}>
-          {csoportPontjai(csoport, effectiveRole).map((p) => (
-            <Link key={p.utvonal} to={p.utvonal} aria-current={sajat === p.utvonal ? 'page' : undefined}>
-              {p.cim}
-            </Link>
-          ))}
-        </nav>
+      {(csoport || fo) && (
+        <div className="keszlet-keret__eszkozsor" data-keszlet-eszkozsor>
+          {csoport ? (
+            <nav className="keszlet-keret__fulek" aria-label={`${CSOPORTOK[csoport]!.cim} almenü`} data-keszlet-fulek={csoport}>
+              {csoportPontjai(csoport, effectiveRole).map((p) => (
+                <Link key={p.utvonal} to={p.utvonal} aria-current={sajat === p.utvonal ? 'page' : undefined}>
+                  {p.cim}
+                </Link>
+              ))}
+            </nav>
+          ) : (
+            <span className="keszlet-keret__fulek keszlet-keret__fulek--ures" />
+          )}
+          {fo && (
+            <button
+              type="button"
+              onClick={fo.onClick}
+              title={`${fo.cim} – ${feliratok(ujTetel, gy.mac)}`}
+              aria-keyshortcuts={ariaFelirat(ujTetel)}
+              className="keszlet-keret__fo-gomb"
+              data-fo-gomb
+            >
+              <Plus size={18} aria-hidden /> {fo.cim}
+            </button>
+          )}
+        </div>
       )}
-      <Outlet />
-      {irhat && sajat !== '/' && (
-        <button
-          type="button"
-          onClick={() => setGyorsMozgas(true)}
-          aria-label="Új mozgás rögzítése"
-          title={`Új mozgás rögzítése – ${feliratok(ujTetel, gy.mac)}`}
-          aria-keyshortcuts={ariaFelirat(ujTetel)}
-          className="keszlet-keret__plusz fixed bottom-6 right-5 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg"
-        >
-          <Plus size={28} />
-        </button>
-      )}
+      <FoGombKontextus.Provider value={setFoMuvelet}>
+        <Outlet />
+      </FoGombKontextus.Provider>
       {gyorsMozgas && (
         <Modal title="Mozgás rögzítése" onClose={() => setGyorsMozgas(false)}>
           <MovementForm onDone={() => setGyorsMozgas(false)} />

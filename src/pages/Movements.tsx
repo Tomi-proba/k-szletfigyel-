@@ -19,6 +19,7 @@ import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { lotUnitCost } from '../lib/costing'
 import type { Movement, MovementReason, Product, PurchaseLot, SaleStatus } from '../types'
 import { KonyveloForras } from '../components/KozosTeendok'
+import { keretben } from '../keret/futas'
 
 const OK_FELIRAT: Record<MovementReason, string> = { normal: '', leltar_hiany: 'Leltári hiány', leltar_tobblet: 'Leltári többlet', selejt: 'Selejt' }
 
@@ -204,12 +205,12 @@ export function Movements() {
               <FileText size={16} /> PDF
             </Button>
             {!isWarehouseUser && !isReadOnlyViewer && (
-              <Button onClick={() => setCreatingOrder(true)}>
+              <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreatingOrder(true)}>
                 <PackagePlus size={16} /> Rendelés leadása
               </Button>
             )}
             {isWarehouseUser && !isReadOnlyViewer && (
-              <Button onClick={() => setCreatingSalePrep(true)}>
+              <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreatingSalePrep(true)}>
                 <ClipboardList size={16} /> Kiszállítás előkészítése
               </Button>
             )}

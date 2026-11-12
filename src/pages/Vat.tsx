@@ -6,7 +6,7 @@
 // computed and shown. The per-product default VAT rate itself stays on the
 // product page (Készlet) - that's a setting, not a report, so it isn't
 // duplicated here.
-import { CheckCircle2, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCircle2, FileSpreadsheet, FileText, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
@@ -21,6 +21,7 @@ import { Button, Card, Checkbox, EmptyState, Input, PageHeader } from '../compon
 import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/format'
 import { currentMonthRange, currentQuarterRange, isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
+import { FoGomb } from '../keret/FoGomb'
 
 interface AutoVatExportRow {
   date: string
@@ -119,9 +120,7 @@ export function Vat() {
         subtitle="ÁFA-egyenleg, automatikus (beszerzés/eladás) és kézi tételek egy helyen. A termékenkénti alapértelmezett ÁFA kulcs a termék adatlapján állítható."
         actions={
           !isReadOnlyViewer && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új ÁFA tétel
-            </Button>
+            <FoGomb cim="Új ÁFA tétel" onClick={() => setCreating(true)} />
           )
         }
       />

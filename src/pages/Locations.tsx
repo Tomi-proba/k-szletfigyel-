@@ -1,4 +1,4 @@
-import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
@@ -7,6 +7,7 @@ import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { Button, Card, Checkbox, Field, Input, PageHeader } from '../components/ui'
+import { FoGomb } from '../keret/FoGomb'
 
 function LocationForm({ location, onDone }: { location?: Location; onDone: () => void }) {
   const addLocation = useStore((s) => s.addLocation)
@@ -67,9 +68,7 @@ export function Locations() {
         subtitle="Több telephely esetén a készlet telephelyenként külön kezelhető"
         actions={
           !isReadOnlyViewer && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={18} /> Új telephely
-            </Button>
+            <FoGomb cim="Új telephely" onClick={() => setCreating(true)} />
           )
         }
       />

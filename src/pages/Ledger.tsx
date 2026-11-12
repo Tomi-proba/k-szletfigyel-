@@ -19,6 +19,8 @@ import { formatCurrency, formatDate, formatMoney, formatNumber } from '../lib/fo
 import { currentMonthRange, currentQuarterRange, isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { useOsszekapcsolva } from '../lib/integracio'
+import { FoGomb } from '../keret/FoGomb'
+import { keretben } from '../keret/futas'
 
 interface LedgerRow {
   date: string
@@ -154,9 +156,7 @@ export function Ledger() {
               <FileText size={16} /> PDF
             </Button>
             {!isReadOnlyViewer && (
-              <Button onClick={() => setCreating(true)}>
-                <Plus size={18} /> Új tétel
-              </Button>
+              <FoGomb cim="Új tétel" onClick={() => setCreating(true)} />
             )}
           </>
         }
@@ -415,7 +415,7 @@ export function Ledger() {
             </p>
           </div>
           {!isReadOnlyViewer && (
-            <Button onClick={() => setCreatingRecurring(true)}>
+            <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreatingRecurring(true)}>
               <Plus size={18} /> Új ismétlődő tétel
             </Button>
           )}

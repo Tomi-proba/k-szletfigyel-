@@ -13,6 +13,7 @@ import { formatCurrency, formatNumber } from '../lib/format'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { getStockStatus, type StockStatus } from '../lib/alerts'
 import { lefoglalt } from '../lib/raktariBejelentes'
+import { keretben } from '../keret/futas'
 
 interface InventoryRow {
   name: string
@@ -125,7 +126,8 @@ export function Products() {
               <FileText size={16} /> PDF
             </Button>
             {canEditProducts && (
-              <Button onClick={() => setCreating(true)}>
+              // A keretben a Termékek oldal fő gombja az „Új mozgás” (F27 B3): az „Új termék” itt másodlagos.
+              <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreating(true)}>
                 <Plus size={18} /> Új termék
               </Button>
             )}

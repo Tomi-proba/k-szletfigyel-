@@ -5,6 +5,13 @@
 // A csomagok ADATKÉNT szerepelnek (nem kedvezményszabályként): egy új csomag egy új sor a CSOMAGOK
 // listában, fejlesztés nélkül. A megtakarítás mindig a külön megvásárolt modulok árához képest számít.
 
+/**
+ * A termék neve EGYETLEN helyen. Munkanév: a végleges név eldöntésekor csak ezt kell átírni – a weboldal, a portál
+ * (fejléc, belépés, regisztráció, böngészőfül címe), a kétlépcsős azonosítás kiadóneve és a későbbi e-mailek is
+ * innen olvasnak.
+ */
+export const TERMEK_NEV = 'eÁFA Csomag'
+
 export type ModulKod = 'konyvelo' | 'afa' | 'keszlet'
 
 export interface Modul {

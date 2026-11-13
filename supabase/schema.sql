@@ -521,7 +521,9 @@ create table if not exists public.movements (
   discrepancy_note text,
   approved_at timestamptz,
   rejected_at timestamptz,
-  reject_reason text
+  reject_reason text,
+  -- A bejövő tétel szállítója (F28): a fő iroda adja meg; üresen a termék szállítója érvényes.
+  supplier_id text
 );
 
 create index if not exists movements_company_id_idx on public.movements (company_id);
@@ -590,9 +592,12 @@ create policy "Iroda-szintű szerepkörök minden zárást látnak" on public.da
   for select using (
     company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda', 'tulajdonos')
   );
-create policy "Fő iroda és iroda zárást létrehozhat" on public.daily_closings
+-- A napi zárást a raktáros küldi be (F28). Az iroda csak korábbi napra tölthet fel zárást: a régi, böngészőben
+-- tárolt zárások egyszeri átköltöztetésekor; a mai napot csak a raktáros zárhatja.
+create policy "Iroda régi zárást átköltöztethet" on public.daily_closings
   for insert with check (
     company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
+    and date < (now() at time zone 'Europe/Budapest')::date
   );
 -- Csak fő iroda vagy iroda állíthatja "megtekintve"/"jóváhagyva" állapotba
 -- - a raktáros sosem hagyhatja jóvá a saját zárását, ez adatbázis-szinten
@@ -1640,27 +1645,7 @@ $$;
 -- Egy mozgás pillanatképe a tranzakció VÉGÉN (a késleltetett trigger miatt a mentés minden sora, pl. a
 -- beszerzési tétel is megvan már): a mozgás, a beszerzési tétele, a termék, a telephely, a szállító, a
 -- vevő, és ha a mozgás visszáru vagy korrekció, az eredeti mozgás és annak tétele.
-create or replace function integracio.mozgas_kep(p_id uuid)
-returns jsonb language sql stable security definer set search_path = integracio, public as $$
-  select jsonb_build_object(
-    'mozgas', to_jsonb(m),
-    'tetel', (select to_jsonb(l) from public.purchase_lots l where l.movement_id = m.id order by l.deleted_at nulls first, l.created_at limit 1),
-    'termek', to_jsonb(p),
-    'telephely', to_jsonb(loc),
-    'szallito', (select to_jsonb(s) from public.suppliers s where s.id::text = p.supplier_id and s.company_id = m.company_id),
-    'vevo', (select to_jsonb(c) from public.customers c where c.id::text = m.customer_id and c.company_id = m.company_id),
-    'eredeti', (select to_jsonb(o) from public.movements o where o.id = coalesce(m.return_of_movement_id, m.corrects_movement_id)),
-    'eredeti_tetel', (select to_jsonb(l) from public.purchase_lots l where l.movement_id = coalesce(m.return_of_movement_id, m.corrects_movement_id) order by l.deleted_at nulls first, l.created_at limit 1),
-    'eredeti_vevo', (
-      select to_jsonb(c) from public.movements o join public.customers c on c.id::text = o.customer_id and c.company_id = o.company_id
-      where o.id = m.return_of_movement_id
-    )
-  )
-  from public.movements m
-  join public.products p on p.id = m.product_id
-  left join public.locations loc on loc.id = m.location_id
-  where m.id = p_id
-$$;
+-- integracio.mozgas_kep: lásd lent, az F28 blokkban (a mozgás saját szállítójával).
 
 create or replace function integracio.mozgas_valtozott()
 returns trigger language plpgsql security definer set search_path = integracio, public as $$
@@ -2465,3 +2450,85 @@ end;
 $$;
 revoke all on function public.raktaros_tetlenseg_beallitasa(integer) from public, anon;
 grant execute on function public.raktaros_tetlenseg_beallitasa(integer) to authenticated;
+
+-- ============================================================================
+-- F28: raktáros és fő iroda munkamegosztása (2026-11-13). Ismételten futtatható.
+-- ============================================================================
+-- 1. A napi zárást a raktáros küldi be; az iroda megtekinti és jóváhagyja. Az iroda csak korábbi napra tölthet
+--    fel zárást (a régi, böngészőben tárolt zárások átköltöztetése); a mai napot csak a raktáros zárhatja.
+-- 2. A bejövő tétel szállítóját a fő iroda adja meg (rendeléskor, vagy a raktári bejelentés elfogadásakor);
+--    a raktáros nem adhatja meg és nem írhatja át. Elfogadáskor kötelező (üresen a termék szállítója).
+-- 3. A Könyvelőbe menő beszerzés a tétel szállítójával megy (ha nincs, a termékével, mint eddig).
+
+alter table public.movements add column if not exists supplier_id text;
+drop policy if exists "Fő iroda és iroda zárást létrehozhat" on public.daily_closings;
+drop policy if exists "Iroda régi zárást átköltöztethet" on public.daily_closings;
+create policy "Iroda régi zárást átköltöztethet" on public.daily_closings
+  for insert with check (
+    company_id = (select public.my_company_id()) and (select public.my_role()) in ('fo_iroda', 'iroda')
+    and date < (now() at time zone 'Europe/Budapest')::date
+  );
+
+create or replace function public.mozgas_szallito_vedelem()
+returns trigger language plpgsql set search_path = public as $$
+declare
+  v_szerep text;
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  v_szerep := public.my_role();
+  if v_szerep = 'raktaros' then
+    if (tg_op = 'INSERT' and new.supplier_id is not null)
+       or (tg_op = 'UPDATE' and new.supplier_id is distinct from old.supplier_id) then
+      raise exception using
+        errcode = '42501',
+        message = 'A szállítót a fő iroda adja meg; a raktáros csak a mennyiséget igazolja vissza.';
+    end if;
+    return new;
+  end if;
+  -- Elfogadáskor (bejövő, normál beszerzés): a szállító kötelező; ha a tételen nincs, a termék szállítója.
+  if tg_op = 'UPDATE' and old.approval_status = 'pending' and new.approval_status = 'approved'
+     and new.type = 'in' and new.ok is null and new.return_of_movement_id is null
+       and new.integracio_esemeny_id is null then
+    if new.supplier_id is null then
+      new.supplier_id := (select p.supplier_id from public.products p where p.id = new.product_id);
+    end if;
+    if new.supplier_id is null then
+      raise exception using
+        errcode = '23514',
+        message = 'Adja meg a szállítót a bejövő tételnél, mielőtt elfogadja.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists movements_szallito_vedelem on public.movements;
+create trigger movements_szallito_vedelem
+  before insert or update on public.movements
+  for each row execute function public.mozgas_szallito_vedelem();
+
+create or replace function integracio.mozgas_kep(p_id uuid)
+returns jsonb language sql stable security definer set search_path = integracio, public as $$
+  select jsonb_build_object(
+    'mozgas', to_jsonb(m),
+    'tetel', (select to_jsonb(l) from public.purchase_lots l where l.movement_id = m.id order by l.deleted_at nulls first, l.created_at limit 1),
+    'termek', to_jsonb(p),
+    'telephely', to_jsonb(loc),
+    'szallito', (select to_jsonb(s) from public.suppliers s where s.id::text = coalesce(m.supplier_id, p.supplier_id) and s.company_id = m.company_id),
+    'vevo', (select to_jsonb(c) from public.customers c where c.id::text = m.customer_id and c.company_id = m.company_id),
+    'eredeti', (select to_jsonb(o) from public.movements o where o.id = coalesce(m.return_of_movement_id, m.corrects_movement_id)),
+    'eredeti_tetel', (select to_jsonb(l) from public.purchase_lots l where l.movement_id = coalesce(m.return_of_movement_id, m.corrects_movement_id) order by l.deleted_at nulls first, l.created_at limit 1),
+    'eredeti_vevo', (
+      select to_jsonb(c) from public.movements o join public.customers c on c.id::text = o.customer_id and c.company_id = o.company_id
+      where o.id = m.return_of_movement_id
+    )
+  )
+  from public.movements m
+  join public.products p on p.id = m.product_id
+  left join public.locations loc on loc.id = m.location_id
+  where m.id = p_id
+$$;
+
+-- F28 vége

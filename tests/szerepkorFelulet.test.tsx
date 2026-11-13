@@ -1,0 +1,85 @@
+// @vitest-environment jsdom
+// Raktáros és fő iroda munkamegosztása a felületen (AWEBOLDAL TERV.md F28): a raktáros menüjében nincs
+// Mozgásnapló és Riasztások, az útvonalaik zárva előle; a napi zárást csak a raktáros küldi be, az iroda és a fő
+// iroda nem (csak megtekinti és jóváhagyja). A szerepkört a helyi mód ?demo_szerepkor= kapcsolója adja.
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { AuthProvider } from '../src/hooks/useAuth'
+import { Layout } from '../src/components/Layout'
+import { Utvonalak } from '../src/Utvonalak'
+import { useStore } from '../src/store/useStore'
+import type { UserRole } from '../src/types/auth'
+
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let gyoker: Root
+let tarolo: HTMLDivElement
+
+beforeEach(() => {
+  localStorage.clear()
+  useStore.getState().clearAllData()
+  tarolo = document.createElement('div')
+  document.body.appendChild(tarolo)
+})
+
+afterEach(() => {
+  act(() => gyoker.unmount())
+  tarolo.remove()
+})
+
+async function megnyit(szerep: UserRole, utvonal: string) {
+  window.history.replaceState(null, '', `/?demo_szerepkor=${szerep}`)
+  // Minden menücsoport nyitva, hogy az összes pont látsszon.
+  localStorage.setItem('keszletfigyelo-nav-expanded-groups', JSON.stringify(['attekintes', 'keszlet', 'partnerek', 'penzugy', 'elozmenyek', 'beallitasok', 'fiok']))
+  gyoker = createRoot(tarolo)
+  await act(async () => {
+    gyoker.render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[utvonal]}>
+          <Utvonalak elrendezes={<Layout />} />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+  })
+}
+
+const menuPontok = () => [...tarolo.querySelectorAll('nav a')].map((a) => a.textContent?.trim() ?? '')
+const gombok = () => [...tarolo.querySelectorAll('button')].map((b) => b.textContent?.trim() ?? '')
+
+describe('szerepkörök a felületen (F28)', () => {
+  it('a raktáros menüjében nincs Mozgásnapló és Riasztások', async () => {
+    await megnyit('raktaros', '/')
+    const m = menuPontok().join(' | ')
+    expect(m).toContain('Napi zárás')
+    expect(m).toContain('Termékek')
+    expect(m).not.toContain('Mozgásnapló')
+    expect(m).not.toContain('Riasztások')
+    expect(tarolo.textContent).not.toContain('Alacsony készlet')
+  })
+
+  it.each(['/mozgasnaplo', '/riasztasok'])('a raktáros a %s útvonalat közvetlenül sem nyithatja meg', async (ut) => {
+    await megnyit('raktaros', ut)
+    expect(tarolo.querySelector('h1')?.textContent ?? '').not.toMatch(/Mozgásnapló|Riasztások/)
+  })
+
+  it('a fő iroda menüjében megvan a Mozgásnapló és a Riasztások', async () => {
+    await megnyit('fo_iroda', '/')
+    const m = menuPontok().join(' | ')
+    expect(m).toContain('Mozgásnapló')
+    expect(m).toContain('Riasztások')
+  })
+
+  it.each<UserRole>(['fo_iroda', 'iroda'])('%s: a napi zárást nem küldheti be, csak megtekinti', async (szerep) => {
+    await megnyit(szerep, '/napi-zaras')
+    expect(gombok()).not.toContain('Napi zárás elküldése')
+    expect(tarolo.querySelector('[data-csak-raktaros-zarhat]')).not.toBeNull()
+  })
+
+  it('a raktáros beküldheti a napi zárást', async () => {
+    await megnyit('raktaros', '/napi-zaras')
+    expect(gombok()).toContain('Napi zárás elküldése')
+    expect(tarolo.querySelector('[data-csak-raktaros-zarhat]')).toBeNull()
+  })
+})

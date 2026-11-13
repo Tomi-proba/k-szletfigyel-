@@ -233,11 +233,13 @@ export interface CreatePendingPurchaseInput {
   /** A szállítói számla kelte és teljesítési dátuma, ha már ismert (jóváhagyáskor is megadható). */
   invoiceDate?: string
   fulfillmentDate?: string
+  /** A szállító (F28); üresen a termék szállítója. */
+  supplierId?: string
 }
 
 export type ApprovePurchaseOrderResult =
   | { ok: true }
-  | { ok: false; reason: 'not-found' | 'not-pending' | 'invalid-quantity' | 'forbidden' }
+  | { ok: false; reason: 'not-found' | 'not-pending' | 'invalid-quantity' | 'forbidden' | 'supplier-required' }
 
 export interface CreatePendingSaleInput {
   productId: string
@@ -418,6 +420,8 @@ interface AppState {
   createWarehouseReport: (input: WarehouseReportInput, opts?: { allowNegativeStock?: boolean }) => WarehouseReportResult
   /** A raktáros visszaigazolja egy irodától/Könyvelőből jött várakozó tétel tényleges mennyiségét. */
   confirmByWarehouse: (id: string, input: { quantity: number; note?: string }, opts?: { allowNegativeStock?: boolean }) => ConfirmByWarehouseResult
+  /** A várakozó bejövő tétel szállítója (F28): csak a fő iroda adhatja meg vagy írhatja át. */
+  setMovementSupplier: (id: string, supplierId: string | undefined) => { ok: boolean }
   /** A fő iroda elutasít egy várakozó tételt (bármelyik fajtát), indoklással. */
   rejectPendingMovement: (id: string, reason: string) => RejectPendingResult
 
@@ -1296,7 +1300,7 @@ export const useStore = create<AppState>()(
         }),
 
       createPendingPurchaseOrder: (input) => {
-        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice, invoiceDate, fulfillmentDate } = input
+        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice, invoiceDate, fulfillmentDate, supplierId } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) return { ok: false, reason: 'invalid-quantity' }
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) return { ok: false, reason: 'invalid-quantity' }
@@ -1333,6 +1337,7 @@ export const useStore = create<AppState>()(
               shippingOnInvoice: effectiveShippingForMovement(shippingCost) ? shippingOnInvoice : undefined,
               invoiceDate: invoiceDate || undefined,
               fulfillmentDate: fulfillmentDate || undefined,
+              supplierId: supplierId || product.supplierId || undefined,
             },
           ],
           auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Rendelés leadva - ${label}`)],
@@ -1352,6 +1357,10 @@ export const useStore = create<AppState>()(
 
         const product = get().products.find((p) => p.id === movement.productId)
         if (!product) return { ok: false, reason: 'not-found' }
+        // A beszerzés szállítója (F28): a tételé, ha nincs, a termékéé; a leltári többletnek és a visszárunak nincs.
+        const beszerzes = !movement.ok && !movement.returnOfMovementId && !movement.integracioEsemenyId
+        const supplierId = beszerzes ? (movement.supplierId ?? product.supplierId) : movement.supplierId
+        if (beszerzes && !supplierId) return { ok: false, reason: 'supplier-required' }
 
         const { costingMethod } = get().settings
         const lotCurrency: Currency = movement.currency ?? 'HUF'
@@ -1415,6 +1424,7 @@ export const useStore = create<AppState>()(
                   orderedQuantity: m.orderedQuantity ?? m.quantity,
                   ...(invoice?.unitPrice !== undefined ? { unitPrice: invoice.unitPrice } : {}),
                   vatRatePercent: undefined,
+                  supplierId,
                   approvalStatus: 'approved',
                   approvedAt: now,
                   discrepancyNote: finalNote,
@@ -1838,6 +1848,15 @@ export const useStore = create<AppState>()(
           auditLog: [...state.auditLog, auditEntry('movement', id, label, 'create', `Raktári bejelentés (${fajta}) - ${label}, a fő iroda elfogadására vár`)],
         }))
         return { ok: true, id }
+      },
+
+      setMovementSupplier: (id, supplierId) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement || movement.type !== 'in' || movement.approvalStatus !== 'pending') return { ok: false }
+        if (!veglegesithet(get())) return { ok: false }
+        if (movement.supplierId === (supplierId || undefined)) return { ok: true }
+        set((state) => ({ movements: state.movements.map((m) => (m.id === id ? { ...m, supplierId: supplierId || undefined } : m)) }))
+        return { ok: true }
       },
 
       confirmByWarehouse: (id, input, opts) => {

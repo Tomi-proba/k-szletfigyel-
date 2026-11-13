@@ -14,6 +14,7 @@ let ceg: TesztFelhasznalo
 let raktaros: TesztFelhasznalo
 let iroda: TesztFelhasznalo
 let termekId: string
+let szallitoId: string
 
 beforeAll(async () => {
   if (!DB_URL) return
@@ -22,7 +23,9 @@ beforeAll(async () => {
   raktaros = await ujCsapattag(pool, ceg, 'raktaros')
   iroda = await ujCsapattag(pool, ceg, 'iroda')
   termekId = randomUUID()
+  szallitoId = randomUUID()
   await ment(pool, ceg.id, randomUUID(), [
+    { tabla: 'suppliers', sor: { id: szallitoId, company_id: ceg.companyId, name: 'Ajtó Kft.', lead_time_days: 5, version: null } },
     {
       tabla: 'products',
       sor: {
@@ -83,7 +86,11 @@ leiras('raktári bejelentés (adatbázis)', () => {
     expect(await hibakod(ment(pool, iroda.id, randomUUID(), [{ tabla: 'movements', sor: { ...b.sor, approval_status: 'approved', version: 1 } }]))).toBe('42501')
     expect(await hibakod(ment(pool, iroda.id, randomUUID(), [{ tabla: 'movements', sor: { ...b.sor, approval_status: 'rejected', version: 1 } }]))).toBe('42501')
     expect(await allapot(b.sor.id)).toBe('pending')
-    expect(await hibakod(ment(pool, ceg.id, randomUUID(), [{ tabla: 'movements', sor: { ...b.sor, approval_status: 'approved', version: 1 } }]))).toBeNull()
+    // A termékhez nincs szállító: a fő iroda csak a szállító megadásával fogadhatja el (F28).
+    expect(await hibakod(ment(pool, ceg.id, randomUUID(), [{ tabla: 'movements', sor: { ...b.sor, approval_status: 'approved', version: 1 } }]))).toBe('23514')
+    expect(
+      await hibakod(ment(pool, ceg.id, randomUUID(), [{ tabla: 'movements', sor: { ...b.sor, approval_status: 'approved', supplier_id: szallitoId, version: 1 } }])),
+    ).toBeNull()
     expect(await allapot(b.sor.id)).toBe('approved')
   })
 

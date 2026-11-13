@@ -63,7 +63,8 @@ export function Dashboard() {
   // saját telephelyét tartalmazza az RLS miatt) megmaradnak, de a
   // vevő/fizetés-jellegű kártyák (kifizetetlen eladás, fizetési
   // kötelezettség, nyitott eladás) irodai adatnak számítanak, ezért rejtve
-  // maradnak.
+  // maradnak. A raktáros a Riasztásokat sem látja (F28): a kezdőlapján csak a rá váró tételek és a saját
+  // hiányzó napi zárása (ez a Napi zárás oldalára visz) jelenik meg.
   const { isWarehouseUser, isReadOnlyViewer } = useAuth()
 
   const urgent = alerts.needsReorder
@@ -91,9 +92,15 @@ export function Dashboard() {
           {/* A csempék a rendelkezésre álló helyhez igazodnak (nem az ablak szélességéhez): a gyors rögzítő mellett,
               a keretben és önállóan is legalább 13rem szélesek. */}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,13rem),1fr))] gap-3">
-            <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
-            <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
-            <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
+            {!isWarehouseUser && (
+              <SummaryCard to="/riasztasok?szuro=alacsony" icon={PackageMinus} label="Alacsony készlet" count={alerts.lowStock.length} tone="danger" />
+            )}
+            {!isWarehouseUser && (
+              <SummaryCard to="/riasztasok?szuro=rendeles" icon={AlertTriangle} label="Rendelendő" count={alerts.needsReorder.length} tone="warning" />
+            )}
+            {!isWarehouseUser && (
+              <SummaryCard to="/riasztasok?szuro=lassan" icon={TrendingDown} label="Lassan fogyó" count={alerts.slowMoving.length} tone="info" />
+            )}
             {!isWarehouseUser && (
               <SummaryCard
                 to="/riasztasok?szuro=kifizetetlen"
@@ -116,7 +123,7 @@ export function Dashboard() {
               <SummaryCard to="/riasztasok?szuro=nyitott" icon={Truck} label="Nyitott eladás" count={alerts.openSales.length} tone="info" />
             )}
             <SummaryCard
-              to="/riasztasok?szuro=hianyzo-zaras"
+              to={isWarehouseUser ? '/napi-zaras' : '/riasztasok?szuro=hianyzo-zaras'}
               icon={ClipboardX}
               label="Hiányzó napi zárás"
               count={alerts.missingClosings.length}
@@ -141,7 +148,7 @@ export function Dashboard() {
             </Link>
           )}
 
-          {alerts.transferSuggestions.length > 0 && (
+          {!isWarehouseUser && alerts.transferSuggestions.length > 0 && (
             <Card>
               <div className="mb-2 flex items-center gap-2 text-[var(--color-text)]">
                 <ArrowLeftRight size={18} className="text-[var(--color-primary)]" />
@@ -159,6 +166,7 @@ export function Dashboard() {
           {/* A keretben a többi program teendőit a keret közös Teendők oldala adja (nem jelenik meg kétszer). */}
           {!keretben() && <KozosTeendokKartya />}
 
+          {!isWarehouseUser && (
           <Card>
             <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Legsürgősebb rendelések</h2>
             {urgent.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">Nincs sürgős rendelési teendő.</p>}
@@ -183,6 +191,7 @@ export function Dashboard() {
               ))}
             </ul>
           </Card>
+          )}
         </div>
       </div>
     </div>

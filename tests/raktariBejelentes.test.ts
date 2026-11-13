@@ -22,7 +22,9 @@ function setup(currentStock = 0) {
   store().addProduct({ name: 'Bejárati ajtó', category: 'Ajtó', unit: 'db', currentStock: 0, minStock: 0, purchasePrice: 500, salePrice: 2000, locationId })
   const productId = store().products[0].id
   if (currentStock > 0) store().recordMovement({ productId, type: 'in', quantity: currentStock, date: '2026-11-01', unitPrice: 500 })
-  return { productId, locationId }
+  store().addSupplier({ name: 'Ajtó Kft.', leadTimeDays: 5 })
+  const supplierId = store().suppliers.at(-1)!.id
+  return { productId, locationId, supplierId }
 }
 
 beforeEach(() => localStorage.clear())
@@ -42,18 +44,23 @@ describe('raktári bejelentés', () => {
   })
 
   it('csak a fő iroda fogadhatja el; elfogadáskor nő a készlet, a megadott áron', () => {
-    const { productId } = setup()
+    const { productId, supplierId } = setup()
     szerep('raktaros')
     const id = (store().createWarehouseReport({ productId, type: 'in', quantity: 5, date: '2026-11-02' }) as { id: string }).id
+    // A szállítót a raktáros nem adhatja meg (F28).
+    expect(store().setMovementSupplier(id, supplierId)).toEqual({ ok: false })
     expect(store().approvePurchaseOrder(id)).toEqual({ ok: false, reason: 'forbidden' })
     szerep('iroda')
     expect(store().approvePurchaseOrder(id)).toEqual({ ok: false, reason: 'forbidden' })
     expect(store().rejectPendingMovement(id, 'nem')).toEqual({ ok: false, reason: 'forbidden' })
     expect(termek().currentStock).toBe(0)
     szerep('fo_iroda')
+    // Szállító nélkül (a terméknek sincs) a fő iroda sem fogadhatja el; megadja, és elfogadja.
+    expect(store().approvePurchaseOrder(id, undefined, undefined, { unitPrice: 800 })).toEqual({ ok: false, reason: 'supplier-required' })
+    expect(store().setMovementSupplier(id, supplierId)).toEqual({ ok: true })
     expect(store().approvePurchaseOrder(id, undefined, undefined, { unitPrice: 800 })).toEqual({ ok: true })
     expect(termek().currentStock).toBe(5)
-    expect(mozgas(id)).toMatchObject({ approvalStatus: 'approved', unitPrice: 800 })
+    expect(mozgas(id)).toMatchObject({ approvalStatus: 'approved', unitPrice: 800, supplierId })
     expect(store().lots.at(-1)).toMatchObject({ movementId: id, quantity: 5, unitPrice: 800 })
   })
 
@@ -153,9 +160,10 @@ describe('raktári visszaigazolás (irodai rendelés, Könyvelőből jött téte
   })
 
   it('irodai rendelés: a raktár visszaigazolja, a fő iroda a raktár mennyiségével fogadja el', () => {
-    const { productId } = setup()
+    const { productId, supplierId } = setup()
     szerep('fo_iroda')
-    expect(store().createPendingPurchaseOrder({ productId, quantity: 6, date: '2026-11-02', unitPrice: 700 }).ok).toBe(true)
+    expect(store().createPendingPurchaseOrder({ productId, quantity: 6, date: '2026-11-02', unitPrice: 700, supplierId }).ok).toBe(true)
+    expect(store().movements.at(-1)!.supplierId).toBe(supplierId)
     const id = store().movements.at(-1)!.id
     szerep('raktaros')
     expect(store().confirmByWarehouse(id, { quantity: 5, note: 'Hiányzott' })).toEqual({ ok: true })

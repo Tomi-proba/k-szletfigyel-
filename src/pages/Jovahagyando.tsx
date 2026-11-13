@@ -14,6 +14,7 @@ import { Link } from '../keret/router'
 import { CheckCircle2, ChevronDown, ChevronUp, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
+import { useSzallitoNeve } from '../components/SzallitoValaszto'
 import { useIntegracioFrissites } from '../lib/integracio'
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
 import type { Movement, Product } from '../types'
@@ -35,6 +36,7 @@ const HIBA: Record<string, string> = {
   'insufficient-lot': 'Az eredeti beszerzésből nincs ennyi a raktárban.',
   forbidden: 'Ezt csak a fő iroda fogadhatja el.',
   'not-integration': 'Ezt a tételt a megnyíló ablakban kell elfogadni.',
+  'supplier-required': 'Adja meg a szállítót az elfogadás előtt.',
 }
 
 type Panel = { id: string; mod: 'kevesebb' | 'nem' } | null
@@ -87,6 +89,9 @@ function Kartya({
   // A Könyvelőből jött és a visszáru-tételt itt, egy koppintással lehet elfogadni; az irodai rendelésnél
   // és a raktári bejelentésnél (ár, áfa, számla) egy ablak nyílik.
   const egyLepesben = Boolean(m.integracioEsemenyId || m.returnOfMovementId)
+  // A bejövő beszerzés szállítója (F28): a fő iroda adja meg, a raktáros csak látja.
+  const beszerzes = m.type === 'in' && !m.ok && !egyLepesben
+  const szallitoNeve = useSzallitoNeve(m, termek)
   const veglegesit = teendo === 'veglegesit'
 
   const nyit = (mod: 'kevesebb' | 'nem') => {
@@ -123,6 +128,10 @@ function Kartya({
         if (r.ok) {
           setPanel(null)
           onKesz(`Elfogadva: ${termek?.name ?? 'tétel'} – ${formatNumber(q)} ${egyseg}.`)
+        } else if (r.reason === 'supplier-required') {
+          // Szállító nélkül jelzett tétel (F28): a fő iroda az ablakban adja meg.
+          setPanel(null)
+          setAblak({ fajta: 'beszerzes', m })
         } else hibaKiir(r)
         return
       }
@@ -175,6 +184,16 @@ function Kartya({
       <p className="text-3xl font-bold tabular-nums" aria-label={`Mennyiség: ${formatNumber(vart)} ${egyseg}`}>
         {formatNumber(vart)} <span className="text-xl font-semibold">{egyseg}</span>
       </p>
+      {beszerzes && (
+        <p className="text-sm" data-szallito>
+          <span className="muted">Szállító: </span>
+          {szallitoNeve ? (
+            <strong>{szallitoNeve}</strong>
+          ) : (
+            <span className="muted">{veglegesit ? 'még nincs megadva – elfogadáskor adja meg' : 'a fő iroda adja meg'}</span>
+          )}
+        </p>
+      )}
       {(vevo || m.note) && (
         <p className="muted text-sm break-words">
           {vevo ? `Vevő: ${vevo}` : ''}
@@ -217,6 +236,7 @@ function Kartya({
               ['Megjegyzés', m.note],
               ['A raktár megjegyzése', m.raktarMegjegyzes],
               ['Vevő', vevo],
+              ...(beszerzes ? [['Szállító', szallitoNeve] as const] : []),
               ['Számlaszám', m.invoiceNumber],
               ...(arLathato ? [['Várható egységár', m.unitPrice !== undefined ? formatMoney(m.unitPrice, m.currency ?? 'HUF') : null] as const] : []),
               ...(m.rejectReason ? [['Elutasítás oka', m.rejectReason] as const] : []),
@@ -444,9 +464,11 @@ export function Jovahagyando() {
           <p className="font-medium">Most nincs jóváhagyásra váró tétel.</p>
           <p className="muted mt-1 text-sm">
             {remote ? 'Az új tételek maguktól megjelennek (percenként frissül).' : 'A Könyvelőből jövő tételek csak szerveres módban (bejelentkezve) jelennek meg.'}{' '}
-            <Link to="/mozgasnaplo" className="underline">
-              Mozgásnapló
-            </Link>
+            {!isWarehouseUser && (
+              <Link to="/mozgasnaplo" className="underline">
+                Mozgásnapló
+              </Link>
+            )}
           </p>
         </div>
       ) : (

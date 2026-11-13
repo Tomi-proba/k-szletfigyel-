@@ -6,11 +6,11 @@ import { aktivCsoport, csoportPontjai, keszletMenu } from '../src/keret/menu'
 const sz = { jovahagyasraVar: 2, modositasiKerelmek: 3, napiZarasok: 1, riasztasok: 7 }
 
 describe('a Készletkezelő menüje a keretben', () => {
-  it('raktáros: 6 egyszerű pont, a jóváhagyásra várók és a riasztások számával', () => {
+  it('raktáros: 4 egyszerű pont, Mozgásnapló és Riasztások nélkül (F28); a jóváhagyásra várók számával', () => {
     const m = keszletMenu('raktaros', sz)
-    expect(m.map((p) => p.cim)).toEqual(['Kezdőlap', 'Jóváhagyásra vár', 'Riasztások', 'Termékek', 'Mozgásnapló', 'Napi zárás'])
+    expect(m.map((p) => p.cim)).toEqual(['Kezdőlap', 'Jóváhagyásra vár', 'Termékek', 'Napi zárás'])
     expect(m.find((p) => p.cim === 'Jóváhagyásra vár')?.szamlalo).toBe(2)
-    expect(m.find((p) => p.cim === 'Riasztások')?.szamlalo).toBe(7)
+    expect(m.some((p) => p.utvonal === '/riasztasok' || p.utvonal === '/mozgasnaplo')).toBe(false)
     expect(aktivCsoport('/keszlet', 'raktaros')).toBeNull()
   })
 

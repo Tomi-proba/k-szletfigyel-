@@ -120,7 +120,8 @@ const NAV_GROUPS: NavGroup[] = [
 ]
 
 // A raktáros/telephelyi felhasználó leegyszerűsített nézete - csak a saját
-// telephelyéhez tartozó napi munkához szükséges 5 menüpont. Minden más
+// telephelyéhez tartozó napi munkához szükséges 4 menüpont (Kezdőlap, Jóváhagyásra
+// vár, Termékek, Napi zárás; a Mozgásnapló és a Riasztások irodai, F28). Minden más
 // (Vevők, Beszállítók, Pénzügy, Riportok, Előzmények, Beállítások) irodai
 // jogosultságot igényel - lásd RoleGate a route-táblán (App.tsx), ami ezt
 // akkor is kikényszeríti, ha valaki közvetlenül beírná az útvonalat. A
@@ -131,10 +132,7 @@ const RAKTAROS_NAV_GROUPS: NavGroup[] = [
     key: 'attekintes',
     label: 'Áttekintés',
     icon: LayoutDashboard,
-    items: [
-      { to: '/', label: 'Kezdőlap' },
-      { to: '/riasztasok', label: 'Riasztások', badge: true },
-    ],
+    items: [{ to: '/', label: 'Kezdőlap' }],
   },
   {
     key: 'keszlet',
@@ -142,7 +140,6 @@ const RAKTAROS_NAV_GROUPS: NavGroup[] = [
     icon: Package,
     items: [
       { to: '/keszlet', label: 'Termékek' },
-      { to: '/mozgasnaplo', label: 'Mozgásnapló' },
       { to: '/napi-zaras', label: 'Napi zárás' },
     ],
   },

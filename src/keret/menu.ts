@@ -75,15 +75,14 @@ export function csoportPontjai(kulcs: string, szerep: UserRole | null) {
   )
 }
 
-/** A keret második menüsora: iroda 7 pont (alpontokkal), raktáros 6 egyszerű pont. */
+/** A keret második menüsora: iroda 7 pont (alpontokkal), raktáros 4 egyszerű pont. A raktáros nem látja a
+ * Mozgásnaplót és a Riasztásokat (F28): a napi munkája a bejelentés, a visszaigazolás és a napi zárás. */
 export function keszletMenu(szerep: UserRole | null, sz: Szamlalok): MenuPont[] {
   if (!irodai(szerep)) {
     return [
       { cim: 'Kezdőlap', utvonal: '/', pontos: true },
       { cim: 'Jóváhagyásra vár', utvonal: '/jovahagyasra-var', szamlalo: sz.jovahagyasraVar },
-      { cim: 'Riasztások', utvonal: '/riasztasok', szamlalo: sz.riasztasok },
       { cim: 'Termékek', utvonal: '/keszlet' },
-      { cim: 'Mozgásnapló', utvonal: '/mozgasnaplo' },
       { cim: 'Napi zárás', utvonal: '/napi-zaras' },
     ]
   }

@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Currency } from '../types'
 import { ProductPicker } from './ProductPicker'
+import { SzallitoValaszto } from './SzallitoValaszto'
 import { Button, Field, FieldGroup, Input, Textarea } from './ui'
 import { todayISO } from '../lib/dates'
 
@@ -32,6 +33,8 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
     return p?.defaultVatRatePercent !== undefined ? String(p.defaultVatRatePercent) : ''
   })
   const [note, setNote] = useState('')
+  // A szállítót a fő iroda adja meg (F28); alapból a termék szállítója. A raktáros csak visszaigazolja a mennyiséget.
+  const [szallito, setSzallito] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [szamlanVan, setSzamlanVan] = useState<'igen' | 'nem' | 'nemtudom'>('nemtudom')
   const [invoiceDate, setInvoiceDate] = useState('')
@@ -50,6 +53,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
     setProductId(nextId)
     const p = products.find((pr) => pr.id === nextId)
     setVatRate(p?.defaultVatRatePercent !== undefined ? String(p.defaultVatRatePercent) : '')
+    setSzallito(p?.supplierId ?? '')
   }
 
   function submit(e: React.FormEvent) {
@@ -58,6 +62,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
     if (!productId) return setError('Válasszon terméket.')
     if (!quantity || !Number.isFinite(qtyNumber) || qtyNumber <= 0) return setError('A mennyiségnek pozitív számnak kell lennie.')
     if (!date) return setError('Adja meg a dátumot.')
+    if (!szallito) return setError('Válassza ki, melyik szállítótól rendel.')
     if (unitPrice.trim() !== '' && (!Number.isFinite(unitPriceNumber) || (unitPriceNumber ?? 0) < 0)) {
       return setError('A várható egységár nem lehet negatív.')
     }
@@ -79,6 +84,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       shippingOnInvoice: (shippingCostNumber ?? 0) > 0 && szamlanVan !== 'nemtudom' ? szamlanVan === 'igen' : undefined,
       invoiceDate: invoiceDate || undefined,
       fulfillmentDate: fulfillmentDate || undefined,
+      supplierId: szallito,
     })
     if (!result.ok) return setError('A rendelés nem rögzíthető.')
 
@@ -90,6 +96,7 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
     setExchangeRate('')
     setVatRate('')
     setNote('')
+    setSzallito('')
     setSuccessTick((t) => t + 1)
     onDone?.()
   }
@@ -99,6 +106,10 @@ export function PurchaseOrderForm({ onDone }: { onDone?: () => void }) {
       <FieldGroup label="Termék">
         <ProductPicker value={productId} onChange={handleProductChange} />
       </FieldGroup>
+
+      <Field label="Szállító">
+        <SzallitoValaszto value={szallito} onChange={setSzallito} kotelezo />
+      </Field>
 
       <Field label={`Rendelt mennyiség${product ? ` (${product.unit})` : ''}`}>
         <Input inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" />

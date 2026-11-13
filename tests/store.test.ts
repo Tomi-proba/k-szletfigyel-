@@ -100,7 +100,7 @@ describe('mozgásrögzítés', () => {
 describe('kétlépcsős beszerzés (iroda → raktár)', () => {
   it('a rendelés leadása nem mozgat készletet; csak a beérkezés jóváhagyása, a ténylegesen átvett mennyiséggel', () => {
     const id = setup()
-    expect(store().createPendingPurchaseOrder({ productId: id, quantity: 10, date: '2026-10-01', unitPrice: 1000 })).toEqual({ ok: true })
+    expect(store().createPendingPurchaseOrder({ productId: id, quantity: 10, date: '2026-10-01', unitPrice: 1000, supplierId: 'szallito-1' })).toEqual({ ok: true })
     const orderId = store().movements.at(-1)!.id
     expect(store().movements.at(-1)!.approvalStatus).toBe('pending')
     expect(productById(id).currentStock).toBe(0)

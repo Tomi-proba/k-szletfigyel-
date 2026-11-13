@@ -28,8 +28,23 @@ export function Utvonalak({ elrendezes }: { elrendezes: ReactElement }) {
       <Route element={elrendezes}>
         <Route index element={<Dashboard />} />
         <Route path="keszlet" element={<Products />} />
-        <Route path="mozgasnaplo" element={<Movements />} />
-        <Route path="riasztasok" element={<Alerts />} />
+        {/* A Mozgásnapló és a Riasztások irodai oldalak; a raktáros nem látja őket (F28). */}
+        <Route
+          path="mozgasnaplo"
+          element={
+            <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
+              <Movements />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="riasztasok"
+          element={
+            <RoleGate roles={['iroda', 'fo_iroda', 'tulajdonos']}>
+              <Alerts />
+            </RoleGate>
+          }
+        />
         <Route
           path="beszallitok"
           element={

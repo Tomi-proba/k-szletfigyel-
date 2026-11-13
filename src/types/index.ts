@@ -184,6 +184,9 @@ export interface Movement extends SoftDeletable {
   /** 'out' only: which tracked customer this was sold to. Omitted for a
    * plain walk-in/cash sale - that's the default and needs no tracking. */
   customerId?: string
+  /** 'in' only: a beérkező tétel szállítója (F28). A fő iroda adja meg rendeléskor vagy a raktári bejelentés
+   * elfogadásakor; a raktáros nem írhatja. Üresen a termék szállítója érvényes. */
+  supplierId?: string
   /** 'out' only, meaningful when customerId is set: whether the customer
    * has paid for this sale yet. Sales without a customerId are always
    * effectively "paid" (cash sale) and this is left unset for them. */

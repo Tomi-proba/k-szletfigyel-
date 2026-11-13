@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, FileText, Send } fro
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { Link } from '../keret/router'
 import { useStore } from '../store/useStore'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { buildDailyClosingMovementLines, buildDailyClosingSummary } from '../lib/dailyClosing'
@@ -40,7 +41,10 @@ interface HistoryRow {
 }
 
 export function DailyClosingPage() {
-  const { isReadOnlyViewer } = useAuth()
+  const { isReadOnlyViewer, effectiveRole } = useAuth()
+  // A napi zárást a raktáros küldi be (F28); az iroda és a fő iroda csak megtekinti és jóváhagyja (Beérkezett
+  // napi jelentések). Szerepkör nélkül (helyi, egyfelhasználós mód) a felhasználó maga zár.
+  const zarhat = !effectiveRole || effectiveRole === 'raktaros'
   const locations = useStore((s) => s.locations)
   const products = useStore((s) => s.products)
   const movements = useStore((s) => s.movements)
@@ -80,6 +84,7 @@ export function DailyClosingPage() {
 
   function handleSubmit() {
     setError(null)
+    if (!zarhat) return
     const result = submitDailyClosing(locationId, date)
     if (result.ok) {
       setSuccessTick((t) => t + 1)
@@ -115,7 +120,14 @@ export function DailyClosingPage() {
 
   return (
     <div>
-      <PageHeader title="Napi zárás" subtitle="Egy telephely aznapi mozgásainak összegzése és elküldése az irodának" />
+      <PageHeader
+        title="Napi zárás"
+        subtitle={
+          zarhat
+            ? 'Egy telephely aznapi mozgásainak összegzése és elküldése az irodának'
+            : 'Egy telephely aznapi mozgásainak összegzése; a zárást a raktáros küldi be'
+        }
+      />
 
       <Card className="mb-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -259,7 +271,16 @@ export function DailyClosingPage() {
             </>
           )}
           {error && <p className="mt-3 text-sm text-[var(--color-danger)]">{error}</p>}
-          {!isReadOnlyViewer && (
+          {!isReadOnlyViewer && !zarhat && (
+            <p className="mt-4 text-sm text-[var(--color-text-muted)]" data-csak-raktaros-zarhat>
+              A napi zárást a telephely raktárosa küldi be. A beküldött zárásokat a{' '}
+              <Link to="/napi-jelentesek" className="underline">
+                Beérkezett napi jelentések
+              </Link>{' '}
+              oldalon tekintheti meg és hagyhatja jóvá.
+            </p>
+          )}
+          {!isReadOnlyViewer && zarhat && (
             <div className="mt-4 flex justify-end">
               <Button onClick={handleSubmit} disabled={!preview || (preview.inCount === 0 && preview.outCount === 0)}>
                 <Send size={16} /> Napi zárás elküldése

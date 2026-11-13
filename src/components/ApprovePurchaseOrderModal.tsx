@@ -9,10 +9,12 @@ import { useStore } from '../store/useStore'
 import type { Movement } from '../types'
 import { Modal } from './Modal'
 import { Button, Field, Input, Textarea } from './ui'
+import { SzallitoValaszto } from './SzallitoValaszto'
 import { formatDate, formatMoney } from '../lib/format'
 
 export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Movement; onClose: () => void }) {
   const approvePurchaseOrder = useStore((s) => s.approvePurchaseOrder)
+  const setMovementSupplier = useStore((s) => s.setMovementSupplier)
   const products = useStore((s) => s.products)
   const product = products.find((p) => p.id === movement.productId)
   // A beszerzési ár érzékeny adatnak számít raktáros szerepkörben (lásd
@@ -35,6 +37,10 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
   const [invoiceDate, setInvoiceDate] = useState(movement.invoiceDate ?? '')
   const [fulfillmentDate, setFulfillmentDate] = useState(movement.fulfillmentDate ?? '')
   const [error, setError] = useState<string | null>(null)
+  // A szállító (F28): a fő iroda adja meg vagy erősíti meg; alapból a tételé, ha nincs, a termékéé. A leltári
+  // többletnek, a visszárunak és a Könyvelőből jött tételnek nincs külön szállítója.
+  const kellSzallito = !isWarehouseUser && !movement.ok && !movement.returnOfMovementId && !movement.integracioEsemenyId
+  const [szallito, setSzallito] = useState(movement.supplierId ?? product?.supplierId ?? '')
 
   const actualQtyNumber = Number(actualQuantity.replace(',', '.'))
   const mismatch = Number.isFinite(actualQtyNumber) && actualQtyNumber !== vart
@@ -47,6 +53,10 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
     const unitPriceNumber = kellAr && unitPrice.trim() !== '' ? Number(unitPrice.replace(',', '.')) : undefined
     if (unitPriceNumber !== undefined && (!Number.isFinite(unitPriceNumber) || unitPriceNumber < 0)) {
       return setError('Az egységár nem lehet negatív.')
+    }
+    if (kellSzallito) {
+      if (!szallito) return setError('Válassza ki a szállítót: a beszerzés ezzel megy a Könyvelőbe.')
+      if (!setMovementSupplier(movement.id, szallito).ok) return setError('Ezt csak a fő iroda fogadhatja el.')
     }
     const result = approvePurchaseOrder(
       movement.id,
@@ -62,7 +72,14 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
             unitPrice: unitPriceNumber,
           },
     )
-    if (!result.ok) return setError(result.reason === 'forbidden' ? 'Ezt csak a fő iroda fogadhatja el.' : 'A jóváhagyás nem sikerült.')
+    if (!result.ok)
+      return setError(
+        result.reason === 'forbidden'
+          ? 'Ezt csak a fő iroda fogadhatja el.'
+          : result.reason === 'supplier-required'
+            ? 'Válassza ki a szállítót: a beszerzés ezzel megy a Könyvelőbe.'
+            : 'A jóváhagyás nem sikerült.',
+      )
     onClose()
   }
 
@@ -87,6 +104,17 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
           ? `A raktár szerint ${movement.raktarMennyiseg ?? movement.quantity} ${product?.unit ?? ''} érkezett${movement.raktarMegjegyzes ? ` (${movement.raktarMegjegyzes})` : ''}.`
           : 'A raktár még nem igazolta vissza, mennyi érkezett. Csak akkor fogadja el, ha biztosan tudja.'}
       </p>
+
+      {kellSzallito && (
+        <Field label="Szállító">
+          <SzallitoValaszto value={szallito} onChange={setSzallito} kotelezo />
+          {!movement.supplierId && (
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+              A tételen még nincs szállító (a raktár nem adja meg); alapból a termék szállítója.
+            </span>
+          )}
+        </Field>
+      )}
 
       <Field label={`Ténylegesen beérkezett mennyiség${product ? ` (${product.unit})` : ''}`}>
         <Input inputMode="decimal" value={actualQuantity} onChange={(e) => setActualQuantity(e.target.value)} autoFocus />

@@ -452,7 +452,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !session) return { error: 'Nincs bejelentkezve.' }
       if (!nev.trim()) return { error: 'A cégnév kötelező.' }
       const { data, error } = await supabase.rpc('ceg_letrehozasa', { p_nev: nev.trim(), p_portal_ceg: portalCegId ?? null })
-      if (error) return { error: error.message }
+      if (error) {
+        // Párhuzamos első megnyitás (pl. két böngészőlapon): ha a portál cégéhez közben már létrejött a
+        // Készlet-cég, és a hívó a tagja, az nem hiba – azzal megyünk tovább.
+        if (portalCegId) {
+          for (let i = 0; i < 6; i++) {
+            const { data: meglevo } = await supabase.from('companies').select('id').eq('portal_company_id', portalCegId).maybeSingle()
+            if (meglevo?.id) {
+              cegTarolasa(meglevo.id as string)
+              await loadProfileAndCompany(session.user.id)
+              return { error: null, cegId: meglevo.id as string }
+            }
+            await new Promise((r) => setTimeout(r, 500))
+          }
+        }
+        return { error: error.message }
+      }
       cegTarolasa(data as string)
       await loadProfileAndCompany(session.user.id)
       return { error: null, cegId: data as string }

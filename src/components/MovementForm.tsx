@@ -783,14 +783,18 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
               </li>
             ))}
           </ul>
-          <p className="mb-2">Ha ugyanarról van szó, ne rögzítse újra: fogadja el a bejelentést, így egyszer szerepel.</p>
-          <div className="flex flex-wrap gap-2">
-            <Link to="/jovahagyasra-var" className="btn btn-small btn-primary" onClick={() => onDone?.()}>
-              Megnyitom a jóváhagyandókat
-            </Link>
-            <button type="button" className="btn btn-small" onClick={() => trySubmit(false, true)}>
-              Ez egy másik tétel, rögzítem
+          <p className="mb-2">
+            {raktarraKuld
+              ? 'Ha ez egy újabb rendelés (pl. a tegnapi még nem érkezett meg), nyugodtan rögzítse. Ha ugyanarról van szó, ne küldje el újra.'
+              : 'Ha ugyanarról van szó, ne rögzítse újra: fogadja el a bejelentést, így egyszer szerepel.'}
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button type="button" className="btn btn-success btn-big" data-kettos-rogzitem onClick={() => trySubmit(false, true)}>
+              {raktarraKuld ? 'Ez egy új rendelés – rögzítem' : 'Ez egy másik tétel – rögzítem'}
             </button>
+            <Link to="/jovahagyasra-var" className="btn btn-big" onClick={() => onDone?.()}>
+              Megnézem a várakozókat
+            </Link>
           </div>
         </div>
       )}

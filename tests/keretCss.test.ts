@@ -1,5 +1,6 @@
 // A Készletkezelő stílusa a keretben (AWEBOLDAL TERV.md F24 KS6): minden szabály a Készlet dobozára szűkül, a
 // Tailwind rétegei feloldva (különben a portál réteg nélküli stílusa felülírná).
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import postcss from 'postcss'
 import { KESZLET_DOBOZ, szukit, szukitettSelektor } from '../keret-css'
@@ -28,5 +29,12 @@ describe('stílus a keretben', () => {
     })
     expect(kint).toEqual([])
     expect(css).toContain('from { transform: rotate(0) }')
+  })
+
+  it('a keret-csomag a közös komponensek stílusát is betölti, a Tailwind előtt (gombok, chipek)', () => {
+    const forras = readFileSync(new URL('../src/modul.tsx', import.meta.url), 'utf8')
+    const kozos = forras.indexOf("import './kozos/kozos.css'")
+    expect(kozos).toBeGreaterThanOrEqual(0)
+    expect(kozos).toBeLessThan(forras.indexOf("import './index.css'"))
   })
 })

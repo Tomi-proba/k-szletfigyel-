@@ -77,6 +77,17 @@
     color: var(--szin-hatter);
     font-weight: 600;
   }
+  /* „Más mennyiséggel”: a kettő közötti döntés, borostyán. */
+  .btn-warning-solid {
+    background: var(--szin-figyelmeztetes);
+    border-color: var(--szin-figyelmeztetes);
+    color: var(--szin-hatter);
+    font-weight: 600;
+  }
+  .btn-danger-solid:hover,
+  .btn-warning-solid:hover {
+    filter: brightness(0.92);
+  }
   .btn-small {
     min-height: 32px;
     padding: var(--tav-1) var(--tav-3);
@@ -160,6 +171,36 @@
     background: var(--szin-siker-halvany);
     color: var(--szin-siker);
     border-color: transparent;
+  }
+
+  /* A raktár válasza a jóváhagyandó kártyán: egyértelmű szín (zöld megjött, sárga eltér, piros nem jött, kék vár). */
+  .raktar-jelzes {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tav-2);
+    padding: var(--tav-3) var(--tav-4);
+    border-radius: var(--kerekites-kicsi);
+    border-left: 6px solid currentColor;
+    font-weight: 600;
+  }
+  .raktar-jelzes--megjott {
+    color: var(--szin-siker);
+    background: var(--szin-siker-halvany);
+  }
+  .raktar-jelzes--elter {
+    color: var(--szin-figyelmeztetes);
+    background: var(--szin-figyelmeztetes-halvany);
+  }
+  .raktar-jelzes--nem {
+    color: var(--szin-hiba);
+    background: color-mix(in srgb, var(--szin-hiba) 12%, var(--szin-hatter));
+  }
+  .raktar-jelzes--var {
+    color: var(--szin-elsodleges);
+    background: var(--szin-elsodleges-halvany);
+  }
+  .raktar-jelzes .raktar-jelzes__megj {
+    font-weight: 400;
   }
 
   /* Gyorsválasztó (pl. „Sérült”, „Hiányzott”): egy koppintással kitölti a megjegyzést. */

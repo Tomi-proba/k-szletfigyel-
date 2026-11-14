@@ -150,7 +150,10 @@ describe('jóváhagyási lista: szavak és szerepkörök', () => {
   it('a raktár visszaigazol, csak a fő iroda véglegesít; az iroda és a tulajdonos csak lát (2026-11-02)', () => {
     expect(teendoje(m({ integracioEsemenyId: 'e' }), raktaros)).toBe('visszaigazol')
     expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't' }), raktaros)).toBeNull()
-    expect(teendoje(m({ integracioEsemenyId: 'e' }), foIroda)).toBe('veglegesit')
+    // A fő iroda csak a raktáros válasza után dönt (megjött, kevesebb vagy nem jött meg); addig csak látja.
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), foIroda)).toBeNull()
+    expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't' }), foIroda)).toBe('veglegesit')
+    expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't', raktarMennyiseg: 0 }), foIroda)).toBe('veglegesit')
     expect(teendoje(m({ integracioEsemenyId: 'e' }), iroda)).toBeNull()
     expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...foIroda, csakOlvas: true })).toBeNull()
     expect(teendoje(m({ type: 'out', returnOfMovementId: 'o' }), iroda)).toBeNull()

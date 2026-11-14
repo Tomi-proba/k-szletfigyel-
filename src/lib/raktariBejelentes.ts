@@ -43,12 +43,14 @@ export interface Szerep {
 }
 
 /** Mi a teendője a felhasználónak ezzel a tétellel: a raktáros visszaigazolja, mi történt; a fő iroda
- * véglegesíti (elfogadja vagy elutasítja). Az iroda és a tulajdonos csak látja. */
+ * véglegesíti (elfogadja vagy elutasítja), de csak miután a raktáros válaszolt (megjött, kevesebb, nem jött meg) –
+ * addig csak látja. Az iroda és a tulajdonos csak látja. Helyi (egyfelhasználós) módban mindent ő végez. */
 export type Teendo = 'visszaigazol' | 'veglegesit' | null
 
 export function teendoje(m: Movement, szerep: Szerep): Teendo {
   if (szerep.csakOlvas || !varakozo(m)) return null
-  if (szerep.helyi || szerep.foIroda) return 'veglegesit'
+  if (szerep.helyi) return 'veglegesit'
+  if (szerep.foIroda) return m.raktarVisszaigazolva ? 'veglegesit' : null
   if (szerep.raktaros && !m.raktarVisszaigazolva) return 'visszaigazol'
   return null
 }

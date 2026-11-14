@@ -11,7 +11,7 @@
 // komponensekből vannak (src/kozos/kozos.css: .btn, .card, .badge).
 import { useMemo, useState } from 'react'
 import { Link } from '../keret/router'
-import { CheckCircle2, ChevronDown, ChevronUp, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
 import { useSzallitoNeve } from '../components/SzallitoValaszto'
@@ -41,6 +41,27 @@ const HIBA: Record<string, string> = {
 
 type Panel = { id: string; mod: 'kevesebb' | 'nem' } | null
 type Ablak = { fajta: 'beszerzes' | 'kiadas' | 'javitas'; m: Movement } | null
+
+/** A raktár válasza egy színes sávban: megjött (zöld), más mennyiség (sárga), nem jött meg (piros), még nem válaszolt (kék). */
+function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null }) {
+  const [fajta, Ikon, szoveg] =
+    raktarSzerint === null
+      ? (['var', Clock, 'A raktár még nem igazolta vissza'] as const)
+      : raktarSzerint === 0
+        ? (['nem', XCircle, 'A raktár szerint NEM jött meg'] as const)
+        : raktarSzerint === vart
+          ? (['megjott', CheckCircle2, `A raktár visszaigazolta: megjött (${formatNumber(raktarSzerint)} ${egyseg})`] as const)
+          : (['elter', AlertTriangle, `A raktár szerint más mennyiség jött: ${formatNumber(raktarSzerint)} ${egyseg} (várt: ${formatNumber(vart)} ${egyseg})`] as const)
+  return (
+    <p className={`raktar-jelzes raktar-jelzes--${fajta}`} data-raktar-jelzes={fajta} role="status">
+      <Ikon size={22} aria-hidden="true" className="shrink-0" />
+      <span>
+        {szoveg}
+        {megjegyzes && raktarSzerint !== null ? <span className="raktar-jelzes__megj"> – {megjegyzes}</span> : null}
+      </span>
+    </p>
+  )
+}
 
 function Kartya({
   m,
@@ -201,11 +222,9 @@ function Kartya({
           {m.note}
         </p>
       )}
-      {raktarSzerint !== null && raktarSzerint !== vart && (
-        <p className="alert alert-warning text-sm">
-          A raktár szerint: <strong>{raktarSzerint === 0 ? 'nem történt meg' : `${formatNumber(raktarSzerint)} ${egyseg}`}</strong>
-          {m.raktarMegjegyzes ? ` – ${m.raktarMegjegyzes}` : ''}
-        </p>
+      {/* A raktár válasza egyértelmű színnel (a felhasználó kérése): zöld megjött, sárga eltér, piros nem, kék még vár. */}
+      {(allapot === 'raktarra_var' || allapot === 'fo_irodara_var') && (
+        <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} />
       )}
       {allapot === 'elutasitva' && m.rejectReason && <p className="alert alert-danger text-sm">A fő iroda elutasította: {m.rejectReason}</p>}
 
@@ -266,7 +285,7 @@ function Kartya({
       ) : (
         <>
           {veglegesit && raktarSzerint === null && (
-            <p className="muted text-sm">A raktár még nem igazolta vissza. Csak akkor fogadja el, ha biztosan tudja, mi történt.</p>
+            <p className="muted text-sm">Csak akkor fogadja el, ha biztosan tudja, mi történt.</p>
           )}
           {veglegesit && raktarSzerint === 0 ? (
             <>
@@ -275,7 +294,7 @@ function Kartya({
               </button>
               {beszerzes && (
                 // F33: ha a raktáros tévedett, a fő iroda felülbírálhatja (mennyiséggel és indoklással).
-                <button type="button" className="btn" data-megis-megjott onClick={() => setAblak({ fajta: 'beszerzes', m })}>
+                <button type="button" className="btn btn-success btn-big btn-block" data-megis-megjott onClick={() => setAblak({ fajta: 'beszerzes', m })}>
                   <CheckCircle2 size={18} aria-hidden="true" /> Mégis megjött – elfogadom
                 </button>
               )}
@@ -288,13 +307,13 @@ function Kartya({
           )}
           <div className="grid grid-cols-2 gap-2">
             {(!veglegesit || egyLepesben || m.type === 'in') && (
-              <button type="button" className="btn" aria-expanded={nyitva === 'kevesebb'} aria-controls={`panel-${m.id}`} onClick={() => nyit('kevesebb')}>
-                <MinusCircle size={18} aria-hidden="true" /> {veglegesit ? 'Más mennyiséggel' : t.kevesebb}
+              <button type="button" className="btn btn-warning-solid btn-big" aria-expanded={nyitva === 'kevesebb'} aria-controls={`panel-${m.id}`} onClick={() => nyit('kevesebb')}>
+                <MinusCircle size={22} aria-hidden="true" /> {veglegesit ? 'Más mennyiséggel' : t.kevesebb}
               </button>
             )}
             {!(veglegesit && raktarSzerint === 0) && (
-              <button type="button" className="btn btn-danger" aria-expanded={nyitva === 'nem'} aria-controls={`panel-${m.id}`} onClick={() => nyit('nem')}>
-                <XCircle size={18} aria-hidden="true" /> {veglegesit ? 'Elutasítom' : t.nem}
+              <button type="button" className="btn btn-danger-solid btn-big" aria-expanded={nyitva === 'nem'} aria-controls={`panel-${m.id}`} onClick={() => nyit('nem')}>
+                <XCircle size={22} aria-hidden="true" /> {veglegesit ? 'Elutasítom' : t.nem}
               </button>
             )}
           </div>
@@ -420,7 +439,7 @@ export function Jovahagyando() {
     [movements],
   )
   const teendoMap = new Map(lista.map((m) => [m.id, teendoje(m, szerep)]))
-  const csoportok: Array<{ cim: string; elemek: Movement[] }> = (
+  const csoportok: Array<{ cim: string; elemek: Movement[]; csukhato?: boolean }> = (
     szerep.raktaros
       ? [
           { cim: 'Visszaigazolásra vár', elemek: lista.filter((m) => teendoMap.get(m.id) === 'visszaigazol') },
@@ -429,7 +448,8 @@ export function Jovahagyando() {
         ]
       : [
           { cim: 'Elfogadásra vár – a raktár visszaigazolta', elemek: lista.filter((m) => allapota(m) === 'fo_irodara_var') },
-          { cim: 'A raktár visszaigazolására vár', elemek: lista.filter((m) => allapota(m) === 'raktarra_var') },
+          // Csak megtekintésre: a fő iroda a raktáros válasza után dönt (összecsukható csoport).
+          { cim: 'A raktárra vár – csak megtekintés', elemek: lista.filter((m) => allapota(m) === 'raktarra_var'), csukhato: true },
           { cim: 'Elutasítva, a raktár javítására vár', elemek: lista.filter((m) => allapota(m) === 'elutasitva') },
         ]
   ).filter((g) => g.elemek.length)
@@ -480,11 +500,8 @@ export function Jovahagyando() {
           </p>
         </div>
       ) : (
-        csoportok.map((g) => (
-          <section key={g.cim} className="mb-6" aria-label={g.cim}>
-            <h2 className="mb-2 text-base font-semibold">
-              {g.cim} <span className="badge">{g.elemek.length}</span>
-            </h2>
+        csoportok.map((g) => {
+          const kartyak = (
             <ul className="flex flex-col gap-3">
               {g.elemek.map((m) => (
                 <Kartya
@@ -503,8 +520,24 @@ export function Jovahagyando() {
                 />
               ))}
             </ul>
-          </section>
-        ))
+          )
+          return g.csukhato ? (
+            <details key={g.cim} className="mb-6" data-raktarra-var>
+              <summary className="mb-2 cursor-pointer text-base font-semibold">
+                {g.cim} <span className="badge badge-info">{g.elemek.length}</span>
+              </summary>
+              <p className="muted mb-2 text-sm">Ezeket a raktáros még nem igazolta vissza. Amint válaszol, felül, az elfogadandók között jelennek meg.</p>
+              {kartyak}
+            </details>
+          ) : (
+            <section key={g.cim} className="mb-6" aria-label={g.cim}>
+              <h2 className="mb-2 text-base font-semibold">
+                {g.cim} <span className="badge">{g.elemek.length}</span>
+              </h2>
+              {kartyak}
+            </section>
+          )
+        })
       )}
       {remote && utolso && <p className="muted text-center text-xs">Frissítve: {utolso.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</p>}
 

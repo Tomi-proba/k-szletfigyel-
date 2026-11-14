@@ -1,4 +1,4 @@
-import { CircleSlash, ClipboardList, FileSpreadsheet, FileText, PackagePlus, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { CircleSlash, ClipboardList, FileSpreadsheet, FileText, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Link } from '../keret/router'
@@ -9,7 +9,6 @@ import type { DeleteMovementMode } from '../store/useStore'
 import { DeleteChoiceDialog } from '../components/DeleteChoiceDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Modal } from '../components/Modal'
-import { PurchaseOrderForm } from '../components/PurchaseOrderForm'
 import { SalePrepForm } from '../components/SalePrepForm'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
 import { Button, Card, Checkbox, EmptyState, Field, FieldGroup, Input, PageHeader, Select, Textarea } from '../components/ui'
@@ -97,7 +96,6 @@ export function Movements() {
   // fejezet): az iroda ad le rendelést, a raktáros hagyja jóvá a
   // beérkezést; a raktáros készíti elő a kiszállítást, az iroda hagyja
   // jóvá/utasítja el.
-  const [creatingOrder, setCreatingOrder] = useState(false)
   const [creatingSalePrep, setCreatingSalePrep] = useState(false)
   const [resubmitting, setResubmitting] = useState<Movement | null>(null)
   const [deletingPending, setDeletingPending] = useState<Movement | null>(null)
@@ -204,11 +202,6 @@ export function Movements() {
             <Button variant="secondary" onClick={() => exportToPdf(`mozgasnaplo_${from}_${to}.pdf`, 'Mozgásnapló', columns, rows)}>
               <FileText size={16} /> PDF
             </Button>
-            {!isWarehouseUser && !isReadOnlyViewer && (
-              <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreatingOrder(true)}>
-                <PackagePlus size={16} /> Rendelés leadása
-              </Button>
-            )}
             {isWarehouseUser && !isReadOnlyViewer && (
               <Button variant={keretben() ? 'secondary' : 'primary'} onClick={() => setCreatingSalePrep(true)}>
                 <ClipboardList size={16} /> Kiszállítás előkészítése
@@ -590,11 +583,6 @@ export function Movements() {
 
       {cancelling && <CancelSaleModal movement={cancelling} product={productById.get(cancelling.productId)} onClose={() => setCancelling(null)} />}
 
-      {creatingOrder && (
-        <Modal title="Rendelés leadása" onClose={() => setCreatingOrder(false)} wide>
-          <PurchaseOrderForm onDone={() => setCreatingOrder(false)} />
-        </Modal>
-      )}
 
       {creatingSalePrep && (
         <Modal title="Kiszállítás előkészítése" onClose={() => setCreatingSalePrep(false)}>

@@ -116,6 +116,16 @@ describe('szerepkörök a felületen (F28)', () => {
     expect(gombok()).toContain('Mentés')
   })
 
+  it('F33: a bejövő rendelés egyetlen helye az „Új mozgás” (Szállítóval); külön „Rendelés leadása” gomb nincs', async () => {
+    await megnyit('fo_iroda', '/')
+    const gomb = (cim: string) => [...tarolo.querySelectorAll('button')].find((b) => b.textContent?.trim() === cim)!
+    await act(async () => gomb('Bejövő').click())
+    expect(tarolo.querySelector('[data-szallito-valaszto]')).not.toBeNull()
+    act(() => gyoker.unmount())
+    await megnyit('fo_iroda', '/mozgasnaplo')
+    expect(gombok().some((g) => /Rendelés leadása/.test(g))).toBe(false)
+  })
+
   it('F33: a raktáros nem látja a „raktáros jóváhagyása” pipát', async () => {
     await megnyit('raktaros', '/')
     const gomb = (cim: string) => [...tarolo.querySelectorAll('button')].find((b) => b.textContent?.trim() === cim)!

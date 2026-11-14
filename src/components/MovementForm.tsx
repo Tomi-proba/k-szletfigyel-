@@ -10,6 +10,7 @@ import { lotUnitCost } from '../lib/costing'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 import { kettosRogzites, szabadKeszlet } from '../lib/raktariBejelentes'
 import { ProductPicker } from './ProductPicker'
+import { SzallitoValaszto } from './SzallitoValaszto'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
@@ -57,6 +58,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const raktarJovahagyasValaszthato = effectiveRole === 'fo_iroda' || effectiveRole === 'iroda'
   const [raktarJovahagyas, setRaktarJovahagyas] = useState(true)
   const [utolsoRaktarra, setUtolsoRaktarra] = useState(false)
+  // A bejövő tétel szállítója (F28): itt adja meg a fő iroda; alapból a termék szállítója. (A „Rendelés leadása”
+  // külön űrlapja megszűnt, F33: a bejövő rendelés egyetlen helye ez az űrlap.)
+  const [szallito, setSzallito] = useState(() => products.find((p) => p.id === defaultProductId)?.supplierId ?? '')
   const activeCustomers = useMemo(() => customers.filter((c) => !c.deletedAt), [customers])
   const suppliers = useStore((s) => s.suppliers)
 
@@ -114,6 +118,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     setProductId(nextProductId)
     const p = products.find((pr) => pr.id === nextProductId)
     setVatRate(p?.defaultVatRatePercent !== undefined ? String(p.defaultVatRatePercent) : '')
+    setSzallito(p?.supplierId ?? '')
   }
 
   const previewHufUnitCost =
@@ -253,6 +258,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         invoiceDate: invoiceDate || undefined,
         fulfillmentDate: fulfillmentDate || undefined,
         dueDate: trackDueDate ? dueDate || undefined : undefined,
+        supplierId: szallito || undefined,
       })
       if (r.ok) {
         setUtolsoRaktarra(true)
@@ -284,6 +290,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
         shippingOnInvoice: type === 'in' && !leltar && (shippingCostNumber ?? 0) > 0 ? (szamlanVan === 'nemtudom' ? undefined : szamlanVan === 'igen') : undefined,
         invoiceDate: type === 'in' && !leltar ? invoiceDate || undefined : undefined,
         fulfillmentDate: type === 'in' && !leltar ? fulfillmentDate || undefined : undefined,
+        supplierId: type === 'in' && !leltar ? szallito || undefined : undefined,
       },
       { allowNegativeStock },
     )
@@ -393,6 +400,12 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </button>
         </div>
       </FieldGroup>
+
+      {type === 'in' && !leltar && !isWarehouseUser && (
+        <Field label="Szállító">
+          <SzallitoValaszto value={szallito} onChange={setSzallito} />
+        </Field>
+      )}
 
       {type === 'in' && !leltar && raktarJovahagyasValaszthato && (
         <div className="mb-3" data-raktar-jovahagyas>

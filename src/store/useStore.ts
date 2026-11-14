@@ -106,6 +106,8 @@ function flagClosingModified(closings: DailyClosing[], locationId: string, date:
 
 export interface RecordMovementInput {
   productId: string
+  /** 'in': a szállító (F28/F33); üresen a termék szállítója. */
+  supplierId?: string
   type: MovementType
   quantity: number
   date: string
@@ -796,6 +798,7 @@ export const useStore = create<AppState>()(
 
       recordMovement: (input, opts) => {
         const {
+          supplierId: bejovoSzallito,
           productId,
           type,
           quantity,
@@ -957,6 +960,7 @@ export const useStore = create<AppState>()(
               exchangeRate: type === 'in' && lotCurrency !== 'HUF' ? lotExchangeRate : undefined,
               unitCost: movementUnitCost,
               customerId: type === 'out' && !inventoryReason ? customerId : undefined,
+              supplierId: type === 'in' && !inventoryReason ? bejovoSzallito || product.supplierId || undefined : undefined,
               // Snapshotted for every sale (not just customer-tracked ones)
               // so VAT and any later reporting always has the price that
               // was actually charged, not today's (possibly changed) price.

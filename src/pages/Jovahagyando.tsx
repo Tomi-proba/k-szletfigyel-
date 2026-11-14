@@ -42,6 +42,14 @@ const HIBA: Record<string, string> = {
 type Panel = { id: string; mod: 'kevesebb' | 'nem' } | null
 type Ablak = { fajta: 'beszerzes' | 'kiadas' | 'javitas'; m: Movement } | null
 
+/** A várható egységár a jóváhagyandó kártyán: a tételé, különben a termék ára (eladásnál az eladási, bejövőnél a beszerzési). */
+function varhatoAr(m: Movement, termek: Product | undefined): string | null {
+  const sajat = m.type === 'out' ? m.saleUnitPrice : m.unitPrice
+  if (sajat !== undefined && sajat !== null) return formatMoney(sajat, m.currency ?? 'HUF')
+  const alap = m.type === 'out' ? termek?.salePrice : termek?.purchasePrice
+  return alap ? `${formatMoney(alap, 'HUF')} (a termék ${m.type === 'out' ? 'eladási' : 'beszerzési'} ára)` : null
+}
+
 /** A raktár válasza egy színes sávban: megjött (zöld), más mennyiség (sárga), nem jött meg (piros), még nem válaszolt (kék). */
 function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null }) {
   const [fajta, Ikon, szoveg] =
@@ -257,7 +265,8 @@ function Kartya({
               ['Vevő', vevo],
               ...(beszerzes ? [['Szállító', szallitoNeve] as const] : []),
               ['Számlaszám', m.invoiceNumber],
-              ...(arLathato ? [['Várható egységár', m.unitPrice !== undefined ? formatMoney(m.unitPrice, m.currency ?? 'HUF') : null] as const] : []),
+              // Kiadásnál az eladási, bejövőnél a beszerzési ár; ha a tételen nincs, a termék ára (jelölve).
+              ...(arLathato ? [[m.type === 'out' ? 'Várható eladási egységár' : 'Várható egységár', varhatoAr(m, termek)] as const] : []),
               ...(m.rejectReason ? [['Elutasítás oka', m.rejectReason] as const] : []),
             ] as ReadonlyArray<readonly [string, string | null | undefined]>
           ).map(([cim, ertek]) => (

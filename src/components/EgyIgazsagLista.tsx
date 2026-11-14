@@ -80,7 +80,12 @@ function Sor({ s, onKifizetve }: { s: EgyIgazsagSor; onKifizetve?: (s: EgyIgazsa
           s.leiras
         )}
       </div>
-      {s.hatarido && <div className="text-xs text-[var(--color-text-muted)]">Határidő: {formatDate(s.hatarido)}</div>}
+      {s.hatarido && (
+        <div className="text-xs text-[var(--color-text-muted)]">
+          Határidő: {formatDate(s.hatarido)}
+          {s.hataridoPartnerbol && ' (a partner fizetési határidejéből; a számlán nincs megadva)'}
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between">
         <span className="text-lg font-bold text-[var(--color-text)]">{formatCurrency(s.osszeg)}</span>
         {s.csoport === 'konyvelo' ? (

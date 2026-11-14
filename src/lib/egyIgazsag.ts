@@ -9,7 +9,7 @@
 // A program nem talál ki határidőt: a határidő nélküli Könyvelő-tétel „nincs határidő” jelzést kap, és a
 // riasztásban nem számít.
 import type { UnpaidSale } from './alerts'
-import { daysBetween, todayISO } from './dates'
+import { daysBetween, isoPlusDays, todayISO } from './dates'
 import { modulHivatkozas, type ModulHivatkozas } from './integracio'
 import type { PayableObligation } from './payables'
 import type { PurchaseLot } from '../types'
@@ -69,6 +69,8 @@ export interface EgyIgazsagSor {
   hatarido: string | null
   /** negatív: lejárt; null: nincs határidő */
   napHataridoig: number | null
+  /** A határidő a partner fizetési határidejéből számolt (F30), mert a Könyvelő számláján nincs megadva. */
+  hataridoPartnerbol?: boolean
   /** a riasztásban (jelvényben) számít-e */
   riaszt: boolean
   hivatkozas: string | null
@@ -107,6 +109,8 @@ export function egyIgazsag(
   reminderWindowDays: number,
   most: Date = new Date(),
   cimek?: Parameters<typeof modulHivatkozas>[1],
+  /** A partner fizetési határideje (napokban) a neve szerint (F30): ha a számlán nincs határidő, ebből számolunk. */
+  partnerHatarido?: (oldal: 'fizetendo' | 'kintlevoseg', nev: string) => number | undefined,
 ): EgyIgazsag | null {
   if (!k || (k.allapot !== 'OK' && k.allapot !== 'KOZPONT_NEM_ERHETO_EL' && k.allapot !== 'NINCS_ADAT')) return null
   const ma = todayISO()
@@ -118,8 +122,11 @@ export function egyIgazsag(
   const lotMozgas = new Map(lots.map((l) => [l.id, l.movementId]))
 
   const konyveloSor = (i: KonyveloTetel): EgyIgazsagSor => {
-    const nap = i.dueDate ? daysBetween(ma, i.dueDate) : null
     const fizetendoOldal = i.kind === 'PAYABLE'
+    // Ha a számlán nincs határidő, a partner (Készletben megadott) fizetési határidejéből: a számla kelte + napok.
+    const napok = !i.dueDate && i.issueDate && i.partnerName ? partnerHatarido?.(fizetendoOldal ? 'fizetendo' : 'kintlevoseg', i.partnerName) : undefined
+    const hatarido = i.dueDate ?? (napok !== undefined && i.issueDate ? isoPlusDays(i.issueDate, napok) : null)
+    const nap = hatarido ? daysBetween(ma, hatarido) : null
     return {
       kulcs: `k:${i.kind}:${i.documentId}:${i.open}`,
       oldal: fizetendoOldal ? 'fizetendo' : 'kintlevoseg',
@@ -127,8 +134,9 @@ export function egyIgazsag(
       partner: i.partnerName ?? (fizetendoOldal ? 'Ismeretlen szállító' : 'Ismeretlen vevő'),
       leiras: [i.serialNumber, i.externalNumber ? `(${i.externalNumber})` : null, i.description].filter(Boolean).join(' ') || 'Bizonylat',
       osszeg: i.open / 100,
-      hatarido: i.dueDate,
+      hatarido,
       napHataridoig: nap,
+      hataridoPartnerbol: !i.dueDate && hatarido !== null,
       riaszt: nap !== null && (nap < 0 || (fizetendoOldal && nap <= reminderWindowDays)),
       hivatkozas: modulHivatkozas(i.link, cimek),
       helyi: null,

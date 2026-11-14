@@ -93,3 +93,22 @@ describe('egy igazság (I6b, KK10)', () => {
     expect(nincs.fizetendo.map((s) => s.csoport)).toEqual(['csak_keszlet'])
   })
 })
+
+describe('a Könyvelő számláján hiányzó határidő a partner határidejéből (F30)', () => {
+  it('ha a számlán nincs határidő, a számla kelte + a partner napjai; ha van, az számít', () => {
+    const k = {
+      allapot: 'OK',
+      items: [
+        { kind: 'RECEIVABLE', documentId: 'd1', serialNumber: 'VSZ-1', externalNumber: null, partnerName: 'Kovács Építő Kft.', description: 'Eladás', issueDate: '2026-11-01', dueDate: null, open: 1_000_00, link: null, stockSources: [] },
+        { kind: 'RECEIVABLE', documentId: 'd2', serialNumber: 'VSZ-2', externalNumber: null, partnerName: 'Kovács Építő Kft.', description: 'Eladás', issueDate: '2026-11-01', dueDate: '2026-11-05', open: 1_000_00, link: null, stockSources: [] },
+        { kind: 'RECEIVABLE', documentId: 'd3', serialNumber: 'VSZ-3', externalNumber: null, partnerName: 'Más Bt.', description: 'Eladás', issueDate: '2026-11-01', dueDate: null, open: 1_000_00, link: null, stockSources: [] },
+      ],
+      pendingDrafts: [],
+    } as unknown as Parameters<typeof egyIgazsag>[0]
+    const e = egyIgazsag(k, [], [], [], 3, new Date(), undefined, (oldal, nev) => (oldal === 'kintlevoseg' && nev === 'Kovács Építő Kft.' ? 20 : undefined))!
+    const sor = (d: string) => e.kintlevoseg.find((s) => s.kulcs.includes(`:${d}:`))!
+    expect(sor('d1')).toMatchObject({ hatarido: '2026-11-21', hataridoPartnerbol: true })
+    expect(sor('d2')).toMatchObject({ hatarido: '2026-11-05', hataridoPartnerbol: false })
+    expect(sor('d3')).toMatchObject({ hatarido: null })
+  })
+})

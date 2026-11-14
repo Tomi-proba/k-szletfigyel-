@@ -125,7 +125,12 @@ export function useAlerts(): AlertsData {
     )
 
     const reminderWindowDays = settings.paymentReminderDaysBefore.length ? Math.max(...settings.paymentReminderDaysBefore) : 0
-    const egy = isWarehouseUser ? null : egyIgazsag(konyveloNyitott, payables, unpaidSales, lots, reminderWindowDays, now)
+    // A partner fizetési határideje név szerint (F30): a Könyvelő számláján hiányzó határidő pótlására.
+    const nevKulcs = (n: string) => n.trim().toLocaleLowerCase('hu')
+    const vevoNap = new Map(customers.filter((c) => c.paymentTermDays !== undefined).map((c) => [nevKulcs(c.name), c.paymentTermDays!]))
+    const szallitoNap = new Map(suppliers.filter((s) => s.paymentTermDays !== undefined).map((s) => [nevKulcs(s.name), s.paymentTermDays!]))
+    const partnerHatarido = (oldal: 'fizetendo' | 'kintlevoseg', nev: string) => (oldal === 'kintlevoseg' ? vevoNap : szallitoNap).get(nevKulcs(nev))
+    const egy = isWarehouseUser ? null : egyIgazsag(konyveloNyitott, payables, unpaidSales, lots, reminderWindowDays, now, undefined, partnerHatarido)
     const osszeg = (l: Array<{ osszeg: number }>) => l.reduce((s, x) => s + x.osszeg, 0)
     const fizetendoRiaszt = egy
       ? { db: egy.fizetendo.filter((x) => x.riaszt).length, osszeg: osszeg(egy.fizetendo.filter((x) => x.riaszt)) }

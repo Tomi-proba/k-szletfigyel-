@@ -39,7 +39,7 @@ const fiz = (id: string, sourceType: 'purchase' | 'ledger', daysUntilDue: number
   urgency: daysUntilDue < 0 ? 'overdue' : 'upcoming',
   isAlertWorthy: daysUntilDue <= 3,
 })
-const eladas = (movementId: string): UnpaidSale => ({ movementId, date: ma, customerId: 'c', customerName: 'Vevő Zrt.', productName: 'Ajtó', quantity: 1, unit: 'db', amount: 254_00 })
+const eladas = (movementId: string): UnpaidSale => ({ movementId, date: ma, customerId: 'c', customerName: 'Vevő Zrt.', productName: 'Ajtó', quantity: 1, unit: 'db', amount: 254_00, dueDate: null })
 
 describe('egy igazság (I6b, KK10)', () => {
   it('Könyvelő nélkül null: a Készlet a saját számítását mutatja', () => {

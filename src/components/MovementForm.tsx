@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useStore } from '../store/useStore'
 import type { Currency, MovementReason, MovementType } from '../types'
 import { bekuldottAfaIdoszakban, lezartIdoszakban, useLezartIdoszakok } from '../lib/integracio'
-import { todayISO } from '../lib/dates'
+import { hataridoNapbol, todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 import { kettosRogzites, szabadKeszlet } from '../lib/raktariBejelentes'
@@ -52,6 +52,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   // mezők el sem érhetők raktáros szerepkörben, nem csak vizuálisan rejtve.
   const { isWarehouseUser } = useAuth()
   const activeCustomers = useMemo(() => customers.filter((c) => !c.deletedAt), [customers])
+  const suppliers = useStore((s) => s.suppliers)
 
   const [productId, setProductId] = useState<string | null>(defaultProductId)
   const [type, setType] = useState<MovementType>('out')
@@ -82,6 +83,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const lezart = lezartIdoszakban(date, lezartak)
   const afaBekuldve = bekuldottAfaIdoszakban(date, lezartak)
   const leltar = ok !== 'normal'
+  // A raktáros kimenő bejelentése partnernek (F30): a választás kötelező.
+  const kiadasPartnernek = isWarehouseUser && type === 'out' && !leltar && trackCustomer
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -183,6 +186,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('Adja meg az árfolyamot (1 egység hány forint).')
       return
     }
+    if (kiadasPartnernek && !customerId) {
+      setError('Válassza ki a listából, melyik partner vitte el az árut.')
+      return
+    }
     if (type === 'out' && trackCustomer && !customerId) {
       setError('Válasszon vevőt, vagy kapcsolja ki a vevőhöz rögzítést.')
       return
@@ -198,7 +205,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
 
     if (isWarehouseUser) {
       // A raktáros bejelentést tesz: a készlet csak a fő iroda elfogadásakor változik.
-      const r = createWarehouseReport({ productId, type, quantity: qtyNumber, date, note, ok: leltar ? ok : undefined }, { allowNegativeStock })
+      const r = createWarehouseReport(
+        { productId, type, quantity: qtyNumber, date, note, ok: leltar ? ok : undefined, customerId: kiadasPartnernek ? customerId : undefined },
+        { allowNegativeStock },
+      )
       if (r.ok) return urit()
       if (r.reason === 'insufficient-stock') return setSzabadHiany(r.available ?? 0)
       setError(
@@ -497,6 +507,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
               if (!e.target.checked) {
                 setDueDate('')
                 setInvoicePaid(false)
+              } else if (!dueDate) {
+                // A szállító fizetési határidejéből (F30): a dátum + a szállító határideje; átírható.
+                const napok = suppliers.find((s) => s.id === product?.supplierId)?.paymentTermDays
+                setDueDate(hataridoNapbol(date, napok) ?? '')
               }
             }}
           />
@@ -549,6 +563,57 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
             Minden eladásra vonatkozik, nem csak a vevőhöz rögzítettekre - mindig befizetendő áfaként kerül a pénzügyi naplóba.
           </span>
         </Field>
+      )}
+
+      {type === 'out' && isWarehouseUser && !leltar && (
+        // A raktáros kiválasztja, ki vitte el az árut (F30): magánszemély (sima eladás) vagy a fő iroda által felvett
+        // partner; partnernél a választás kötelező. Csak a nevet látja, fizetési adatot nem.
+        <FieldGroup label="Ki vitte el?">
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Ki vitte el?">
+            {(
+              [
+                [false, 'Magánszemély'],
+                [true, 'Partner'],
+              ] as const
+            ).map(([partner, cim]) => (
+              <button
+                key={cim}
+                type="button"
+                aria-pressed={trackCustomer === partner}
+                onClick={() => {
+                  setTrackCustomer(partner)
+                  if (!partner) setCustomerId('')
+                }}
+                className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                  trackCustomer === partner
+                    ? 'border-[var(--color-primary)] bg-[var(--color-info-bg)] text-[var(--color-primary)]'
+                    : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                }`}
+              >
+                {cim}
+              </button>
+            ))}
+          </div>
+          {trackCustomer && (
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-text)]">Partner</span>
+              {activeCustomers.length === 0 ? (
+                <span className="block text-xs text-[var(--color-text-muted)]">Még nincs felvett partner – a fő iroda veszi fel.</span>
+              ) : (
+                <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)} aria-required="true" data-partner-valaszto>
+                  <option value="">Válassza ki a partnert…</option>
+                  {[...activeCustomers]
+                    .sort((a, b) => a.name.localeCompare(b.name, 'hu'))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </Select>
+              )}
+            </label>
+          )}
+        </FieldGroup>
       )}
 
       {type === 'out' && !isWarehouseUser && !leltar && (

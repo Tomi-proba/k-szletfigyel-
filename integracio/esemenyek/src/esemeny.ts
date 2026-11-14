@@ -339,6 +339,62 @@ export const EVENT_TYPES: readonly EventTypeDefinition[] = [
       ),
   },
   {
+    type: "keszlet.eladas.veglegesitve",
+    version: 3,
+    description: "A Készletben véglegesítettek egy eladást (KK2), az ELÁBÉ-val és a vevő határidejéből számolt fizetési határidővel (F30).",
+    consumers: ["konyvelo"],
+    payload: z
+      .object({
+        saleId: z.string(),
+        date: isoDate,
+        customer: partnerRef.nullable(),
+        cash: z.boolean(),
+        /** A vevőszámla száma, ha van (a Könyvelőben rögzített számlával így párosítható). */
+        invoiceNumber: z.string().max(100).nullable(),
+        /** Az eladott áruk bekerülési értéke (ELÁBÉ), a Készlet FIFO/átlagár számítása szerint. */
+        costOfGoods: filler.nonnegative(),
+        /** A fizetési határidő (F30): a vevő határidejéből; null, ha a vevőnek nincs, vagy kifizették. */
+        dueDate: isoDate.nullable(),
+        lines: z.array(stockLineV2).min(1),
+        totals,
+      })
+      .refine(withTotals, { message: "Az összesen nem egyezik a tételek összegével.", path: ["totals"] }),
+  },  {
+    type: "keszlet.beszerzes.veglegesitve",
+    version: 4,
+    description:
+      "A Készletben véglegesítettek egy beszerzést (KK1), a fizetési határidővel (F30): tételenként, hogy az áfa visszaigényelhető-e, és a szállítási díj külön, azzal, hogy rajta van-e a szállító számláján (F15.3, F15.7/2).",
+    consumers: ["konyvelo"],
+    payload: z
+      .object({
+        purchaseId: z.string(),
+        receivedDate: isoDate,
+        invoiceDate: isoDate.nullable(),
+        fulfillmentDate: isoDate.nullable(),
+        invoiceNumber: z.string().max(100).nullable(),
+        supplier: partnerRef.nullable(),
+        /** Ha a beszerzés devizában volt: a pénznem és az árfolyam (az összegek ettől még forintban vannak). */
+        originalCurrency: originalCurrency.nullable(),
+        /** A fizetési határidő (F30): a szállító határidejéből vagy kézzel; null, ha nem adták meg. */
+        dueDate: isoDate.nullable(),
+        lines: z.array(purchaseLineV3).min(1),
+        shipping: purchaseShipping.nullable(),
+        /**
+         * A szállító számlájának összesene: a tételek, és a szállítási díj, ha a számlán van
+         * (`onSupplierInvoice === true`). Ha nincs rajta vagy nem tudni, a díj nem része.
+         */
+        totals,
+      })
+      .refine(
+        (p) => {
+          const ship = p.shipping?.onSupplierInvoice === true ? p.shipping : null;
+          const net = p.lines.reduce((s, l) => s + l.netAmount, 0) + (ship?.netAmount ?? 0);
+          const vat = p.lines.reduce((s, l) => s + l.vatAmount, 0) + (ship?.vatAmount ?? 0);
+          return net === p.totals.net && vat === p.totals.vat;
+        },
+        { message: "Az összesen nem egyezik a tételek (és a számlán lévő szállítási díj) összegével.", path: ["totals"] },
+      ),
+  },  {
     type: "keszlet.leltar.elteres",
     version: 1,
     description:

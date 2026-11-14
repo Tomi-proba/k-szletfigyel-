@@ -170,6 +170,8 @@ function beszerzes(k: Kep) {
     invoiceNumber: szoveg(m.invoice_number),
     supplier: partnerRef(k.szallito),
     originalCurrency: devizanem !== "HUF" ? { code: devizanem, rate: lot.exchangeRate } : null,
+    // A beszerzési tétel fizetési határideje (F30: a szállító határidejéből vagy kézzel); nincs, ha nem adták meg.
+    dueDate: szoveg(k.tetel?.due_date)?.slice(0, 10) ?? null,
     lines: [line],
     shipping,
     totals: { net, vat, gross: net + vat },
@@ -200,6 +202,8 @@ function eladas(k: Kep) {
     cash: !m.customer_id,
     invoiceNumber: szoveg(m.invoice_number),
     costOfGoods: Math.max(0, filler(q * egysegKoltseg)),
+    // A vevő határidejéből számolt fizetési határidő (F30); nincs, ha kifizették vagy a vevőnek nincs határideje.
+    dueDate: szoveg(m.due_date)?.slice(0, 10) ?? null,
     lines: [line],
     totals: osszesen([line]),
   };
@@ -382,8 +386,8 @@ export function tervez(v: Valtozas): Terv {
           esemeny: { type: "keszlet.mozgas.jovahagyva", version: 1, payload: jovahagyas(m, k, cel, fajta === "RETURN" ? k.eredeti : null), causedBy },
         };
       }
-      if (fajta === "PURCHASE") return { record: { ...record, label: cimke("Beszerzés", k) }, esemeny: { type: "keszlet.beszerzes.veglegesitve", version: 3, payload: beszerzes(k), causedBy } };
-      if (fajta === "SALE") return { record: { ...record, label: cimke("Eladás", k) }, esemeny: { type: "keszlet.eladas.veglegesitve", version: 2, payload: eladas(k), causedBy } };
+      if (fajta === "PURCHASE") return { record: { ...record, label: cimke("Beszerzés", k) }, esemeny: { type: "keszlet.beszerzes.veglegesitve", version: 4, payload: beszerzes(k), causedBy } };
+      if (fajta === "SALE") return { record: { ...record, label: cimke("Eladás", k) }, esemeny: { type: "keszlet.eladas.veglegesitve", version: 3, payload: eladas(k), causedBy } };
       if (fajta === "INVENTORY") return { record: { ...record, label: cimke("Leltáreltérés", k) }, esemeny: { type: "keszlet.leltar.elteres", version: 1, payload: leltar(k), causedBy } };
       return { record: { ...record, label: cimke("Visszáru", k) }, esemeny: { type: "keszlet.visszaru.veglegesitve", version: 1, payload: visszaru(k), causedBy } };
     }

@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { createId } from './id'
 import { buildSeedData } from './seed'
 import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/costing'
-import { todayISO } from '../lib/dates'
+import { hataridoNapbol, todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
 import { fuggoMentesekBeszamitasa, integracioFrissitesLetoltese, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
@@ -405,7 +405,7 @@ interface AppState {
   createPendingSalePrep: (input: CreatePendingSaleInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   approveSalePrep: (
     id: string,
-    input?: { vatRatePercent?: number; isPaid?: boolean; invoiceNumber?: string },
+    input?: { vatRatePercent?: number; isPaid?: boolean; invoiceNumber?: string; customerId?: string | null },
     opts?: { allowNegativeStock?: boolean },
   ) => ApproveSaleResult
   rejectSalePrep: (id: string, reason?: string) => RejectSaleResult
@@ -961,6 +961,10 @@ export const useStore = create<AppState>()(
               // A leltári hiány és a selejt nem eladás: nincs eladási ára, áfája, kiszállítása.
               saleUnitPrice: type === 'out' && !inventoryReason ? product.salePrice : undefined,
               isPaid: type === 'out' && customerId && !inventoryReason ? (isPaid ?? true) : undefined,
+              dueDate:
+                type === 'out' && customerId && !inventoryReason && isPaid === false
+                  ? hataridoNapbol(date, get().customers.find((c) => c.id === customerId)?.paymentTermDays)
+                  : undefined,
               vatRatePercent: type === 'out' && !inventoryReason ? vatRatePercent : undefined,
               saleStatus: type === 'out' && !inventoryReason ? 'pending' : undefined,
               saleStatusChangedAt: type === 'out' && !inventoryReason ? new Date().toISOString() : undefined,
@@ -1393,6 +1397,12 @@ export const useStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           vatRatePercent,
           vatReclaimable,
+          // A szállító fizetési határidejéből (F30): a dátum + a szállító határideje; nincs, ha nincs megadva.
+          ...(() => {
+            const sz = supplierId ? get().suppliers.find((x) => x.id === supplierId) : undefined
+            const due = beszerzes ? hataridoNapbol(movement.date, sz?.paymentTermDays) : undefined
+            return due ? { dueDate: due, isPaid: false } : {}
+          })(),
         }
 
         const nextPurchasePrice =
@@ -1511,7 +1521,11 @@ export const useStore = create<AppState>()(
         // A leltári hiány és a selejt (raktári bejelentésből) nem eladás: nincs eladási ára, áfája, kiszállítása.
         const eladas = !movement.ok
         const vatRatePercent = eladas ? input?.vatRatePercent : undefined
-        const isPaid = eladas && movement.customerId ? (input?.isPaid ?? true) : undefined
+        // A vevőt a fő iroda elfogadáskor átírhatja (F30); a határidő a dátum + a vevő határideje.
+        const customerId = eladas ? (input?.customerId === undefined ? movement.customerId : input.customerId || undefined) : undefined
+        const isPaid = eladas && customerId ? (input?.isPaid ?? true) : undefined
+        const vevo = customerId ? get().customers.find((c) => c.id === customerId) : undefined
+        const dueDate = eladas && customerId && isPaid === false ? hataridoNapbol(movement.date, vevo?.paymentTermDays) : undefined
         const now = new Date().toISOString()
         const label = `${product.name} (${movement.quantity} ${product.unit})`
         const affectedClosing = get().dailyClosings.find((c) => c.locationId === movement.locationId && c.date === movement.date)
@@ -1525,7 +1539,9 @@ export const useStore = create<AppState>()(
                   ...m,
                   unitCost: movementUnitCost,
                   saleUnitPrice: eladas ? product.salePrice : undefined,
+                  customerId,
                   isPaid,
+                  dueDate,
                   vatRatePercent,
                   invoiceNumber: eladas ? input?.invoiceNumber?.trim() || m.invoiceNumber : undefined,
                   saleStatus: eladas ? 'pending' : undefined,

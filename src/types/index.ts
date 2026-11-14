@@ -34,6 +34,8 @@ export interface Supplier extends SoftDeletable {
   email?: string
   /** Average delivery lead time in days, used for reorder alerts. */
   leadTimeDays: number
+  /** Fizetési határidő napokban (F30): a beszerzés határideje alapból a dátum + ennyi nap. */
+  paymentTermDays?: number
 }
 
 export interface Customer extends SoftDeletable {
@@ -42,6 +44,8 @@ export interface Customer extends SoftDeletable {
   phone?: string
   email?: string
   notes?: string
+  /** Fizetési határidő napokban (F30): az eladás határideje a dátum + ennyi nap. */
+  paymentTermDays?: number
 }
 
 export interface Product extends SoftDeletable {
@@ -187,6 +191,8 @@ export interface Movement extends SoftDeletable {
   /** 'in' only: a beérkező tétel szállítója (F28). A fő iroda adja meg rendeléskor vagy a raktári bejelentés
    * elfogadásakor; a raktáros nem írhatja. Üresen a termék szállítója érvényes. */
   supplierId?: string
+  /** 'out', vevőnek eladva: a fizetési határidő (F30), elfogadáskor a dátum + a vevő határideje. */
+  dueDate?: string
   /** 'out' only, meaningful when customerId is set: whether the customer
    * has paid for this sale yet. Sales without a customerId are always
    * effectively "paid" (cash sale) and this is left unset for them. */

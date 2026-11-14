@@ -16,6 +16,8 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
   const [phone, setPhone] = useState(supplier?.phone ?? '')
   const [email, setEmail] = useState(supplier?.email ?? '')
   const [leadTimeDays, setLeadTimeDays] = useState(String(supplier?.leadTimeDays ?? 7))
+  // Fizetési határidő napokban (F30): üresen nincs határidő.
+  const [hatarido, setHatarido] = useState(supplier?.paymentTermDays === undefined ? '' : String(supplier.paymentTermDays))
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
@@ -23,8 +25,18 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
     const leadNum = Number(leadTimeDays)
     if (!name.trim()) return setError('A szállító nevét kötelező megadni.')
     if (!Number.isFinite(leadNum) || leadNum < 0) return setError('A szállítási idő nem lehet negatív.')
+    const napok = hatarido.trim() === '' ? undefined : Number(hatarido)
+    if (napok !== undefined && (!Number.isInteger(napok) || napok < 0 || napok > 365)) {
+      return setError('A fizetési határidő 0 és 365 közötti egész szám (nap) lehet, vagy maradjon üresen.')
+    }
 
-    const payload = { name: name.trim(), phone: phone.trim() || undefined, email: email.trim() || undefined, leadTimeDays: leadNum }
+    const payload = {
+      name: name.trim(),
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      leadTimeDays: leadNum,
+      paymentTermDays: napok,
+    }
     if (supplier) updateSupplier(supplier.id, payload)
     else addSupplier(payload)
     onDone()
@@ -43,6 +55,12 @@ function SupplierForm({ supplier, onDone }: { supplier?: Supplier; onDone: () =>
       </Field>
       <Field label="Átlagos szállítási idő (nap)">
         <Input type="number" min={0} value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} required />
+      </Field>
+      <Field label="Fizetési határidő (nap)">
+        <Input type="number" min={0} max={365} inputMode="numeric" value={hatarido} onChange={(e) => setHatarido(e.target.value)} placeholder="pl. 30" />
+        <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+          Ennyi napon belül kell fizetnünk. Beszerzéskor a határidő ebből töltődik ki (átírható).
+        </span>
       </Field>
 
       {supplier && (
@@ -112,6 +130,9 @@ export function Suppliers() {
                 <div className="text-sm text-[var(--color-text-muted)]">{s.phone || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">{s.email || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">Szállítási idő: {s.leadTimeDays} nap</div>
+                <div className="text-sm text-[var(--color-text-muted)]">
+                  Fizetési határidő: {s.paymentTermDays === undefined ? 'nincs megadva' : `${s.paymentTermDays} nap`}
+                </div>
                 <div className="text-xs text-[var(--color-text-muted)]">{productCount} termékhez rendelve</div>
                 {!isReadOnlyViewer && (
                   <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">

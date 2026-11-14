@@ -1,3 +1,4 @@
+import { HataridoJelzes } from '../components/HataridoJelzes'
 import { ArrowLeftRight, CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -247,6 +248,7 @@ export function Alerts() {
                     <div className="mt-1 text-sm text-[var(--color-text-muted)]">
                       {formatDate(sale.date)} · {sale.productName} · {formatNumber(sale.quantity)} {sale.unit}
                     </div>
+                    <HataridoJelzes hatarido={sale.dueDate} />
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-lg font-bold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
                       {konyvelobolKovetett.has(sale.movementId) ? (

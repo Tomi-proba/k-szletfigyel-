@@ -166,6 +166,7 @@ export function buildSeedData(): SeedResult {
     phone: '+36 30 111 2233',
     email: 'rendeles@metalking.hu',
     leadTimeDays: 5,
+    paymentTermDays: 30,
   }
   const supFa: Supplier = {
     id: createId(),
@@ -173,6 +174,7 @@ export function buildSeedData(): SeedResult {
     phone: '+36 20 444 5566',
     email: 'info@faarutrade.hu',
     leadTimeDays: 10,
+    paymentTermDays: 15,
   }
   const supEpker: Supplier = {
     id: createId(),
@@ -188,6 +190,7 @@ export function buildSeedData(): SeedResult {
     name: 'Kovács Építő Kft.',
     phone: '+36 30 222 3344',
     email: 'info@kovacsepito.hu',
+    paymentTermDays: 8,
   }
   const custNagy: Customer = {
     id: createId(),
@@ -199,6 +202,7 @@ export function buildSeedData(): SeedResult {
     name: 'Szabó és Társa Bt.',
     phone: '+36 70 333 9988',
     email: 'szabo.tarsa@gmail.com',
+    paymentTermDays: 15,
   }
   const customers = [custKovacs, custNagy, custSzabo]
 

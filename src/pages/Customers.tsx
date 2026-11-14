@@ -1,3 +1,4 @@
+import { HataridoJelzes } from '../components/HataridoJelzes'
 import { CheckCircle2, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
@@ -18,17 +19,24 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
   const [phone, setPhone] = useState(customer?.phone ?? '')
   const [email, setEmail] = useState(customer?.email ?? '')
   const [notes, setNotes] = useState(customer?.notes ?? '')
+  // Fizetési határidő napokban (F30): üresen nincs határidő.
+  const [hatarido, setHatarido] = useState(customer?.paymentTermDays === undefined ? '' : String(customer.paymentTermDays))
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return setError('A vevő nevét kötelező megadni.')
+    const napok = hatarido.trim() === '' ? undefined : Number(hatarido)
+    if (napok !== undefined && (!Number.isInteger(napok) || napok < 0 || napok > 365)) {
+      return setError('A fizetési határidő 0 és 365 közötti egész szám (nap) lehet, vagy maradjon üresen.')
+    }
 
     const payload = {
       name: name.trim(),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       notes: notes.trim() || undefined,
+      paymentTermDays: napok,
     }
     if (customer) updateCustomer(customer.id, payload)
     else addCustomer(payload)
@@ -45,6 +53,12 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
       </Field>
       <Field label="Email">
         <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <Field label="Fizetési határidő (nap)">
+        <Input type="number" min={0} max={365} inputMode="numeric" value={hatarido} onChange={(e) => setHatarido(e.target.value)} placeholder="pl. 15" />
+        <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+          Ennyi napon belül kell fizetnie. Üresen hagyva az eladásnak nincs határideje.
+        </span>
       </Field>
       <Field label="Megjegyzés">
         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -114,6 +128,7 @@ export function Customers() {
                   <div className="text-xs text-[var(--color-text-muted)]">
                     {formatDate(sale.date)} · {sale.productName} · {sale.quantity} {sale.unit}
                   </div>
+                  <HataridoJelzes hatarido={sale.dueDate} />
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-[var(--color-danger)]">{formatCurrency(sale.amount)}</span>
@@ -162,6 +177,9 @@ export function Customers() {
                 </div>
                 <div className="text-sm text-[var(--color-text-muted)]">{c.phone || '—'}</div>
                 <div className="text-sm text-[var(--color-text-muted)]">{c.email || '—'}</div>
+                <div className="text-sm text-[var(--color-text-muted)]">
+                  Fizetési határidő: {c.paymentTermDays === undefined ? 'nincs megadva' : `${c.paymentTermDays} nap`}
+                </div>
                 {c.notes && <div className="text-xs text-[var(--color-text-muted)]">{c.notes}</div>}
                 {!isReadOnlyViewer && (
                   <div className="mt-1 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">

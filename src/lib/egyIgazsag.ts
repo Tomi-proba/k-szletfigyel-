@@ -165,10 +165,10 @@ export function egyIgazsag(
       partner: s.customerName,
       leiras: `${s.productName} · ${s.quantity} ${s.unit} · ${s.date}`,
       osszeg: s.amount,
-      // A Készlet eladásának nincs fizetési határideje: nem találunk ki (mint eddig, a kifizetetlen eladás riaszt).
-      hatarido: null,
-      napHataridoig: null,
-      riaszt: true,
+      // A határidő a vevő fizetési határidejéből (F30); ha nincs megadva, nem találunk ki (a kifizetetlen eladás riaszt).
+      hatarido: s.dueDate,
+      napHataridoig: s.dueDate ? daysBetween(ma, s.dueDate) : null,
+      riaszt: s.dueDate ? daysBetween(ma, s.dueDate) < 0 : true,
       hivatkozas: null,
       helyi: { eladas: s },
     })

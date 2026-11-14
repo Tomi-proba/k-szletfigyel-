@@ -10,6 +10,7 @@ import { AuthProvider } from '../src/hooks/useAuth'
 import { Layout } from '../src/components/Layout'
 import { Utvonalak } from '../src/Utvonalak'
 import { useStore } from '../src/store/useStore'
+const store = () => useStore.getState()
 import type { UserRole } from '../src/types/auth'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -81,5 +82,26 @@ describe('szerepkörök a felületen (F28)', () => {
     await megnyit('raktaros', '/napi-zaras')
     expect(gombok()).toContain('Napi zárás elküldése')
     expect(tarolo.querySelector('[data-csak-raktaros-zarhat]')).toBeNull()
+  })
+
+  it('a raktárosnak nincs Partnerek (Vevők, Szállítók) menüje (F30)', async () => {
+    await megnyit('raktaros', '/')
+    const m = menuPontok().join(' | ')
+    expect(m).not.toContain('Vevők')
+    expect(m).not.toContain('Szállítók')
+  })
+
+  it('a raktáros kiadásnál Magánszemély vagy Partner; Partnernél kötelező listából választani (F30)', async () => {
+    store().addCustomer({ name: 'Kovács Építő Kft.', paymentTermDays: 15 })
+    await megnyit('raktaros', '/')
+    const gomb = (cim: string) => [...tarolo.querySelectorAll('button')].find((b) => b.textContent?.trim() === cim)!
+    await act(async () => gomb('Kimenő').click())
+    expect(gomb('Magánszemély')).toBeTruthy()
+    expect(tarolo.querySelector('[data-partner-valaszto]')).toBeNull()
+    await act(async () => gomb('Partner').click())
+    const lista = tarolo.querySelector<HTMLSelectElement>('[data-partner-valaszto]')!
+    expect([...lista.options].map((o) => o.textContent)).toContain('Kovács Építő Kft.')
+    // A raktáros csak a nevet látja: határidő, tartozás nincs a listában.
+    expect(lista.textContent).not.toMatch(/nap|Ft/)
   })
 })

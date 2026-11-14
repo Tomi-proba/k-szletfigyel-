@@ -190,6 +190,7 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     saleUnitPrice: row.sale_unit_price === null ? undefined : Number(row.sale_unit_price),
     customerId: (row.customer_id as string | null) ?? undefined,
     supplierId: (row.supplier_id as string | null) ?? undefined,
+    dueDate: (row.due_date as string | null) ?? undefined,
     isPaid: (row.is_paid as boolean | null) ?? undefined,
     vatRatePercent: row.vat_rate_percent === null ? undefined : Number(row.vat_rate_percent),
     saleStatus: (row.sale_status as Movement['saleStatus']) ?? undefined,
@@ -241,6 +242,7 @@ function movementToRow(companyId: string, m: Movement) {
     sale_unit_price: m.saleUnitPrice ?? null,
     customer_id: m.customerId ?? null,
     supplier_id: m.supplierId ?? null,
+    due_date: m.dueDate ?? null,
     is_paid: m.isPaid ?? null,
     vat_rate_percent: m.vatRatePercent ?? null,
     sale_status: m.saleStatus ?? null,
@@ -373,6 +375,7 @@ function supplierFromRow(row: Record<string, unknown>): Supplier {
     phone: opt(row.phone),
     email: opt(row.email),
     leadTimeDays: Number(row.lead_time_days),
+    paymentTermDays: row.payment_term_days == null ? undefined : Number(row.payment_term_days),
     deletedAt: opt(row.deleted_at),
   }
 }
@@ -384,6 +387,7 @@ function supplierToRow(companyId: string, s: Supplier) {
     phone: s.phone ?? null,
     email: s.email ?? null,
     lead_time_days: s.leadTimeDays,
+    payment_term_days: s.paymentTermDays ?? null,
     deleted_at: s.deletedAt ?? null,
   }
 }
@@ -395,6 +399,7 @@ function customerFromRow(row: Record<string, unknown>): Customer {
     phone: opt(row.phone),
     email: opt(row.email),
     notes: opt(row.notes),
+    paymentTermDays: row.payment_term_days == null ? undefined : Number(row.payment_term_days),
     deletedAt: opt(row.deleted_at),
   }
 }
@@ -406,6 +411,7 @@ function customerToRow(companyId: string, c: Customer) {
     phone: c.phone ?? null,
     email: c.email ?? null,
     notes: c.notes ?? null,
+    payment_term_days: c.paymentTermDays ?? null,
     deleted_at: c.deletedAt ?? null,
   }
 }

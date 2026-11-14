@@ -6,8 +6,9 @@ import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Movement } from '../types'
 import { Modal } from './Modal'
-import { Button, Field, Input, Textarea } from './ui'
-import { formatCurrency, formatNumber } from '../lib/format'
+import { Button, Field, Input, Select, Textarea } from './ui'
+import { formatCurrency, formatDate, formatNumber } from '../lib/format'
+import { hataridoNapbol } from '../lib/dates'
 
 export function ApproveSaleModal({ movement, onClose }: { movement: Movement; onClose: () => void }) {
   const approveSalePrep = useStore((s) => s.approveSalePrep)
@@ -15,11 +16,16 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   const products = useStore((s) => s.products)
   const customers = useStore((s) => s.customers)
   const product = products.find((p) => p.id === movement.productId)
-  const customer = movement.customerId ? customers.find((c) => c.id === movement.customerId) : undefined
+  // A vevőt a raktáros választja (F30); a fő iroda itt átírhatja. Üresen: magánszemély (sima eladás).
+  const [vevoId, setVevoId] = useState(movement.customerId ?? '')
+  const customer = vevoId ? customers.find((c) => c.id === vevoId) : undefined
+  const aktivVevok = customers.filter((c) => !c.deletedAt || c.id === movement.customerId).sort((a, b) => a.name.localeCompare(b.name, 'hu'))
 
   const [view, setView] = useState<'approve' | 'reject'>('approve')
   const [vatRate, setVatRate] = useState(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
-  const [isPaid, setIsPaid] = useState(true)
+  // Ha a vevőnek van fizetési határideje, alapból „még nem fizetett” (átutalással fizet).
+  const [isPaid, setIsPaid] = useState(customer?.paymentTermDays === undefined || customer.paymentTermDays === 0)
+  const hatarido = !isPaid ? hataridoNapbol(movement.date, customer?.paymentTermDays) : undefined
   const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
   const [rejectReason, setRejectReason] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +43,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
     }
     const result = approveSalePrep(
       movement.id,
-      { vatRatePercent: vatRateNumber, isPaid: movement.customerId ? isPaid : undefined, invoiceNumber },
+      { vatRatePercent: vatRateNumber, isPaid: vevoId ? isPaid : undefined, invoiceNumber, customerId: vevoId || null },
       { allowNegativeStock },
     )
     if (result.ok) return onClose()
@@ -64,7 +70,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
           Mennyiség: {formatNumber(movement.quantity)} {product?.unit}
           {eladas && <> · Eladási ár: {formatCurrency(product?.salePrice ?? 0)}</>}
           {okFelirat && <> · {okFelirat}</>}
-          {customer && <> · Vevő: {customer.name}</>}
+          {movement.customerId && <> · A raktár szerint: {customers.find((c) => c.id === movement.customerId)?.name ?? 'törölt vevő'}</>}
         </div>
         {movement.note && <div className="mt-1 text-xs text-[var(--color-text-muted)]">Megjegyzés: {movement.note}</div>}
         {movement.raktarMegjegyzes && <div className="mt-1 text-xs text-[var(--color-text-muted)]">A raktár megjegyzése: {movement.raktarMegjegyzes}</div>}
@@ -85,7 +91,28 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
             </>
           )}
 
-          {eladas && movement.customerId && (
+          {eladas && (
+            <Field label="Vevő">
+              <Select
+                value={vevoId}
+                onChange={(e) => {
+                  setVevoId(e.target.value)
+                  const v = customers.find((c) => c.id === e.target.value)
+                  setIsPaid(v?.paymentTermDays === undefined || v.paymentTermDays === 0)
+                }}
+                data-vevo-valaszto
+              >
+                <option value="">Magánszemély (sima eladás)</option>
+                {aktivVevok.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          {eladas && vevoId && (
             <div className="mb-4">
               <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
               <div className="grid grid-cols-2 gap-2">
@@ -112,6 +139,13 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
                   Még nem fizetett
                 </button>
               </div>
+              {!isPaid && (
+                <span className="mt-1 block text-xs text-[var(--color-text-muted)]" data-elfogadas-hatarido>
+                  {hatarido
+                    ? `Fizetési határidő: ${formatDate(hatarido)} (${customer?.paymentTermDays} nap)`
+                    : 'A vevőnek nincs fizetési határideje (a Vevők oldalon adható meg).'}
+                </span>
+              )}
             </div>
           )}
 

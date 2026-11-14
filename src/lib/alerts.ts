@@ -3,7 +3,7 @@
 // without depending on the zustand store or React.
 import { differenceInCalendarDays, formatISO, subYears } from 'date-fns'
 import type { Customer, Location, Movement, Product, SaleStatus, Settings, Supplier } from '../types'
-import { isoDaysAgo, todayISO } from './dates'
+import { hataridoNapbol, isoDaysAgo, todayISO } from './dates'
 
 /** A calendar month difference is "significant" for the seasonality note at this threshold. */
 const SEASONALITY_NOTE_THRESHOLD_PERCENT = 30
@@ -292,6 +292,8 @@ export interface UnpaidSale {
   quantity: number
   unit: string
   amount: number
+  /** A fizetési határidő (F30): a tételen tárolt, vagy a dátum + a vevő határideje; null, ha nincs. */
+  dueDate: string | null
 }
 
 export interface CustomerBalance {
@@ -321,6 +323,7 @@ export function computeUnpaidSales(movements: Movement[], products: Product[], c
         quantity: m.quantity,
         unit: product?.unit ?? '',
         amount: m.quantity * (m.saleUnitPrice ?? product?.salePrice ?? 0),
+        dueDate: m.dueDate ?? hataridoNapbol(m.date, customer?.paymentTermDays) ?? null,
       }
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1))

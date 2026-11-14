@@ -88,7 +88,7 @@ leiras("beszerzés", () => {
     const fuvar = Math.round(lotShippingHuf(lot) * 100);
     expect(e).toMatchObject({
       type: "keszlet.beszerzes.veglegesitve",
-      version: 3,
+      version: 4,
       source: { module: "keszlet", companyRef: ceg.companyId, recordType: "beszerzes", recordId: m.sor.id, sequence: 1 },
       payload: {
         purchaseId: m.sor.id,
@@ -123,7 +123,7 @@ leiras("beszerzés", () => {
     await ment(pool, ceg.felhasznalo, [{ tabla: "movements", sor: jovahagyva }, tetel(ceg, termekId, String(m.sor.id), { quantity: 8, remaining_quantity: 8, unit_price: 1000, vat_rate_percent: 27 })]);
     await osszeallitas(pool);
     const es = await esemenyek(String(m.sor.id));
-    expect(tipusok(es)).toEqual(["keszlet.beszerzes.veglegesitve@3#1"]);
+    expect(tipusok(es)).toEqual(["keszlet.beszerzes.veglegesitve@4#1"]);
     expect(es[0]!.payload).toMatchObject({ lines: [{ quantity: 8, netAmount: 800_000, vatAmount: 216_000, vatReclaimable: true }], shipping: null, totals: { gross: 1_016_000 } });
   });
 
@@ -143,9 +143,9 @@ leiras("beszerzés", () => {
     await osszeallitas(pool);
 
     expect(await esemenyek(String(fuggo.sor.id))).toEqual([]);
-    expect(tipusok(await esemenyek(String(torolt.sor.id)))).toEqual(["keszlet.beszerzes.veglegesitve@3#1", "keszlet.mozgas.sztornozva@3#2"]);
+    expect(tipusok(await esemenyek(String(torolt.sor.id)))).toEqual(["keszlet.beszerzes.veglegesitve@4#1", "keszlet.mozgas.sztornozva@3#2"]);
     const k = await esemenyek(String(korrigalt.sor.id));
-    expect(tipusok(k)).toEqual(["keszlet.beszerzes.veglegesitve@3#1", "keszlet.mozgas.sztornozva@3#2"]);
+    expect(tipusok(k)).toEqual(["keszlet.beszerzes.veglegesitve@4#1", "keszlet.mozgas.sztornozva@3#2"]);
     expect(k[1]!.payload).toMatchObject({ movementKind: "PURCHASE", movementId: korrigalt.sor.id, reason: "Korrekció - érvényteleníti a mozgást" });
     // A korrekciós tétel maga nem eladás.
     expect(await esemenyek(String(korrekcio.sor.id))).toEqual([]);
@@ -154,7 +154,7 @@ leiras("beszerzés", () => {
 
 leiras("eladás, visszavonás, leltár, visszáru", () => {
   it("eladás a Készlet áfaszámításával és ELÁBÉ-val; a visszavonás egyszer megy, a visszavételezés nem eladás", async () => {
-    const m = mozgas(ceg, termekId, { type: "out", quantity: 2, sale_unit_price: 1234.56, unit_cost: 600.4, vat_rate_percent: 27, customer_id: vevoId, invoice_number: "V-1" });
+    const m = mozgas(ceg, termekId, { type: "out", quantity: 2, sale_unit_price: 1234.56, unit_cost: 600.4, vat_rate_percent: 27, customer_id: vevoId, invoice_number: "V-1", is_paid: false, due_date: "2026-11-20" });
     await ment(pool, ceg.felhasznalo, [m]);
     await ment(pool, ceg.felhasznalo, [
       { tabla: "movements", sor: { ...m.sor, cancelled: true, cancelled_at: "2026-11-04T08:00:00Z", cancel_reason: "ügyfél lemondta", version: 1 } },
@@ -162,10 +162,10 @@ leiras("eladás, visszavonás, leltár, visszáru", () => {
     ]);
     await osszeallitas(pool);
     const es = await esemenyek(String(m.sor.id));
-    expect(tipusok(es)).toEqual(["keszlet.eladas.veglegesitve@2#1", "keszlet.mozgas.sztornozva@3#2"]);
+    expect(tipusok(es)).toEqual(["keszlet.eladas.veglegesitve@3#1", "keszlet.mozgas.sztornozva@3#2"]);
     const vat = Math.round(movementVatAmountHuf({ quantity: 2, saleUnitPrice: 1234.56, vatRatePercent: 27 }) * 100);
     expect(es[0]!.payload).toMatchObject({
-      saleId: m.sor.id, cash: false, invoiceNumber: "V-1", customer: { name: "Vevő Bt.", taxNumber: "11111111-1-11" }, costOfGoods: 120_080,
+      saleId: m.sor.id, cash: false, invoiceNumber: "V-1", customer: { name: "Vevő Bt.", taxNumber: "11111111-1-11" }, costOfGoods: 120_080, dueDate: "2026-11-20",
       lines: [{ netAmount: 246_912, vatRate: 27, vatAmount: vat }], totals: { net: 246_912, vat, gross: 246_912 + vat },
     });
     expect(es[1]!.payload).toMatchObject({ movementKind: "SALE", reason: "ügyfél lemondta" });
@@ -196,13 +196,13 @@ leiras("eladás, visszavonás, leltár, visszáru", () => {
     await ment(pool, ceg.felhasznalo, [vv, tetel(ceg, termekId, String(vv.sor.id), { quantity: 2, remaining_quantity: 2, unit_price: 400 }), vk]);
     await osszeallitas(pool);
     const e1 = await esemenyek(String(elad.sor.id));
-    expect(tipusok(e1)).toEqual(["keszlet.eladas.veglegesitve@2#1", "keszlet.visszaru.veglegesitve@1#2"]);
+    expect(tipusok(e1)).toEqual(["keszlet.eladas.veglegesitve@3#1", "keszlet.visszaru.veglegesitve@1#2"]);
     expect(e1[1]!.payload).toMatchObject({
       returnId: vv.sor.id, kind: "CUSTOMER_RETURN", original: { movementKind: "SALE", movementId: elad.sor.id }, partner: { name: "Vevő Bt." }, cash: false, reason: "sérült",
       lines: [{ quantity: 2, netAmount: 200_000, vatAmount: 54_000 }], totals: { gross: 254_000 }, costOfGoods: 80_000, vatReclaimable: null,
     });
     const e2 = await esemenyek(String(besz.sor.id));
-    expect(tipusok(e2)).toEqual(["keszlet.beszerzes.veglegesitve@3#1", "keszlet.visszaru.veglegesitve@1#2"]);
+    expect(tipusok(e2)).toEqual(["keszlet.beszerzes.veglegesitve@4#1", "keszlet.visszaru.veglegesitve@1#2"]);
     // A szállítási díj a beszerzéshez tartozott: a visszaküldés az áru árán megy.
     expect(e2[1]!.payload).toMatchObject({ kind: "SUPPLIER_RETURN", partner: { name: "Ajtó Kft." }, lines: [{ quantity: 3, netAmount: 90_000, vatAmount: 24_300 }], vatReclaimable: true, costOfGoods: null });
   });

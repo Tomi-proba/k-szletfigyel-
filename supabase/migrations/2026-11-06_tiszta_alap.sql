@@ -523,7 +523,9 @@ create table if not exists public.movements (
   rejected_at timestamptz,
   reject_reason text,
   -- A bejövő tétel szállítója (F28): a fő iroda adja meg; üresen a termék szállítója érvényes.
-  supplier_id text
+  supplier_id text,
+  -- Vevőnek eladott tétel fizetési határideje (F30): elfogadáskor a dátum + a vevő határideje.
+  due_date date
 );
 
 create index if not exists movements_company_id_idx on public.movements (company_id);
@@ -1144,6 +1146,8 @@ create table if not exists public.suppliers (
   email text,
   lead_time_days numeric not null default 0,
   tax_number text,
+  -- Fizetési határidő napokban (F30): a beszerzés határideje alapból a dátum + ennyi nap.
+  payment_term_days integer check (payment_term_days between 0 and 365),
   created_at timestamptz not null default now(),
   deleted_at timestamptz,
   version integer not null default 1
@@ -1158,6 +1162,8 @@ create table if not exists public.customers (
   email text,
   notes text,
   tax_number text,
+  -- Fizetési határidő napokban (F30): az eladás határideje a dátum + ennyi nap.
+  payment_term_days integer check (payment_term_days between 0 and 365),
   created_at timestamptz not null default now(),
   deleted_at timestamptz,
   version integer not null default 1
@@ -2532,3 +2538,46 @@ returns jsonb language sql stable security definer set search_path = integracio,
 $$;
 
 -- F28 vége
+
+-- ============================================================================
+-- F30: partnerek fizetési határideje; a raktáros kiválasztja a vevőt (2026-11-14). Ismételten futtatható.
+-- ============================================================================
+-- 1. A vevőnek és a szállítónak fizetési határideje lehet (napokban).
+-- 2. A vevőnek eladott, ki nem fizetett tétel határideje elfogadáskor: a dátum + a vevő határideje (ha nincs rajta).
+-- 3. A raktáros a kimenő bejelentéshez vevőt választhat, de a pénzügyi adatát (kifizetve, határidő) nem írhatja.
+
+alter table public.suppliers add column if not exists payment_term_days integer;
+alter table public.customers add column if not exists payment_term_days integer;
+alter table public.movements add column if not exists due_date date;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'suppliers_payment_term_days_check') then
+    alter table public.suppliers add constraint suppliers_payment_term_days_check check (payment_term_days between 0 and 365);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'customers_payment_term_days_check') then
+    alter table public.customers add constraint customers_payment_term_days_check check (payment_term_days between 0 and 365);
+  end if;
+end $$;
+
+create or replace function public.mozgas_vevo_penzugy() returns trigger language plpgsql set search_path = public as $$
+begin
+  if auth.uid() is not null and public.my_role() = 'raktaros' then
+    if (tg_op = 'INSERT' and (new.is_paid is not null or new.due_date is not null))
+       or (tg_op = 'UPDATE' and (new.is_paid is distinct from old.is_paid or new.due_date is distinct from old.due_date)) then
+      raise exception using errcode = '42501', message = 'A fizetési adatokat (kifizetve, határidő) a fő iroda kezeli.';
+    end if;
+    return new;
+  end if;
+  if new.type = 'out' and new.customer_id is not null and new.is_paid is false and new.due_date is null
+     and new.approval_status is distinct from 'pending'
+     and new.approval_status is distinct from 'rejected' and new.ok is null then
+    new.due_date := new.date + (
+      select c.payment_term_days from public.customers c where c.id::text = new.customer_id and c.company_id = new.company_id
+    );
+  end if;
+  return new;
+end; $$;
+drop trigger if exists movements_vevo_penzugy on public.movements;
+create trigger movements_vevo_penzugy before insert or update on public.movements
+  for each row execute function public.mozgas_vevo_penzugy();
+-- F30 vége

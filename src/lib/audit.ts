@@ -75,12 +75,14 @@ const FIELD_LABELS: Record<AuditEntityType, Record<string, string>> = {
     phone: 'Telefonszám',
     email: 'Email',
     notes: 'Megjegyzés',
+    paymentTermDays: 'Fizetési határidő (nap)',
   },
   supplier: {
     name: 'Név',
     phone: 'Telefonszám',
     email: 'Email',
     leadTimeDays: 'Átlagos szállítási idő',
+    paymentTermDays: 'Fizetési határidő (nap)',
   },
   location: {
     name: 'Név',

@@ -269,9 +269,17 @@ function Kartya({
             <p className="muted text-sm">A raktár még nem igazolta vissza. Csak akkor fogadja el, ha biztosan tudja, mi történt.</p>
           )}
           {veglegesit && raktarSzerint === 0 ? (
-            <button type="button" className="btn btn-danger btn-big btn-block" onClick={() => nyit('nem')}>
-              <XCircle size={22} aria-hidden="true" /> Elutasítás megerősítése
-            </button>
+            <>
+              <button type="button" className="btn btn-danger btn-big btn-block" onClick={() => nyit('nem')}>
+                <XCircle size={22} aria-hidden="true" /> Elutasítás megerősítése
+              </button>
+              {beszerzes && (
+                // F33: ha a raktáros tévedett, a fő iroda felülbírálhatja (mennyiséggel és indoklással).
+                <button type="button" className="btn" data-megis-megjott onClick={() => setAblak({ fajta: 'beszerzes', m })}>
+                  <CheckCircle2 size={18} aria-hidden="true" /> Mégis megjött – elfogadom
+                </button>
+              )}
+            </>
           ) : (
             <button type="button" className="btn btn-success btn-big btn-block" onClick={() => (veglegesit ? elfogad() : visszaigazol(vart))}>
               <CheckCircle2 size={22} aria-hidden="true" />{' '}

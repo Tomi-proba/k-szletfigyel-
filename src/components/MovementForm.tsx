@@ -50,7 +50,13 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   // rögzíti - a beszerzési ár, ÁFA, fizetési határidő és vevő-hozzárendelés
   // irodai adatnak számít (lásd DOCUMENTATION.md 14. fejezet), ezért ezek a
   // mezők el sem érhetők raktáros szerepkörben, nem csak vizuálisan rejtve.
-  const { isWarehouseUser } = useAuth()
+  const { isWarehouseUser, effectiveRole } = useAuth()
+  const createPendingPurchaseOrder = useStore((s) => s.createPendingPurchaseOrder)
+  // F33: a fő iroda és az iroda bejövő tételénél „a raktáros jóváhagyása szükséges” (alapból bepipálva): ilyenkor
+  // nem kerül azonnal készletre, a raktáros visszaigazolja, a fő iroda véglegesíti (mint a Rendelés leadásánál).
+  const raktarJovahagyasValaszthato = effectiveRole === 'fo_iroda' || effectiveRole === 'iroda'
+  const [raktarJovahagyas, setRaktarJovahagyas] = useState(true)
+  const [utolsoRaktarra, setUtolsoRaktarra] = useState(false)
   const activeCustomers = useMemo(() => customers.filter((c) => !c.deletedAt), [customers])
   const suppliers = useStore((s) => s.suppliers)
 
@@ -85,6 +91,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const leltar = ok !== 'normal'
   // A raktáros kimenő bejelentése partnernek (F30): a választás kötelező.
   const kiadasPartnernek = isWarehouseUser && type === 'out' && !leltar && trackCustomer
+  const raktarraKuld = raktarJovahagyasValaszthato && raktarJovahagyas && type === 'in' && !leltar
   const [error, setError] = useState<string | null>(null)
   const [successTick, setSuccessTick] = useState(0)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -229,6 +236,32 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       }
     }
 
+    if (raktarraKuld) {
+      // A raktáros visszaigazolására vár: a beírt adatokkal, mint egy leadott rendelés (F33).
+      const r = createPendingPurchaseOrder({
+        productId,
+        quantity: qtyNumber,
+        date,
+        note,
+        unitPrice: unitPriceNumber,
+        shippingCost: shippingCostNumber,
+        currency: unitPrice.trim() !== '' ? currency : undefined,
+        exchangeRate: unitPrice.trim() !== '' && currency !== 'HUF' ? exchangeRateNumber : undefined,
+        vatRatePercent: vatRateNumber,
+        invoiceNumber,
+        shippingOnInvoice: (shippingCostNumber ?? 0) > 0 ? (szamlanVan === 'nemtudom' ? undefined : szamlanVan === 'igen') : undefined,
+        invoiceDate: invoiceDate || undefined,
+        fulfillmentDate: fulfillmentDate || undefined,
+        dueDate: trackDueDate ? dueDate || undefined : undefined,
+      })
+      if (r.ok) {
+        setUtolsoRaktarra(true)
+        return urit()
+      }
+      return setError('A tétel nem küldhető a raktárnak.')
+    }
+    setUtolsoRaktarra(false)
+
     const result = recordMovement(
       {
         productId,
@@ -360,6 +393,21 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </button>
         </div>
       </FieldGroup>
+
+      {type === 'in' && !leltar && raktarJovahagyasValaszthato && (
+        <div className="mb-3" data-raktar-jovahagyas>
+          <Checkbox
+            label="A raktáros jóváhagyása szükséges (visszaigazolja, hogy megjött)"
+            checked={raktarJovahagyas}
+            onChange={(e) => setRaktarJovahagyas(e.target.checked)}
+          />
+          <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+            {raktarJovahagyas
+              ? 'Nem kerül azonnal készletre: a raktáros visszaigazolja, utána a fő iroda véglegesíti.'
+              : 'Azonnal készletre kerül, raktári visszaigazolás nélkül.'}
+          </span>
+        </div>
+      )}
 
       {type === 'in' && !isWarehouseUser && (
         <FieldGroup label="Beszerzési ár (opcionális)">
@@ -737,12 +785,16 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
       {successTick > 0 && !error && (
         <p className="mb-3 text-sm text-[var(--color-success)]">
-          {isWarehouseUser ? 'Bejelentés elküldve – a fő iroda elfogadása után számít bele a készletbe.' : 'Mozgás rögzítve.'}
+          {isWarehouseUser
+            ? 'Bejelentés elküldve – a fő iroda elfogadása után számít bele a készletbe.'
+            : utolsoRaktarra
+              ? 'Elküldve a raktárnak visszaigazolásra – a fő iroda véglegesítése után kerül készletre.'
+              : 'Mozgás rögzítve.'}
         </p>
       )}
 
       <Button type="submit" className="w-full py-3 text-base">
-        {isWarehouseUser ? 'Bejelentés küldése' : 'Mentés'}
+        {isWarehouseUser ? 'Bejelentés küldése' : raktarraKuld ? 'Küldés a raktárnak' : 'Mentés'}
       </Button>
 
       {szabadHiany !== null && (

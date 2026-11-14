@@ -235,6 +235,8 @@ export interface CreatePendingPurchaseInput {
   fulfillmentDate?: string
   /** A szállító (F28); üresen a termék szállítója. */
   supplierId?: string
+  /** A fizetési határidő, ha megadták (F33); különben elfogadáskor a szállító határidejéből. */
+  dueDate?: string
 }
 
 export type ApprovePurchaseOrderResult =
@@ -1304,7 +1306,7 @@ export const useStore = create<AppState>()(
         }),
 
       createPendingPurchaseOrder: (input) => {
-        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice, invoiceDate, fulfillmentDate, supplierId } = input
+        const { productId, quantity, date, note, unitPrice, shippingCost, currency, exchangeRate, vatRatePercent, invoiceNumber, shippingOnInvoice, invoiceDate, fulfillmentDate, supplierId, dueDate } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         if (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice < 0)) return { ok: false, reason: 'invalid-quantity' }
         if (shippingCost !== undefined && (!Number.isFinite(shippingCost) || shippingCost < 0)) return { ok: false, reason: 'invalid-quantity' }
@@ -1342,6 +1344,7 @@ export const useStore = create<AppState>()(
               invoiceDate: invoiceDate || undefined,
               fulfillmentDate: fulfillmentDate || undefined,
               supplierId: supplierId || product.supplierId || undefined,
+              dueDate: dueDate || undefined,
             },
           ],
           auditLog: [...state.auditLog, auditEntry('movement', movementId, label, 'create', `Rendelés leadva - ${label}`)],
@@ -1400,7 +1403,7 @@ export const useStore = create<AppState>()(
           // A szállító fizetési határidejéből (F30): a dátum + a szállító határideje; nincs, ha nincs megadva.
           ...(() => {
             const sz = supplierId ? get().suppliers.find((x) => x.id === supplierId) : undefined
-            const due = beszerzes ? hataridoNapbol(movement.date, sz?.paymentTermDays) : undefined
+            const due = beszerzes ? (movement.dueDate ?? hataridoNapbol(movement.date, sz?.paymentTermDays)) : undefined
             return due ? { dueDate: due, isPaid: false } : {}
           })(),
         }
@@ -1448,7 +1451,13 @@ export const useStore = create<AppState>()(
           dailyClosings: flagClosingModified(state.dailyClosings, movement.locationId, movement.date),
           auditLog: [
             ...state.auditLog,
-            auditEntry('movement', id, label, 'update', `Beérkezés jóváhagyva - ${label}${finalNote ? ` (${finalNote})` : ''}`),
+            auditEntry(
+              'movement',
+              id,
+              label,
+              'update',
+              `${movement.raktarVisszaigazolva && movement.raktarMennyiseg === 0 ? 'Felülbírálva (a raktár szerint nem jött meg): b' : 'B'}eérkezés jóváhagyva - ${label}${finalNote ? ` (${finalNote})` : ''}`,
+            ),
             ...(affectedClosing
               ? [
                   auditEntry(

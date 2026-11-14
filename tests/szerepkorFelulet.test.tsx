@@ -104,4 +104,22 @@ describe('szerepkörök a felületen (F28)', () => {
     // A raktáros csak a nevet látja: határidő, tartozás nincs a listában.
     expect(lista.textContent).not.toMatch(/nap|Ft/)
   })
+
+  it('F33: a fő iroda bejövőnél látja „A raktáros jóváhagyása szükséges” pipát, alapból bepipálva; a raktáros nem', async () => {
+    await megnyit('fo_iroda', '/')
+    const gomb = (cim: string) => [...tarolo.querySelectorAll('button')].find((b) => b.textContent?.trim() === cim)!
+    await act(async () => gomb('Bejövő').click())
+    const pipa = tarolo.querySelector<HTMLInputElement>('[data-raktar-jovahagyas] input[type="checkbox"]')!
+    expect(pipa.checked).toBe(true)
+    expect(gombok()).toContain('Küldés a raktárnak')
+    await act(async () => pipa.click())
+    expect(gombok()).toContain('Mentés')
+  })
+
+  it('F33: a raktáros nem látja a „raktáros jóváhagyása” pipát', async () => {
+    await megnyit('raktaros', '/')
+    const gomb = (cim: string) => [...tarolo.querySelectorAll('button')].find((b) => b.textContent?.trim() === cim)!
+    await act(async () => gomb('Bejövő').click())
+    expect(tarolo.querySelector('[data-raktar-jovahagyas]')).toBeNull()
+  })
 })

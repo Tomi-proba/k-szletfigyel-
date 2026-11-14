@@ -174,6 +174,25 @@ describe('raktári visszaigazolás (irodai rendelés, Könyvelőből jött téte
   })
 })
 
+describe('F33: a fő iroda bejövője a raktár visszaigazolására vár; tévedésnél a fő iroda felülbírálhatja', () => {
+  it('a raktár „nem jött meg”-et igazol vissza, a fő iroda mégis elfogadja a mennyiséggel és indoklással', () => {
+    const { productId, supplierId } = setup()
+    szerep('fo_iroda')
+    expect(store().createPendingPurchaseOrder({ productId, quantity: 4, date: '2026-11-14', unitPrice: 500, supplierId, dueDate: '2026-12-01' }).ok).toBe(true)
+    const id = store().movements.at(-1)!.id
+    expect(termek().currentStock).toBe(0)
+    szerep('raktaros')
+    expect(store().confirmByWarehouse(id, { quantity: 0, note: 'Nem jött meg' })).toEqual({ ok: true })
+    szerep('fo_iroda')
+    expect(store().approvePurchaseOrder(id, 4, 'A sofőr a hátsó raktárba tette')).toEqual({ ok: true })
+    expect(termek().currentStock).toBe(4)
+    expect(mozgas(id)).toMatchObject({ approvalStatus: 'approved', quantity: 4, discrepancyNote: 'A sofőr a hátsó raktárba tette' })
+    // A megadott fizetési határidő a beszerzési tételre kerül.
+    expect(store().lots.find((l) => l.movementId === id)).toMatchObject({ dueDate: '2026-12-01', isPaid: false })
+    expect(store().auditLog.at(-1)!.description).toMatch(/Felülbírálva/)
+  })
+})
+
 describe('kettős rögzítés gyanúja', () => {
   it('ugyanaz a termék és irány, legfeljebb egy nap eltéréssel, még el nem fogadva', () => {
     const { productId } = setup(10)

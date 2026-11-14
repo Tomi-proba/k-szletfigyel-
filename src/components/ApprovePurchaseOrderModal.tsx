@@ -24,7 +24,7 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
 
   const vart = movement.orderedQuantity ?? movement.quantity
   const [actualQuantity, setActualQuantity] = useState(String(movement.raktarMennyiseg || movement.quantity))
-  const [note, setNote] = useState(movement.raktarMegjegyzes ?? '')
+  const [note, setNote] = useState(movement.raktarVisszaigazolva && movement.raktarMennyiseg === 0 ? '' : (movement.raktarMegjegyzes ?? ''))
   // Raktári bejelentésnél nincs várható ár: a fő iroda itt adhatja meg (alapból a jelenlegi beszerzési ár).
   const kellAr = movement.unitPrice === undefined && !movement.ok && !isWarehouseUser
   const [unitPrice, setUnitPrice] = useState(product ? String(product.purchasePrice) : '')
@@ -42,6 +42,8 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
   const kellSzallito = !isWarehouseUser && !movement.ok && !movement.returnOfMovementId && !movement.integracioEsemenyId
   const [szallito, setSzallito] = useState(movement.supplierId ?? product?.supplierId ?? '')
 
+  // F33: a raktár szerint nem jött meg, a fő iroda mégis elfogadja (felülbírálás): indoklás kötelező.
+  const felulbiralas = Boolean(movement.raktarVisszaigazolva) && movement.raktarMennyiseg === 0
   const actualQtyNumber = Number(actualQuantity.replace(',', '.'))
   const mismatch = Number.isFinite(actualQtyNumber) && actualQtyNumber !== vart
 
@@ -49,6 +51,9 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
     setError(null)
     if (!Number.isFinite(actualQtyNumber) || actualQtyNumber <= 0) {
       return setError('A tényleges mennyiségnek pozitív számnak kell lennie.')
+    }
+    if (felulbiralas && !note.trim()) {
+      return setError('A raktár szerint nem jött meg: írja be röviden, miért fogadja el mégis.')
     }
     const unitPriceNumber = kellAr && unitPrice.trim() !== '' ? Number(unitPrice.replace(',', '.')) : undefined
     if (unitPriceNumber !== undefined && (!Number.isFinite(unitPriceNumber) || unitPriceNumber < 0)) {
@@ -126,7 +131,7 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
         </p>
       )}
 
-      <Field label="Megjegyzés az eltérésről (opcionális)">
+      <Field label={felulbiralas ? 'Miért fogadja el mégis? (a raktár szerint nem jött meg)' : 'Megjegyzés az eltérésről (opcionális)'}>
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="pl. sérült volt 2 db, ezért kevesebb…" />
       </Field>
 

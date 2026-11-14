@@ -120,7 +120,8 @@ leiras('egy művelet = egy mentés', () => {
     }
     const beallitas: Valtozas = {
       tabla: 'company_settings',
-      sor: { id: ceg.companyId, company_id: ceg.companyId, settings: { costingMethod: 'fifo' }, ledger_categories: ['ÁFA', 'Bérleti díj'], version: null },
+      // Az új cég beállítássora már létezik (F34b: FIFO), így ez frissítés az 1. változatról.
+      sor: { id: ceg.companyId, company_id: ceg.companyId, settings: { costingMethod: 'fifo' }, ledger_categories: ['ÁFA', 'Bérleti díj'], version: 1 },
     }
     await ment(pool, ceg.id, randomUUID(), [zaras, beallitas])
     const z = (await pool.query('select movement_ids, product_breakdown from public.daily_closings where id = $1', [zaras.sor.id])).rows[0]

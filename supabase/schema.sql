@@ -2587,3 +2587,19 @@ drop trigger if exists movements_vevo_penzugy on public.movements;
 create trigger movements_vevo_penzugy before insert or update on public.movements
   for each row execute function public.mozgas_vevo_penzugy();
 -- F30 vége
+
+-- F34b: FIFO az új cégek alapértelmezett költségszámítása (a felhasználó kérése). Ismételten futtatható.
+-- Csak az új cégeknél: a létrejöttükkor beállítássort kapnak FIFO-val. A meglévő cégek beállítása nem változik (akinél
+-- nincs mentett beállítás, annál a program továbbra is a súlyozott átlagot használja).
+create or replace function public.uj_ceg_fifo() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.company_settings (id, company_id, settings)
+  values (new.id, new.id, jsonb_build_object('costingMethod', 'fifo'))
+  on conflict (id) do nothing;
+  return new;
+end; $$;
+revoke all on function public.uj_ceg_fifo() from public, anon, authenticated;
+drop trigger if exists companies_uj_ceg_fifo on public.companies;
+create trigger companies_uj_ceg_fifo after insert on public.companies
+  for each row execute function public.uj_ceg_fifo();
+-- F34b vége

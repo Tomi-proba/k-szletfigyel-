@@ -398,7 +398,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  costingMethod: 'average',
+  // Új telepítésnél és új cégnél FIFO (F34b); a meglévő, mentett beállítás nem változik.
+  costingMethod: 'fifo',
   avgConsumptionWindowDays: 30,
   safetyStockDays: 7,
   reorderTargetDays: 30,

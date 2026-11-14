@@ -25,7 +25,8 @@ describe('a böngésző pillanatképének beolvasása', () => {
     const h = helyiPillanatkep(JSON.stringify({ state: { suppliers: [{ id: 's1', name: 'Ablak Kft.', leadTimeDays: 7 }] }, version: 1 }))
     expect(h?.suppliers).toHaveLength(1)
     expect(h?.products).toEqual([])
-    expect(h?.settings.costingMethod).toBe(DEFAULT_SETTINGS.costingMethod)
+    // Régi helyi adatnál a hiányzó költségszámítás a korábbi alap, a súlyozott átlag marad (F34b).
+    expect(h?.settings.costingMethod).toBe('average')
   })
 
   it('hiányzó vagy sérült adatnál nincs mit átköltöztetni', () => {

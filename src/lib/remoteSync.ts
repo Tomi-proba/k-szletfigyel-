@@ -554,7 +554,9 @@ export async function fetchBusinessData(companyId: string, opts: { naplot: boole
     customers: jegyez('customers', customers.data).map(customerFromRow),
     ledgerEntries: jegyez('ledger_entries', ledger.data).map(ledgerFromRow),
     recurringLedgerEntries: jegyez('recurring_ledger_entries', recurring.data).map(recurringFromRow),
-    settings: beallitasSor ? { ...DEFAULT_SETTINGS, ...(beallitasSor.settings as Partial<Settings>) } : DEFAULT_SETTINGS,
+    // Az új cégek FIFO-beállítással jönnek létre (F34b, adatbázis); ahol még nincs mentett beállítás (régi cég), ott a
+    // korábbi alapértelmezés, a súlyozott átlag marad, hogy az önköltség-számítás ne váltson át magától.
+    settings: { ...DEFAULT_SETTINGS, costingMethod: 'average', ...((beallitasSor?.settings as Partial<Settings> | undefined) ?? {}) },
     ledgerCategories: beallitasSor ? (beallitasSor.ledger_categories as string[]) : [...DEFAULT_LEDGER_CATEGORIES],
   }
 }

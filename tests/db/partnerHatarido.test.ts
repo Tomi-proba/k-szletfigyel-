@@ -77,6 +77,11 @@ leiras('partnerek fizetési határideje (adatbázis)', () => {
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [kiadas({ approval_status: 'pending', customer_id: vevoId, due_date: '2026-12-01' })]))).toBe('42501')
   })
 
+  it('F34b: az új cég FIFO költségszámítással jön létre', async () => {
+    const r = await pool.query("select settings->>'costingMethod' as m from public.company_settings where id = $1", [ceg.companyId])
+    expect(r.rows[0]?.m).toBe('fifo')
+  })
+
   it('a raktáros vevőt nem vehet fel', async () => {
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [{ tabla: 'customers', sor: { id: randomUUID(), company_id: ceg.companyId, name: 'Új vevő', version: null } }]))).toBe('42501')
   })

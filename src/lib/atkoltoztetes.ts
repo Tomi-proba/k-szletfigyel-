@@ -79,7 +79,8 @@ export function helyiPillanatkep(nyers: string | null): HelyiAdatok | null {
       auditLog: s.auditLog ?? [],
       ledgerEntries: s.ledgerEntries ?? [],
       recurringLedgerEntries: s.recurringLedgerEntries ?? [],
-      settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) } as Settings,
+      // Régi helyi adatnál, ha nem volt mentett költségszámítás, a korábbi alap (súlyozott átlag) marad (F34b).
+      settings: { ...DEFAULT_SETTINGS, costingMethod: 'average', ...(s.settings ?? {}) } as Settings,
       ledgerCategories: s.ledgerCategories ?? [...DEFAULT_LEDGER_CATEGORIES],
     }
   } catch {

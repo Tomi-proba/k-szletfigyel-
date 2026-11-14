@@ -14,6 +14,7 @@ import { Link } from '../keret/router'
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
+import { useVanRaktaros } from '../hooks/useVanRaktaros'
 import { useSzallitoNeve } from '../components/SzallitoValaszto'
 import { useIntegracioFrissites } from '../lib/integracio'
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '../lib/format'
@@ -98,6 +99,7 @@ function Kartya({
   setAblak: (a: Ablak) => void
   onKesz: (uzenet: string) => void
 }) {
+  const vanRaktaros = useVanRaktaros()
   const confirm = useStore((s) => s.confirmByWarehouse)
   const approveIntegration = useStore((s) => s.approveIntegrationMovement)
   const approvePurchase = useStore((s) => s.approvePurchaseOrder)
@@ -231,7 +233,7 @@ function Kartya({
         </p>
       )}
       {/* A raktár válasza egyértelmű színnel (a felhasználó kérése): zöld megjött, sárga eltér, piros nem, kék még vár. */}
-      {(allapot === 'raktarra_var' || allapot === 'fo_irodara_var') && (
+      {(allapot === 'fo_irodara_var' || (allapot === 'raktarra_var' && vanRaktaros !== false)) && (
         <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} />
       )}
       {allapot === 'elutasitva' && m.rejectReason && <p className="alert alert-danger text-sm">A fő iroda elutasította: {m.rejectReason}</p>}
@@ -417,6 +419,7 @@ export function Jovahagyando() {
   const dataMode = useStore((s) => s.dataMode)
   const auditLog = useStore((s) => s.auditLog)
   const { isWarehouseUser, isReadOnlyViewer, effectiveRole } = useAuth()
+  const vanRaktaros = useVanRaktaros()
   const { remote, utolso, hiba, fut, frissit } = useIntegracioFrissites()
   const [panel, setPanel] = useState<Panel>(null)
   const [ablak, setAblak] = useState<Ablak>(null)
@@ -438,6 +441,7 @@ export function Jovahagyando() {
     foIroda: effectiveRole === 'fo_iroda',
     csakOlvas: isReadOnlyViewer,
     helyi: dataMode !== 'remote' || !effectiveRole,
+    vanRaktaros,
   }
   const lista = useMemo(
     () =>
@@ -456,9 +460,17 @@ export function Jovahagyando() {
           { cim: 'A fő iroda elfogadására vár', elemek: lista.filter((m) => allapota(m) === 'fo_irodara_var') },
         ]
       : [
-          { cim: 'Elfogadásra vár – a raktár visszaigazolta', elemek: lista.filter((m) => allapota(m) === 'fo_irodara_var') },
+          // Raktáros nélkül (F34) a raktárra váró tételt is a fő iroda véglegesíti: ezek is itt vannak.
+          {
+            cim: vanRaktaros === false ? 'Elfogadásra vár' : 'Elfogadásra vár – a raktár visszaigazolta',
+            elemek: lista.filter((m) => allapota(m) === 'fo_irodara_var' || (allapota(m) === 'raktarra_var' && teendoMap.get(m.id) === 'veglegesit')),
+          },
           // Csak megtekintésre: a fő iroda a raktáros válasza után dönt (összecsukható csoport).
-          { cim: 'A raktárra vár – csak megtekintés', elemek: lista.filter((m) => allapota(m) === 'raktarra_var'), csukhato: true },
+          {
+            cim: 'A raktárra vár – csak megtekintés',
+            elemek: lista.filter((m) => allapota(m) === 'raktarra_var' && teendoMap.get(m.id) !== 'veglegesit'),
+            csukhato: true,
+          },
           { cim: 'Elutasítva, a raktár javítására vár', elemek: lista.filter((m) => allapota(m) === 'elutasitva') },
         ]
   ).filter((g) => g.elemek.length)

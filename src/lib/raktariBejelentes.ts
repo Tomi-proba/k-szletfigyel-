@@ -40,6 +40,13 @@ export interface Szerep {
   csakOlvas: boolean
   /** Helyi (nem szerveres) mód: egyetlen felhasználó, mindent ő végez. */
   helyi: boolean
+  /** Van-e raktáros a cégnél (F34): ha biztosan nincs, a fő iroda a raktárra váró tételt is maga véglegesíti. */
+  vanRaktaros?: boolean | null
+}
+
+/** A „raktáros jóváhagyása szükséges” pipa csak a fő irodának és az irodának, és csak ha van raktáros a cégnél. */
+export function raktarJovahagyasLathato(szerep: string | null | undefined, vanRaktaros: boolean | null): boolean {
+  return (szerep === 'fo_iroda' || szerep === 'iroda') && vanRaktaros === true
 }
 
 /** Mi a teendője a felhasználónak ezzel a tétellel: a raktáros visszaigazolja, mi történt; a fő iroda
@@ -50,7 +57,7 @@ export type Teendo = 'visszaigazol' | 'veglegesit' | null
 export function teendoje(m: Movement, szerep: Szerep): Teendo {
   if (szerep.csakOlvas || !varakozo(m)) return null
   if (szerep.helyi) return 'veglegesit'
-  if (szerep.foIroda) return m.raktarVisszaigazolva ? 'veglegesit' : null
+  if (szerep.foIroda) return m.raktarVisszaigazolva || szerep.vanRaktaros === false ? 'veglegesit' : null
   if (szerep.raktaros && !m.raktarVisszaigazolva) return 'visszaigazol'
   return null
 }

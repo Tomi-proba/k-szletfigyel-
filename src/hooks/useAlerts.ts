@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useAuth } from './useAuth'
+import { useVanRaktaros } from './useVanRaktaros'
 import { useStore } from '../store/useStore'
 import {
   computeCustomerBalances,
@@ -86,6 +87,7 @@ export function useAlerts(): AlertsData {
   // eszköz saját, helyi (jellemzően demó-)állapota - kiszámolásuk raktáros
   // nézetben félrevezető, nem valós adatot mutatna.
   const { isWarehouseUser, isReadOnlyViewer, effectiveRole } = useAuth()
+  const vanRaktaros = useVanRaktaros()
   const dataMode = useStore((s) => s.dataMode)
   const konyveloNyitott = useKonyveloNyitott(!isWarehouseUser)
 
@@ -118,6 +120,7 @@ export function useAlerts(): AlertsData {
       foIroda: effectiveRole === 'fo_iroda',
       csakOlvas: isReadOnlyViewer,
       helyi: dataMode !== 'remote' || !effectiveRole,
+      vanRaktaros,
     }
     const varakozoTetelek = movements.filter(varakozo)
     const jovahagyasraVar = movements.filter(
@@ -171,5 +174,6 @@ export function useAlerts(): AlertsData {
     effectiveRole,
     dataMode,
     konyveloNyitott,
+    vanRaktaros,
   ])
 }

@@ -8,7 +8,8 @@ import { bekuldottAfaIdoszakban, lezartIdoszakban, useLezartIdoszakok } from '..
 import { hataridoNapbol, todayISO } from '../lib/dates'
 import { lotUnitCost } from '../lib/costing'
 import { formatCurrency, formatDate, formatNumber } from '../lib/format'
-import { kettosRogzites, szabadKeszlet } from '../lib/raktariBejelentes'
+import { kettosRogzites, raktarJovahagyasLathato, szabadKeszlet } from '../lib/raktariBejelentes'
+import { useVanRaktaros } from '../hooks/useVanRaktaros'
 import { ProductPicker } from './ProductPicker'
 import { SzallitoValaszto } from './SzallitoValaszto'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -55,7 +56,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const createPendingPurchaseOrder = useStore((s) => s.createPendingPurchaseOrder)
   // F33: a fő iroda és az iroda bejövő tételénél „a raktáros jóváhagyása szükséges” (alapból bepipálva): ilyenkor
   // nem kerül azonnal készletre, a raktáros visszaigazolja, a fő iroda véglegesíti (mint a Rendelés leadásánál).
-  const raktarJovahagyasValaszthato = effectiveRole === 'fo_iroda' || effectiveRole === 'iroda'
+  // A pipa csak akkor, ha van raktáros a cégnél (F34): raktáros nélkül nincs, aki visszaigazolja.
+  const vanRaktaros = useVanRaktaros()
+  const raktarJovahagyasValaszthato = raktarJovahagyasLathato(effectiveRole, vanRaktaros)
   const [raktarJovahagyas, setRaktarJovahagyas] = useState(true)
   const [utolsoRaktarra, setUtolsoRaktarra] = useState(false)
   // A bejövő tétel szállítója (F28): itt adja meg a fő iroda; alapból a termék szállítója. (A „Rendelés leadása”

@@ -12,7 +12,7 @@ vi.mock('../src/lib/remoteSync', async (eredeti) => ({
 
 import { integracioFrissites, returnableQuantity, useStore } from '../src/store/useStore'
 import { fajtaja, SZOVEG } from '../src/lib/jovahagyando'
-import { teendoje } from '../src/lib/raktariBejelentes'
+import { raktarJovahagyasLathato, teendoje } from '../src/lib/raktariBejelentes'
 import { bekuldottAfaIdoszakban, lezartIdoszakban } from '../src/lib/integracio'
 import { DEFAULT_SETTINGS, type Movement } from '../src/types'
 
@@ -154,6 +154,16 @@ describe('jóváhagyási lista: szavak és szerepkörök', () => {
     expect(teendoje(m({ integracioEsemenyId: 'e' }), foIroda)).toBeNull()
     expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't' }), foIroda)).toBe('veglegesit')
     expect(teendoje(m({ integracioEsemenyId: 'e', raktarVisszaigazolva: 't', raktarMennyiseg: 0 }), foIroda)).toBe('veglegesit')
+    // Ha a cégnek nincs raktárosa, nincs ki visszaigazoljon: a fő iroda maga véglegesít; ha nem tudni, vár.
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...foIroda, vanRaktaros: false })).toBe('veglegesit')
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...foIroda, vanRaktaros: null })).toBeNull()
+    expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...iroda, vanRaktaros: false })).toBeNull()
+    // A „raktáros jóváhagyása szükséges” pipa csak raktárossal rendelkező cégnél, és csak a fő irodának és az irodának.
+    expect(raktarJovahagyasLathato('fo_iroda', true)).toBe(true)
+    expect(raktarJovahagyasLathato('iroda', true)).toBe(true)
+    expect(raktarJovahagyasLathato('fo_iroda', false)).toBe(false)
+    expect(raktarJovahagyasLathato('fo_iroda', null)).toBe(false)
+    expect(raktarJovahagyasLathato('raktaros', true)).toBe(false)
     expect(teendoje(m({ integracioEsemenyId: 'e' }), iroda)).toBeNull()
     expect(teendoje(m({ integracioEsemenyId: 'e' }), { ...foIroda, csakOlvas: true })).toBeNull()
     expect(teendoje(m({ type: 'out', returnOfMovementId: 'o' }), iroda)).toBeNull()

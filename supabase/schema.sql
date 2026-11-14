@@ -2562,8 +2562,14 @@ end $$;
 create or replace function public.mozgas_vevo_penzugy() returns trigger language plpgsql set search_path = public as $$
 begin
   if auth.uid() is not null and public.my_role() = 'raktaros' then
-    if (tg_op = 'INSERT' and (new.is_paid is not null or new.due_date is not null))
-       or (tg_op = 'UPDATE' and (new.is_paid is distinct from old.is_paid or new.due_date is distinct from old.due_date)) then
+    -- A határidőt a fő iroda kezeli. A „fizetett-e” jelzést a raktáros a saját, még el nem fogadott, partnernek szóló
+    -- eladás-bejelentésénél megadhatja (F34): a fő iroda elfogadáskor ezt látja és felülírhatja.
+    if (tg_op = 'INSERT' and new.due_date is not null)
+       or (tg_op = 'UPDATE' and new.due_date is distinct from old.due_date)
+       or (new.is_paid is not null
+           and (tg_op = 'INSERT' or new.is_paid is distinct from old.is_paid)
+           and not (new.type = 'out' and new.customer_id is not null and new.ok is null and new.approval_status = 'pending'
+                    and (tg_op = 'INSERT' or old.approval_status in ('pending', 'rejected')))) then
       raise exception using errcode = '42501', message = 'A fizetési adatokat (kifizetve, határidő) a fő iroda kezeli.';
     end if;
     return new;

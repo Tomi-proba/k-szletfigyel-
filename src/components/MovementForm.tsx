@@ -79,6 +79,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [trackCustomer, setTrackCustomer] = useState(false)
   const [customerId, setCustomerId] = useState('')
   const [isPaid, setIsPaid] = useState(true)
+  // A raktáros partnernek szóló eladásánál kötelező jelölni, fizetett-e (F34); nincs alapérték.
+  const [raktarFizetett, setRaktarFizetett] = useState<boolean | null>(null)
   const [trackDueDate, setTrackDueDate] = useState(false)
   const [dueDate, setDueDate] = useState('')
   const [invoicePaid, setInvoicePaid] = useState(false)
@@ -144,6 +146,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     setTrackCustomer(false)
     setCustomerId('')
     setIsPaid(true)
+    setRaktarFizetett(null)
   }
 
   function resetDueDateSection() {
@@ -205,6 +208,10 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
       setError('Válassza ki a listából, melyik partner vitte el az árut.')
       return
     }
+    if (kiadasPartnernek && raktarFizetett === null) {
+      setError('Jelölje, hogy a partner fizetett-e.')
+      return
+    }
     if (type === 'out' && trackCustomer && !customerId) {
       setError('Válasszon vevőt, vagy kapcsolja ki a vevőhöz rögzítést.')
       return
@@ -221,7 +228,16 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
     if (isWarehouseUser) {
       // A raktáros bejelentést tesz: a készlet csak a fő iroda elfogadásakor változik.
       const r = createWarehouseReport(
-        { productId, type, quantity: qtyNumber, date, note, ok: leltar ? ok : undefined, customerId: kiadasPartnernek ? customerId : undefined },
+        {
+          productId,
+          type,
+          quantity: qtyNumber,
+          date,
+          note,
+          ok: leltar ? ok : undefined,
+          customerId: kiadasPartnernek ? customerId : undefined,
+          isPaid: kiadasPartnernek ? (raktarFizetett ?? undefined) : undefined,
+        },
         { allowNegativeStock },
       )
       if (r.ok) return urit()
@@ -676,6 +692,36 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
                 </Select>
               )}
             </label>
+          )}
+          {trackCustomer && (
+            // F34: a raktáros jelzi, fizetett-e a partner; a fő iroda elfogadáskor ezt látja (és felülírhatja).
+            <div className="mt-3">
+              <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetett?</span>
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Fizetett?" aria-required="true" data-raktar-fizetett>
+                {(
+                  [
+                    [true, 'Igen, fizetett'],
+                    [false, 'Nem fizetett'],
+                  ] as const
+                ).map(([fizetett, cim]) => (
+                  <button
+                    key={cim}
+                    type="button"
+                    aria-pressed={raktarFizetett === fizetett}
+                    onClick={() => setRaktarFizetett(fizetett)}
+                    className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
+                      raktarFizetett === fizetett
+                        ? fizetett
+                          ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                          : 'border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                        : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    {cim}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </FieldGroup>
       )}

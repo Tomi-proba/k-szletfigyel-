@@ -63,11 +63,17 @@ leiras('partnerek fizetési határideje (adatbázis)', () => {
     expect(await hibakod(ment(pool, ceg.id, randomUUID(), [{ tabla: 'customers', sor: { id: randomUUID(), company_id: ceg.companyId, name: 'Hibás', payment_term_days: 400, version: null } }]))).toBe('23514')
   })
 
-  it('a raktáros a kimenő bejelentéshez vevőt adhat, a fizetési adatot nem', async () => {
+  it('a raktáros a kimenő bejelentéshez vevőt és „fizetett-e” jelzést adhat, határidőt nem', async () => {
     const jo = kiadas({ approval_status: 'pending', customer_id: vevoId })
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [jo]))).toBeNull()
     expect((await sor(jo.sor.id)).customer_id).toBe(vevoId)
-    expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [kiadas({ approval_status: 'pending', customer_id: vevoId, is_paid: false })]))).toBe('42501')
+    // F34: a partnernek szóló, még el nem fogadott bejelentésnél a fizetettséget megadhatja.
+    const nemFizetett = kiadas({ approval_status: 'pending', customer_id: vevoId, is_paid: false })
+    expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [nemFizetett]))).toBeNull()
+    expect((await sor(nemFizetett.sor.id)).is_paid).toBe(false)
+    // Partner nélkül, vagy elfogadott tételen nem.
+    expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [kiadas({ approval_status: 'pending', is_paid: false })]))).toBe('42501')
+    expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [kiadas({ customer_id: vevoId, is_paid: false })]))).toBe('42501')
     expect(await hibakod(ment(pool, raktaros.id, randomUUID(), [kiadas({ approval_status: 'pending', customer_id: vevoId, due_date: '2026-12-01' })]))).toBe('42501')
   })
 

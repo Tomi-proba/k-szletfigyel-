@@ -64,6 +64,17 @@ describe('raktári bejelentés', () => {
     expect(store().lots.at(-1)).toMatchObject({ movementId: id, quantity: 5, unitPrice: 800 })
   })
 
+  it('F34: partnernek szóló kiadásnál a raktáros jelzi, fizetett-e; partner nélkül nem', () => {
+    const { productId } = setup(10)
+    store().addCustomer({ name: 'Kovács Kft.' })
+    const customerId = store().customers.at(-1)!.id
+    szerep('raktaros')
+    const a = (store().createWarehouseReport({ productId, type: 'out', quantity: 2, date: '2026-11-02', customerId, isPaid: false }) as { id: string }).id
+    expect(mozgas(a)).toMatchObject({ customerId, isPaid: false, approvalStatus: 'pending' })
+    const b = (store().createWarehouseReport({ productId, type: 'out', quantity: 1, date: '2026-11-02', isPaid: false }) as { id: string }).id
+    expect(mozgas(b).isPaid).toBeUndefined()
+  })
+
   it('a várakozó kiadások lefoglalják a készletet', () => {
     const { productId } = setup(10)
     szerep('raktaros')

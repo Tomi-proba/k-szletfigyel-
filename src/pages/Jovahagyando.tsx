@@ -228,6 +228,12 @@ function Kartya({
       {(vevo || m.note) && (
         <p className="muted text-sm break-words">
           {vevo ? `Vevő: ${vevo}` : ''}
+          {/* F34: a raktáros jelzése, fizetett-e a partner. */}
+          {vevo && m.type === 'out' && m.isPaid !== undefined && m.isPaid !== null ? (
+            <strong data-kartya-fizetett className={m.isPaid ? 'text-[var(--szin-siker)]' : 'text-[var(--szin-hiba)]'}>
+              {m.isPaid ? ' · fizetett' : ' · nem fizetett'}
+            </strong>
+          ) : null}
           {vevo && m.note ? ' · ' : ''}
           {m.note}
         </p>

@@ -103,6 +103,14 @@ describe('szerepkörök a felületen (F28)', () => {
     expect([...lista.options].map((o) => o.textContent)).toContain('Kovács Építő Kft.')
     // A raktáros csak a nevet látja: határidő, tartozás nincs a listában.
     expect(lista.textContent).not.toMatch(/nap|Ft/)
+    // F34: partnernél a raktáros azt is jelzi, fizetett-e (kötelező, nincs alapérték).
+    const fizetett = tarolo.querySelector('[data-raktar-fizetett]')!
+    expect([...fizetett.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Igen, fizetett', 'Nem fizetett'])
+    expect(fizetett.querySelector('[aria-pressed="true"]')).toBeNull()
+    await act(async () => gomb('Nem fizetett').click())
+    expect(fizetett.querySelector('[aria-pressed="true"]')?.textContent).toBe('Nem fizetett')
+    await act(async () => gomb('Magánszemély').click())
+    expect(tarolo.querySelector('[data-raktar-fizetett]')).toBeNull()
   })
 
   it('F33: a fő iroda bejövőnél látja „A raktáros jóváhagyása szükséges” pipát, alapból bepipálva; a raktáros nem', async () => {

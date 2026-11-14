@@ -24,7 +24,8 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   const [view, setView] = useState<'approve' | 'reject'>('approve')
   const [vatRate, setVatRate] = useState(product?.defaultVatRatePercent !== undefined ? String(product.defaultVatRatePercent) : '')
   // Ha a vevőnek van fizetési határideje, alapból „még nem fizetett” (átutalással fizet).
-  const [isPaid, setIsPaid] = useState(customer?.paymentTermDays === undefined || customer.paymentTermDays === 0)
+  // Ha a raktáros jelezte, fizetett-e (F34), az az alap; különben a vevő határidejéből.
+  const [isPaid, setIsPaid] = useState(movement.isPaid ?? (customer?.paymentTermDays === undefined || customer.paymentTermDays === 0))
   const hatarido = !isPaid ? hataridoNapbol(movement.date, customer?.paymentTermDays) : undefined
   const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
   const [rejectReason, setRejectReason] = useState('')
@@ -115,6 +116,11 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
           {eladas && vevoId && (
             <div className="mb-4">
               <span className="mb-1 block text-sm font-medium text-[var(--color-text)]">Fizetési állapot</span>
+              {movement.isPaid !== undefined && movement.isPaid !== null && (
+                <span className="mb-2 block text-xs text-[var(--color-text-muted)]" data-raktar-szerint-fizetett>
+                  A raktáros szerint: {movement.isPaid ? 'fizetett' : 'nem fizetett'}.
+                </span>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

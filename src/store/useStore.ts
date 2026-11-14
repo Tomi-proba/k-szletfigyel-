@@ -174,6 +174,8 @@ export interface WarehouseReportInput {
   note?: string
   ok?: MovementReason
   customerId?: string
+  /** Partnernek szóló eladásnál a raktáros jelzi, fizetett-e (F34); a fő iroda elfogadáskor felülírhatja. */
+  isPaid?: boolean
 }
 
 export type WarehouseReportResult =
@@ -1828,7 +1830,7 @@ export const useStore = create<AppState>()(
       },
 
       createWarehouseReport: (input, opts) => {
-        const { productId, type, quantity, date, note, ok: reason, customerId } = input
+        const { productId, type, quantity, date, note, ok: reason, customerId, isPaid } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         const inventoryReason = reason && reason !== 'normal' ? reason : undefined
         if (inventoryReason && (inventoryReason === 'leltar_tobblet') !== (type === 'in')) return { ok: false, reason: 'invalid-reason' }
@@ -1868,6 +1870,7 @@ export const useStore = create<AppState>()(
               note: trimmed,
               createdAt: now,
               customerId: type === 'out' && !inventoryReason ? customerId || undefined : undefined,
+              isPaid: type === 'out' && !inventoryReason && customerId ? isPaid : undefined,
               ok: inventoryReason,
               approvalStatus: 'pending',
               raktarVisszaigazolva: now,

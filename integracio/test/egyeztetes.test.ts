@@ -103,7 +103,10 @@ leiras("a Készlet számai a központ kérdésére", () => {
     expect((await hivas(RECONCILE_PATH, { companyRef: ceg.companyId })).status).toBe(422);
   });
 
-  it("készletérték a cég módszerével: átlagár (alapértelmezés) és FIFO", async () => {
+  it("készletérték a cég módszerével: átlagár (beállítás nélküli régi cég) és FIFO", async () => {
+    // Az új cég FIFO-beállítással jön létre (F34b); a beállítás nélküli régi cégnél az átlagár az alap.
+    expect((await pool.query("SELECT settings->>'costingMethod' AS m FROM public.company_settings WHERE id = $1", [ceg.companyId])).rows[0]?.m).toBe("fifo");
+    await pool.query("DELETE FROM public.company_settings WHERE id = $1", [ceg.companyId]);
     let a = await valasz();
     expect(a).toMatchObject({ module: "keszlet", method: "AVERAGE", stockValue: (6 * 1005 + 3 * 500) * 100 });
     await modszer("fifo");

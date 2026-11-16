@@ -997,7 +997,8 @@ export const useStore = create<AppState>()(
           nextPurchasePrice =
             costingMethod === 'average'
               ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, quantity, batchUnitCost)
-              : Math.round(batchUnitCost * 100) / 100
+              : // FIFO-nál a termék beszerzési ára csak kézzel változik: az önköltség a tételekből jön (F34b).
+                product.purchasePrice
         } else {
           // Lots are always consumed FIFO to keep the ledger accurate, even
           // in 'average' mode - only which number gets snapshotted onto the
@@ -1501,7 +1502,7 @@ export const useStore = create<AppState>()(
         const nextPurchasePrice =
           costingMethod === 'average'
             ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, finalQuantity, batchUnitCost)
-            : Math.round(batchUnitCost * 100) / 100
+            : product.purchasePrice
 
         const expectedQuantity = movement.orderedQuantity ?? movement.quantity
         const quantityMismatch = finalQuantity !== expectedQuantity
@@ -1747,7 +1748,7 @@ export const useStore = create<AppState>()(
           nextPurchasePrice =
             costingMethod === 'average'
               ? weightedAverageAfterReceipt(product.currentStock, product.purchasePrice, actual, batchUnitCost)
-              : Math.round(batchUnitCost * 100) / 100
+              : product.purchasePrice
           stockDelta = actual
         } else {
           const resultingStock = product.currentStock - actual

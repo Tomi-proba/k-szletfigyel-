@@ -158,13 +158,13 @@ export function ProductForm({ product, onDone }: ProductFormProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Field label={product ? (costingMethod === 'fifo' ? 'Legutóbbi beszerzési ár (Ft)' : 'Átlagos beszerzési ár (Ft)') : 'Kezdő beszerzési ár (Ft)'}>
+          <Field label={costingMethod === 'fifo' ? 'Beszerzési ár (Ft)' : product ? 'Átlagos beszerzési ár (Ft)' : 'Kezdő beszerzési ár (Ft)'}>
             <Input type="number" min={0} step="any" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} required />
           </Field>
           {product && (
             <p className="-mt-2 mb-3 text-xs text-[var(--color-text-muted)]">
               {costingMethod === 'fifo'
-                ? 'Minden bejövő mozgásnál az ott megadott árra frissül (a FIFO költségszámítás a tételes előzményekből dolgozik, lásd lent).'
+                ? 'Csak kézzel változik: ez az ár ajánlódik fel új beszerzésnél. Az önköltséget FIFO szerint a tényleges beszerzési tételek adják.'
                 : 'Ezt minden bejövő mozgásnál automatikusan frissíti a rendszer, ha eltérő árat ad meg (súlyozott átlag).'}
             </p>
           )}

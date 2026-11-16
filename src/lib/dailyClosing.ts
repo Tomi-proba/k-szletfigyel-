@@ -11,6 +11,16 @@ function isActiveMovement(m: Movement): boolean {
   return !m.deletedAt && !m.cancelled && m.approvalStatus !== 'pending' && m.approvalStatus !== 'rejected'
 }
 
+/** Egy telephely egy napjának ténylegesen ható mozgásai (F35): az aznapi javítások (korrekciós tétel, amely egy
+ * ugyanarra a napra eső tételt érvénytelenít) és az általuk érvénytelenített eredeti tételek kiesnek, így a napi
+ * jelentés a javított állapotot mutatja. */
+export function napHatasosMozgasai(movements: Movement[], locationId: string, date: string): Movement[] {
+  const nap = movements.filter((m) => m.locationId === locationId && m.date === date && isActiveMovement(m))
+  const napiIdk = new Set(nap.map((m) => m.id))
+  const javitott = new Set(nap.filter((m) => m.correctsMovementId && napiIdk.has(m.correctsMovementId)).map((m) => m.correctsMovementId!))
+  return nap.filter((m) => !javitott.has(m.id) && !(m.correctsMovementId && javitott.has(m.correctsMovementId)))
+}
+
 export interface DailyClosingSummary {
   inCount: number
   outCount: number
@@ -23,7 +33,7 @@ export interface DailyClosingSummary {
  * "előnézet" the user sees before actually submitting. */
 export function buildDailyClosingSummary(movements: Movement[], products: Product[], locationId: string, date: string): DailyClosingSummary {
   const productById = new Map(products.map((p) => [p.id, p]))
-  const dayMovements = movements.filter((m) => m.locationId === locationId && m.date === date && isActiveMovement(m))
+  const dayMovements = napHatasosMozgasai(movements, locationId, date)
 
   const byProduct = new Map<string, DailyClosingProductRow>()
   let inCount = 0

@@ -189,6 +189,21 @@ export type ConfirmByWarehouseResult =
 
 export type RejectPendingResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' | 'reason-required' | 'forbidden' }
 
+/** A napi jelentés tételének javított adatai (F35, fő iroda). */
+export interface NapiTetelUj {
+  productId: string
+  quantity: number
+  /** Bejövőnél a beszerzési egységár (Ft). */
+  unitPrice?: number
+  /** Kimenőnél a vevő és a fizetettség. */
+  customerId?: string
+  isPaid?: boolean
+  note?: string
+}
+export type NapiJavitasEredmeny =
+  | { ok: true; ujId?: string }
+  | { ok: false; reason: 'forbidden' | 'not-found' | 'not-editable' | 'reason-required' | 'invalid-quantity' | 'no-change' | 'failed' }
+
 export type DeleteMovementMode = 'correction' | 'soft-delete'
 export type DeleteLedgerEntryMode = 'correction' | 'soft-delete'
 
@@ -456,6 +471,13 @@ interface AppState {
   submitDailyClosing: (locationId: string, date: string) => SubmitDailyClosingResult
   markDailyClosingViewed: (id: string) => void
   approveDailyClosing: (id: string) => void
+  /** F35: a fő iroda a napi jelentés egy tételét javítja (az eredetit érvényteleníti, a javítottat rögzíti, ugyanarra
+   * a napra), kötelező indoklással; a zárás „módosítva” lesz és újraszámolódik. */
+  napiTetelJavitas: (movementId: string, uj: NapiTetelUj, indoklas: string) => NapiJavitasEredmeny
+  /** F35: a fő iroda a napi jelentés hibás tételét törli (érvényteleníti, ugyanarra a napra). */
+  napiTetelTorles: (movementId: string, indoklas: string) => NapiJavitasEredmeny
+  /** F35: a fő iroda a napi jelentésből hiányzó tételt pótol arra a napra. */
+  napiTetelPotlas: (input: NapiTetelUj & { type: MovementType; date: string }, indoklas: string) => NapiJavitasEredmeny
 
   // Ledger (general income/expense journal)
   addLedgerEntry: (input: Omit<LedgerEntry, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -485,6 +507,68 @@ interface AppState {
   // Danger zone
   resetToDemoData: () => void
   clearAllData: () => void
+}
+
+
+// --- F35: a napi jelentés javítása (fő iroda) -----------------------------------------------------------------
+type Getter = () => AppState
+type Setter = (fn: (state: AppState) => Partial<AppState>) => void
+
+/** Javítható-e a tétel a napi jelentésből: érvényes (elfogadott, nem visszavont, nem törölt), nem maga is javítás,
+ * és még nem javították. */
+export function napiJavithato(m: Movement, movements: readonly Movement[]): boolean {
+  if (m.deletedAt || m.cancelled || m.correctsMovementId) return false
+  if (m.approvalStatus === 'pending' || m.approvalStatus === 'rejected') return false
+  return !movements.some((x) => x.correctsMovementId === m.id && !x.deletedAt)
+}
+
+/** A változások olvasható listája („Mennyiség: 45 kg → 40 kg”) – a megerősítéshez és a naplóhoz. */
+export function napiValtozasok(m: Movement, uj: NapiTetelUj, s: Pick<AppState, 'products' | 'customers'>): string[] {
+  const termek = (id: string) => s.products.find((p) => p.id === id)
+  const vevo = (id?: string) => (id ? (s.customers.find((c) => c.id === id)?.name ?? 'ismeretlen vevő') : 'magánszemély')
+  const egyseg = termek(uj.productId)?.unit ?? termek(m.productId)?.unit ?? ''
+  const v: string[] = []
+  if (uj.productId !== m.productId) v.push(`Termék: ${termek(m.productId)?.name ?? '?'} → ${termek(uj.productId)?.name ?? '?'}`)
+  if (uj.quantity !== m.quantity) v.push(`Mennyiség: ${m.quantity} ${termek(m.productId)?.unit ?? ''} → ${uj.quantity} ${egyseg}`.replace(/\s+/g, ' ').trim())
+  if (m.type === 'in' && uj.unitPrice !== undefined && uj.unitPrice !== (m.unitPrice ?? undefined)) v.push(`Egységár: ${m.unitPrice ?? '–'} Ft → ${uj.unitPrice} Ft`)
+  if (m.type === 'out' && (uj.customerId || undefined) !== (m.customerId || undefined)) v.push(`Vevő: ${vevo(m.customerId)} → ${vevo(uj.customerId)}`)
+  if (m.type === 'out' && uj.customerId && (uj.isPaid ?? true) !== (m.isPaid ?? true)) v.push(`Fizetett: ${(m.isPaid ?? true) ? 'igen' : 'nem'} → ${(uj.isPaid ?? true) ? 'igen' : 'nem'}`)
+  if ((uj.note?.trim() || undefined) !== (m.note?.trim() || undefined) && uj.note !== undefined) v.push(`Megjegyzés: „${m.note ?? ''}” → „${uj.note.trim()}”`)
+  return v
+}
+
+/** Az eredeti tétel érvénytelenítése korrekciós tétellel UGYANARRA a napra (nem a mai napra), hogy a napi jelentés
+ * a javított állapotot mutassa. */
+function napiVisszafordit(get: Getter, m: Movement, megjegyzes: string): boolean {
+  const ellen: MovementType = m.type === 'in' ? 'out' : 'in'
+  const r = get().recordMovement(
+    {
+      productId: m.productId,
+      type: ellen,
+      quantity: m.quantity,
+      date: m.date,
+      note: megjegyzes,
+      unitPrice: ellen === 'in' ? (m.unitCost ?? m.unitPrice ?? 0) : undefined,
+      correctsMovementId: m.id,
+    },
+    { allowNegativeStock: true },
+  )
+  return r.ok
+}
+
+/** A nap zárásának újraszámolása a javított tételekből; „utólag módosult” jelöléssel. */
+function napiZarasUjraszamol(get: Getter, set: Setter, locationId: string, date: string): void {
+  const zaras = get().dailyClosings.find((c) => c.locationId === locationId && c.date === date)
+  if (!zaras) return
+  const s = buildDailyClosingSummary(get().movements, get().products, locationId, date)
+  const most = new Date().toISOString()
+  set((state) => ({
+    dailyClosings: state.dailyClosings.map((c) =>
+      c.id === zaras.id
+        ? { ...c, inCount: s.inCount, outCount: s.outCount, productBreakdown: s.productBreakdown, movementIds: s.movementIds, modifiedAfterSubmission: true, lastModifiedAt: most }
+        : c,
+    ),
+  }))
 }
 
 export const useStore = create<AppState>()(
@@ -1994,6 +2078,98 @@ export const useStore = create<AppState>()(
             auditLog: [...state.auditLog, auditEntry('dailyClosing', id, label, 'update', `Napi zárás megtekintve - ${label}`)],
           }
         }),
+
+      napiTetelJavitas: (movementId, uj, indoklas) => {
+        if (!veglegesithet(get())) return { ok: false, reason: 'forbidden' }
+        const ok = indoklas.trim()
+        if (!ok) return { ok: false, reason: 'reason-required' }
+        const m = get().movements.find((x) => x.id === movementId)
+        if (!m) return { ok: false, reason: 'not-found' }
+        if (!napiJavithato(m, get().movements)) return { ok: false, reason: 'not-editable' }
+        if (!Number.isFinite(uj.quantity) || uj.quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+        const valtozasok = napiValtozasok(m, uj, get())
+        if (valtozasok.length === 0) return { ok: false, reason: 'no-change' }
+        // 1. Az eredeti tétel érvénytelenítése ugyanarra a napra (korrekciós tétel).
+        const vissza = napiVisszafordit(get, m, `Javítás (fő iroda) – érvényteleníti a(z) #${m.id.slice(0, 8)} tételt: ${ok}`)
+        if (!vissza) return { ok: false, reason: 'failed' }
+        // 2. A javított tétel rögzítése ugyanarra a napra.
+        const r = get().recordMovement(
+          {
+            productId: uj.productId,
+            type: m.type,
+            quantity: uj.quantity,
+            date: m.date,
+            note: [uj.note?.trim(), `Javított tétel (fő iroda): ${ok}`].filter(Boolean).join(' – '),
+            unitPrice: m.type === 'in' ? (uj.unitPrice ?? m.unitPrice) : undefined,
+            supplierId: m.type === 'in' ? m.supplierId : undefined,
+            customerId: m.type === 'out' ? uj.customerId || undefined : undefined,
+            isPaid: m.type === 'out' && uj.customerId ? (uj.isPaid ?? true) : undefined,
+            vatRatePercent: m.vatRatePercent,
+            invoiceNumber: m.invoiceNumber,
+          },
+          { allowNegativeStock: true },
+        )
+        if (!r.ok) return { ok: false, reason: 'failed' }
+        napiZarasUjraszamol(get, set, m.locationId, m.date)
+        const termek = get().products.find((p) => p.id === m.productId)
+        set((state) => ({
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', m.id, termek?.name ?? 'Tétel', 'update', `Napi jelentés tétele javítva (fő iroda): ${valtozasok.join('; ')} – ${ok}`),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      napiTetelTorles: (movementId, indoklas) => {
+        if (!veglegesithet(get())) return { ok: false, reason: 'forbidden' }
+        const ok = indoklas.trim()
+        if (!ok) return { ok: false, reason: 'reason-required' }
+        const m = get().movements.find((x) => x.id === movementId)
+        if (!m) return { ok: false, reason: 'not-found' }
+        if (!napiJavithato(m, get().movements)) return { ok: false, reason: 'not-editable' }
+        if (!napiVisszafordit(get, m, `Törölve a napi jelentésből (fő iroda) – #${m.id.slice(0, 8)}: ${ok}`)) return { ok: false, reason: 'failed' }
+        napiZarasUjraszamol(get, set, m.locationId, m.date)
+        const termek = get().products.find((p) => p.id === m.productId)
+        set((state) => ({
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', m.id, termek?.name ?? 'Tétel', 'correction', `Napi jelentés tétele törölve (fő iroda): ${termek?.name ?? 'tétel'} ${m.quantity} ${termek?.unit ?? ''} – ${ok}`),
+          ],
+        }))
+        return { ok: true }
+      },
+
+      napiTetelPotlas: (input, indoklas) => {
+        if (!veglegesithet(get())) return { ok: false, reason: 'forbidden' }
+        const ok = indoklas.trim()
+        if (!ok) return { ok: false, reason: 'reason-required' }
+        if (!Number.isFinite(input.quantity) || input.quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
+        const termek = get().products.find((p) => p.id === input.productId)
+        if (!termek) return { ok: false, reason: 'not-found' }
+        const r = get().recordMovement(
+          {
+            productId: input.productId,
+            type: input.type,
+            quantity: input.quantity,
+            date: input.date,
+            note: [input.note?.trim(), `Pótolt tétel (fő iroda): ${ok}`].filter(Boolean).join(' – '),
+            unitPrice: input.type === 'in' ? input.unitPrice : undefined,
+            customerId: input.type === 'out' ? input.customerId || undefined : undefined,
+            isPaid: input.type === 'out' && input.customerId ? (input.isPaid ?? true) : undefined,
+          },
+          { allowNegativeStock: true },
+        )
+        if (!r.ok) return { ok: false, reason: 'failed' }
+        napiZarasUjraszamol(get, set, termek.locationId, input.date)
+        set((state) => ({
+          auditLog: [
+            ...state.auditLog,
+            auditEntry('movement', termek.id, termek.name, 'create', `Napi jelentés tétele pótolva (fő iroda): ${input.type === 'in' ? 'bejövő' : 'kimenő'} ${input.quantity} ${termek.unit} – ${ok}`),
+          ],
+        }))
+        return { ok: true }
+      },
 
       approveDailyClosing: (id) =>
         set((state) => {

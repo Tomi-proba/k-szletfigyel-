@@ -12,6 +12,7 @@ import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { buildDailyClosingSummary, type DailyClosingSummary } from '../lib/dailyClosing'
 import type { DailyClosing, DailyClosingStatus, Location } from '../types'
 import { Modal } from '../components/Modal'
+import { NapiJelentesJavitas } from '../components/NapiJelentesJavitas'
 import { Button, Card, EmptyState, PageHeader, Select, Input } from '../components/ui'
 import { formatDate, formatDateTime, formatNumber } from '../lib/format'
 import { isoDaysAgo, todayISO } from '../lib/dates'
@@ -75,7 +76,10 @@ export function DailyReports() {
   }))
   const [locationFilter, setLocationFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | DailyClosingStatus>('')
-  const [detail, setDetail] = useState<DailyClosing | null>(null)
+  const [megnyitott, setDetail] = useState<DailyClosing | null>(null)
+  // A megnyitott zárás mindig a friss adatból (a fő irodai javítás után is, F35).
+  const detail = megnyitott ? (dailyClosings.find((c) => c.id === megnyitott.id) ?? megnyitott) : null
+  const foIroda = useStore((s) => s.dataMode !== 'remote' || s.remoteRole === 'fo_iroda')
   const [inProgressDetail, setInProgressDetail] = useState<{ location: Location; summary: DailyClosingSummary } | null>(null)
 
   const filtered = useMemo(
@@ -339,6 +343,8 @@ export function DailyReports() {
               </table>
             </div>
           )}
+          {/* F35: a fő iroda javíthatja, törölheti és pótolhatja a jelentés tételeit (megerősítéssel, indoklással). */}
+          {foIroda && !isReadOnlyViewer && <NapiJelentesJavitas locationId={detail.locationId} date={detail.date} />}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDetail(null)}>
               Bezárás

@@ -61,7 +61,10 @@ async function registerHungarianFont(doc: JsPDFType) {
 export async function exportToPdf<T>(filename: string, title: string, columns: ExportColumn<T>[], rows: T[]): Promise<void> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const orientation = columns.length > 5 ? 'landscape' : 'portrait'
-  const doc = new jsPDF({ orientation, unit: 'mm' })
+  // Sok oszlopnál (pl. Mozgásnapló) A3 fekvő lap, kisebb betű és az oszlopszélességek aránya a megadott
+  // szélességek szerint – különben a szavak betűnként törnének.
+  const szeles = columns.length > 12
+  const doc = new jsPDF({ orientation, unit: 'mm', format: szeles ? 'a3' : 'a4' })
   await registerHungarianFont(doc)
 
   doc.setFontSize(14)
@@ -77,10 +80,17 @@ export async function exportToPdf<T>(filename: string, title: string, columns: E
     startY: 26,
     head: [columns.map((c) => c.header)],
     body: rows.map((row) => columns.map((c) => String(c.accessor(row)))),
-    styles: { font: 'NotoSans', fontSize: 8, cellPadding: 2 },
+    styles: { font: 'NotoSans', fontSize: szeles ? 7 : 8, cellPadding: szeles ? 1.5 : 2 },
+    columnStyles: oszlopSzelessegek(columns.map((c) => c.width ?? 18), doc.internal.pageSize.getWidth() - 29),
     headStyles: { font: 'NotoSans', fontStyle: 'bold', fillColor: [29, 78, 216], textColor: 255 },
     alternateRowStyles: { fillColor: [244, 245, 247] },
   })
 
   doc.save(filename)
+}
+
+/** A megadott (Excel-) szélességek arányában osztja szét a lap hasznos szélességét (mm). */
+export function oszlopSzelessegek(szelessegek: number[], hasznos: number): Record<number, { cellWidth: number }> {
+  const osszes = szelessegek.reduce((a, b) => a + b, 0) || 1
+  return Object.fromEntries(szelessegek.map((w, i) => [i, { cellWidth: (w / osszes) * hasznos }]))
 }

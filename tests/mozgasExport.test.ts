@@ -43,3 +43,12 @@ describe('Mozgásnapló export', () => {
     expect(sor).toMatchObject({ tipus: 'Kimenő (Leltári hiány)', partner: 'nem eladás', egysegar: 'nem eladás', ertek: 3000, elabe: 'nem eladás', fizetve: 'nem eladás' })
   })
 })
+
+describe('PDF oszlopszélességek', () => {
+  it('a megadott szélességek arányában osztja szét a lapot', async () => {
+    const { oszlopSzelessegek } = await import('../src/lib/export')
+    const sz = oszlopSzelessegek([10, 30], 100)
+    expect(sz[0].cellWidth).toBe(25)
+    expect(sz[1].cellWidth).toBe(75)
+  })
+})

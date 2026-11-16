@@ -47,12 +47,25 @@ interface MovementRow {
   exchangeRate: string
   unitCost: string
   lotRemaining: string
+  saleUnitPrice: string
+  revenue: string
+  elabe: string
   vat: string
   customerName: string
   paymentStatus: string
   saleStatus: string
   cancelledInfo: string
   note: string
+}
+
+/** Kimenő tétel értékei (a felhasználó kérése): eladási egységár (a tételé, különben a termék eladási ára), árbevétel,
+ * ELÁBÉ (eladott áruk beszerzési értéke: az eladáskor rögzített egységköltség × mennyiség) és árrés. */
+export function eladasErtekek(m: Movement, product: Product | undefined) {
+  const sajat = m.saleUnitPrice
+  const egysegar = sajat ?? product?.salePrice
+  const arbevetel = egysegar !== undefined ? Math.round(egysegar * m.quantity) : undefined
+  const elabe = m.unitCost !== undefined ? Math.round(m.unitCost * m.quantity) : undefined
+  return { egysegar, termekArabol: sajat === undefined, arbevetel, elabe, arres: arbevetel !== undefined && elabe !== undefined ? arbevetel - elabe : undefined }
 }
 
 export function Movements() {
@@ -151,6 +164,11 @@ export function Movements() {
       exchangeRate: m.type === 'in' && m.currency && m.currency !== 'HUF' ? String(m.exchangeRate ?? '') : '',
       unitCost: lot ? String(Math.round(lotUnitCost(lot))) : '',
       lotRemaining: lot ? `${formatNumber(lot.remainingQuantity)} / ${formatNumber(lot.quantity)}` : '',
+      ...(() => {
+        if (m.type !== 'out') return { saleUnitPrice: '', revenue: '', elabe: '' }
+        const e = eladasErtekek(m, product)
+        return { saleUnitPrice: e.egysegar !== undefined ? String(e.egysegar) : '', revenue: e.arbevetel !== undefined ? String(e.arbevetel) : '', elabe: e.elabe !== undefined ? String(e.elabe) : '' }
+      })(),
       vat: vat.rate === undefined ? '' : `${vat.rate}%${m.type === 'in' ? (vat.reclaimable === false ? ' (nem visszaig.)' : ' (visszaig.)') : ''}`,
       customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : '',
       paymentStatus: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : '',
@@ -178,6 +196,9 @@ export function Movements() {
           { header: 'Árfolyam', accessor: (r: MovementRow) => r.exchangeRate, width: 12 },
           { header: 'Egységköltség (Ft)', accessor: (r: MovementRow) => r.unitCost, width: 16 },
           { header: 'Készleten (tételből)', accessor: (r: MovementRow) => r.lotRemaining, width: 18 },
+          { header: 'Eladási egységár (Ft)', accessor: (r: MovementRow) => r.saleUnitPrice, width: 16 },
+          { header: 'Árbevétel (Ft)', accessor: (r: MovementRow) => r.revenue, width: 14 },
+          { header: 'ELÁBÉ (Ft)', accessor: (r: MovementRow) => r.elabe, width: 14 },
           { header: 'Áfa', accessor: (r: MovementRow) => r.vat, width: 16 },
           { header: 'Vevő', accessor: (r: MovementRow) => r.customerName, width: 22 },
           { header: 'Fizetve', accessor: (r: MovementRow) => r.paymentStatus, width: 14 },
@@ -282,7 +303,7 @@ export function Movements() {
                 {locations.length > 1 && <th className="px-4 py-3 font-medium">Telephely</th>}
                 <th className="px-4 py-3 font-medium">Típus</th>
                 <th className="px-4 py-3 text-right font-medium">Mennyiség</th>
-                {!isWarehouseUser && <th className="px-4 py-3 font-medium">Beszerzés részletei</th>}
+                {!isWarehouseUser && <th className="px-4 py-3 font-medium">Ár és érték</th>}
                 {!isWarehouseUser && <th className="px-4 py-3 font-medium">Áfa</th>}
                 {!isWarehouseUser && <th className="px-4 py-3 font-medium">Vevő</th>}
                 <th className="px-4 py-3 font-medium">Eladási státusz</th>
@@ -383,7 +404,29 @@ export function Movements() {
                             )
                           })()
                         ) : (
-                          <span>—</span>
+                          (() => {
+                            // Kimenő: eladási ár, árbevétel, ELÁBÉ és árrés.
+                            const e = eladasErtekek(m, product)
+                            return (
+                              <div className="space-y-0.5" data-eladas-ertek>
+                                {e.egysegar !== undefined && (
+                                  <div>
+                                    Eladási ár: {formatCurrency(e.egysegar)}
+                                    {e.termekArabol ? ' (a termék ára)' : ''}
+                                    {e.arbevetel !== undefined ? ` · Árbevétel: ${formatCurrency(e.arbevetel)}` : ''}
+                                  </div>
+                                )}
+                                {e.elabe !== undefined ? (
+                                  <div className="text-[var(--color-text)]">ELÁBÉ: {formatCurrency(e.elabe)}</div>
+                                ) : (
+                                  <div>ELÁBÉ: elfogadáskor számolódik</div>
+                                )}
+                                {e.arres !== undefined && (
+                                  <div className={e.arres < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}>Árrés: {formatCurrency(e.arres)}</div>
+                                )}
+                              </div>
+                            )
+                          })()
                         )}
                       </td>
                     )}

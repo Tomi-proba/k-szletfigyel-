@@ -65,6 +65,8 @@
     font-weight: 600;
   }
   .btn-success:hover {
+    /* A .btn:hover szürke háttere ne írja felül a színes gombot (egér alatt is olvasható maradjon). */
+    background: var(--szin-siker);
     filter: brightness(0.92);
   }
   .btn-danger {
@@ -84,8 +86,12 @@
     color: var(--szin-hatter);
     font-weight: 600;
   }
-  .btn-danger-solid:hover,
+  .btn-danger-solid:hover {
+    background: var(--szin-hiba);
+    filter: brightness(0.92);
+  }
   .btn-warning-solid:hover {
+    background: var(--szin-figyelmeztetes);
     filter: brightness(0.92);
   }
   .btn-small {

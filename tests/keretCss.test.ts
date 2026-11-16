@@ -37,4 +37,11 @@ describe('stílus a keretben', () => {
     expect(kozos).toBeGreaterThanOrEqual(0)
     expect(kozos).toBeLessThan(forras.indexOf("import './index.css'"))
   })
+
+  it('a színes gombok egér alatt is megtartják a színüket (a .btn:hover nem írja felül)', () => {
+    const css = readFileSync(new URL('../src/kozos/kozos.css', import.meta.url), 'utf8')
+    for (const [osztaly, szin] of [['btn-success', '--szin-siker'], ['btn-danger-solid', '--szin-hiba'], ['btn-warning-solid', '--szin-figyelmeztetes'], ['btn-primary', '--szin-elsodleges-sotet']]) {
+      expect(css).toMatch(new RegExp(`\\.${osztaly}:hover\\s*\\{[^}]*background:\\s*var\\(${szin}\\)`))
+    }
+  })
 })

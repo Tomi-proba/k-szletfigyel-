@@ -101,7 +101,7 @@ export function DailyClosingPage() {
     inCount: c.inCount,
     outCount: c.outCount,
     submittedAt: formatDateTime(c.submittedAt),
-    modified: c.modifiedAfterSubmission ? `Igen (${c.lastModifiedAt ? formatDateTime(c.lastModifiedAt) : ''})` : 'Nem',
+    modified: c.modifiedAfterSubmission ? `Igen${c.lastModifiedAt ? ` (${formatDateTime(c.lastModifiedAt)})` : ''}` : 'Nem',
   }))
   const historyColumns: ExportColumn<HistoryRow>[] = [
     { header: 'Dátum', accessor: (r) => r.date, width: 14 },

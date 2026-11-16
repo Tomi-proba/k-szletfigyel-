@@ -98,10 +98,10 @@ export function Vat() {
     date: formatDate(e.date),
     type: e.type === 'income' ? 'Bevétel' : 'Kiadás',
     description: e.description,
-    amountOriginal: e.currency === 'HUF' ? '' : formatMoney(e.amount, e.currency),
+    amountOriginal: formatMoney(e.amount, e.currency),
     amountHuf: Math.round(e.amount * e.exchangeRate),
     direction: e.vatDirection === 'payable' ? 'Befizetendő' : 'Visszaigényelhető',
-    note: e.note ?? '',
+    note: e.note?.trim() || 'nincs',
   }))
   const manualColumns: ExportColumn<ManualVatExportRow>[] = [
     { header: 'Dátum', accessor: (r) => r.date, width: 14 },

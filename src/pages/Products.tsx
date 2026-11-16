@@ -85,7 +85,7 @@ export function Products() {
     const status = info ? info.status : getStockStatus(p.currentStock < p.minStock, false)
     return {
       name: p.name,
-      sku: p.sku ?? '',
+      sku: p.sku || 'nincs megadva',
       category: p.category,
       locationName: locationName(p.locationId),
       unit: p.unit,

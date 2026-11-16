@@ -89,7 +89,7 @@ function MarginReportSection() {
 
   const columns: ExportColumn<MarginRow>[] = [
     { header: 'Termék', accessor: (r) => r.productName, width: 28 },
-    { header: 'Cikkszám', accessor: (r) => r.sku, width: 14 },
+    { header: 'Cikkszám', accessor: (r) => r.sku || 'nincs megadva', width: 14 },
     { header: 'Eladott mennyiség', accessor: (r) => r.quantitySold, width: 16 },
     { header: 'Árbevétel', accessor: (r) => r.revenue, width: 16 },
     { header: 'Beszerzési költség', accessor: (r) => r.cost, width: 16 },

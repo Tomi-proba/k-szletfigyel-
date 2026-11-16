@@ -116,10 +116,10 @@ export function Ledger() {
       type: e.type === 'income' ? 'Bevétel' : 'Kiadás',
       category: e.category,
       description: e.description,
-      amountOriginal: e.currency === 'HUF' ? '' : formatMoney(e.amount, e.currency),
+      amountOriginal: formatMoney(e.amount, e.currency),
       amountHuf: ledgerEntryHuf(e),
-      vat: e.category === VAT_CATEGORY ? `${e.vatRatePercent ?? 0}% · ${e.vatDirection === 'payable' ? 'Befizetendő' : 'Visszaigényelhető'}` : '',
-      note: e.note ?? '',
+      vat: e.category === VAT_CATEGORY ? `${e.vatRatePercent ?? 0}% · ${e.vatDirection === 'payable' ? 'Befizetendő' : 'Visszaigényelhető'}` : 'nem áfatétel',
+      note: e.note?.trim() || 'nincs',
     }
   }
 

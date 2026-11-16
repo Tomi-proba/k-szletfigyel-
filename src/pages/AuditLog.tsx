@@ -43,7 +43,7 @@ export function AuditLog() {
     entityLabel: e.entityLabel,
     action: ACTION_LABELS[e.action],
     description: e.description,
-    changes: (e.changes ?? []).map((c) => `${c.label}: ${c.oldValue} → ${c.newValue}`).join('; '),
+    changes: (e.changes ?? []).map((c) => `${c.label}: ${c.oldValue} → ${c.newValue}`).join('; ') || 'nincs részletezve',
   }))
 
   const columns: ExportColumn<AuditRow>[] = [

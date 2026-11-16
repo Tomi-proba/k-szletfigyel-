@@ -1,6 +1,6 @@
 // A Mozgásnapló kimenő soraiban: eladási ár, árbevétel, ELÁBÉ (eladáskor rögzített egységköltség × mennyiség), árrés.
 import { describe, expect, it } from 'vitest'
-import { eladasErtekek } from '../src/pages/Movements'
+import { eladasErtekek } from '../src/lib/mozgasExport'
 import type { Movement, Product } from '../src/types'
 
 const termek = { salePrice: 490 } as Product

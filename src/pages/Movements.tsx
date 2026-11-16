@@ -16,6 +16,7 @@ import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber }
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { lotUnitCost } from '../lib/costing'
+import { eladasErtekek, mozgasExportSor, type MozgasExportSor } from '../lib/mozgasExport'
 import type { Movement, MovementReason, Product, PurchaseLot, SaleStatus } from '../types'
 import { KonyveloForras } from '../components/KozosTeendok'
 import { keretben } from '../keret/futas'
@@ -31,42 +32,6 @@ const SALE_STATUS_OPTIONS: SaleStatus[] = ['pending', 'shipping', 'delivered']
 type SaleStatusFilter = SaleStatus | 'cancelled'
 const SALE_STATUS_FILTER_LABELS: Record<SaleStatusFilter, string> = { ...SALE_STATUS_LABELS, cancelled: 'Visszavonva' }
 const SALE_STATUS_FILTER_OPTIONS: SaleStatusFilter[] = [...SALE_STATUS_OPTIONS, 'cancelled']
-
-interface MovementRow {
-  date: string
-  productName: string
-  sku: string
-  locationName: string
-  type: string
-  quantity: number
-  unit: string
-  supplierName: string
-  goodsUnitPrice: string
-  shippingCost: string
-  currency: string
-  exchangeRate: string
-  unitCost: string
-  lotRemaining: string
-  saleUnitPrice: string
-  revenue: string
-  elabe: string
-  vat: string
-  customerName: string
-  paymentStatus: string
-  saleStatus: string
-  cancelledInfo: string
-  note: string
-}
-
-/** Kimenő tétel értékei (a felhasználó kérése): eladási egységár (a tételé, különben a termék eladási ára), árbevétel,
- * ELÁBÉ (eladott áruk beszerzési értéke: az eladáskor rögzített egységköltség × mennyiség) és árrés. */
-export function eladasErtekek(m: Movement, product: Product | undefined) {
-  const sajat = m.saleUnitPrice
-  const egysegar = sajat ?? product?.salePrice
-  const arbevetel = egysegar !== undefined ? Math.round(egysegar * m.quantity) : undefined
-  const elabe = m.unitCost !== undefined ? Math.round(m.unitCost * m.quantity) : undefined
-  return { egysegar, termekArabol: sajat === undefined, arbevetel, elabe, arres: arbevetel !== undefined && elabe !== undefined ? arbevetel - elabe : undefined }
-}
 
 export function Movements() {
   const movements = useStore((s) => s.movements)
@@ -144,68 +109,49 @@ export function Movements() {
     return { rate: lot?.vatRatePercent, reclaimable: lot?.vatReclaimable }
   }
 
-  function toRow(m: Movement): MovementRow {
+  function toRow(m: Movement): MozgasExportSor {
     const product = productById.get(m.productId)
-    const vat = vatOf(m)
-    const lot = m.type === 'in' ? lotByMovementId.get(m.id) : undefined
-    const supplier = product?.supplierId ? supplierById.get(product.supplierId) : undefined
-    return {
-      date: formatDate(m.date),
-      productName: product?.name ?? 'Törölt termék',
-      sku: product?.sku ?? '',
-      locationName: locationById.get(m.locationId)?.name ?? '',
-      type: m.type === 'in' ? 'Bejövő' : 'Kimenő',
-      quantity: m.quantity,
-      unit: product?.unit ?? '',
-      supplierName: m.type === 'in' ? (supplier?.name ?? '') : '',
-      goodsUnitPrice: m.type === 'in' && m.unitPrice !== undefined ? String(m.unitPrice) : '',
-      shippingCost: m.type === 'in' && m.shippingCost !== undefined ? String(m.shippingCost) : '',
-      currency: m.type === 'in' ? (m.currency ?? 'HUF') : '',
-      exchangeRate: m.type === 'in' && m.currency && m.currency !== 'HUF' ? String(m.exchangeRate ?? '') : '',
-      unitCost: lot ? String(Math.round(lotUnitCost(lot))) : '',
-      lotRemaining: lot ? `${formatNumber(lot.remainingQuantity)} / ${formatNumber(lot.quantity)}` : '',
-      ...(() => {
-        if (m.type !== 'out') return { saleUnitPrice: '', revenue: '', elabe: '' }
-        const e = eladasErtekek(m, product)
-        return { saleUnitPrice: e.egysegar !== undefined ? String(e.egysegar) : '', revenue: e.arbevetel !== undefined ? String(e.arbevetel) : '', elabe: e.elabe !== undefined ? String(e.elabe) : '' }
-      })(),
-      vat: vat.rate === undefined ? '' : `${vat.rate}%${m.type === 'in' ? (vat.reclaimable === false ? ' (nem visszaig.)' : ' (visszaig.)') : ''}`,
-      customerName: m.customerId ? (customerById.get(m.customerId)?.name ?? 'Törölt vevő') : '',
-      paymentStatus: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : '',
-      saleStatus: m.type === 'out' ? (m.cancelled ? 'Visszavonva' : m.saleStatus ? SALE_STATUS_LABELS[m.saleStatus] : '') : '',
-      cancelledInfo: m.cancelled ? `Visszavonva${m.cancelReason ? ` (${m.cancelReason})` : ''}` : m.deletedAt ? 'Törölve' : '',
-      note: m.note ?? '',
-    }
+    const supplierId = m.supplierId ?? product?.supplierId
+    return mozgasExportSor(m, {
+      product,
+      lot: m.type === 'in' ? lotByMovementId.get(m.id) : undefined,
+      location: locationById.get(m.locationId),
+      customer: m.customerId ? customerById.get(m.customerId) : undefined,
+      supplier: supplierId ? supplierById.get(supplierId) : undefined,
+      formatDate,
+    })
   }
 
-  const columns: ExportColumn<MovementRow>[] = [
-    { header: 'Dátum', accessor: (r) => r.date, width: 14 },
-    { header: 'Termék', accessor: (r) => r.productName, width: 28 },
-    { header: 'Cikkszám', accessor: (r) => r.sku, width: 14 },
-    ...(locations.length > 1 ? [{ header: 'Telephely', accessor: (r: MovementRow) => r.locationName, width: 18 }] : []),
-    { header: 'Típus', accessor: (r) => r.type, width: 10 },
-    { header: 'Mennyiség', accessor: (r) => r.quantity, width: 12 },
-    { header: 'Egység', accessor: (r) => r.unit, width: 10 },
+  // Minden oszlop minden sorban ki van töltve (lásd lib/mozgasExport.ts). A pénzügyi oszlopok irodai adatok:
+  // raktáros szerepkörben kimaradnak.
+  type Oszlop = ExportColumn<MozgasExportSor>
+  const columns: Oszlop[] = [
+    { header: 'Dátum', accessor: (r) => r.datum, width: 14 },
+    { header: 'Termék', accessor: (r) => r.termek, width: 28 },
+    { header: 'Cikkszám', accessor: (r) => r.cikkszam, width: 14 },
+    ...(locations.length > 1 ? [{ header: 'Telephely', accessor: (r) => r.telephely, width: 18 } as Oszlop] : []),
+    { header: 'Típus', accessor: (r) => r.tipus, width: 12 },
+    { header: 'Mennyiség', accessor: (r) => r.mennyiseg, width: 12 },
+    { header: 'Egység', accessor: (r) => r.egyseg, width: 10 },
     ...(isWarehouseUser
       ? []
-      : [
-          { header: 'Szállító', accessor: (r: MovementRow) => r.supplierName, width: 22 },
-          { header: 'Áru egységára', accessor: (r: MovementRow) => r.goodsUnitPrice, width: 14 },
-          { header: 'Szállítási költség', accessor: (r: MovementRow) => r.shippingCost, width: 16 },
-          { header: 'Pénznem', accessor: (r: MovementRow) => r.currency, width: 10 },
-          { header: 'Árfolyam', accessor: (r: MovementRow) => r.exchangeRate, width: 12 },
-          { header: 'Egységköltség (Ft)', accessor: (r: MovementRow) => r.unitCost, width: 16 },
-          { header: 'Készleten (tételből)', accessor: (r: MovementRow) => r.lotRemaining, width: 18 },
-          { header: 'Eladási egységár (Ft)', accessor: (r: MovementRow) => r.saleUnitPrice, width: 16 },
-          { header: 'Árbevétel (Ft)', accessor: (r: MovementRow) => r.revenue, width: 14 },
-          { header: 'ELÁBÉ (Ft)', accessor: (r: MovementRow) => r.elabe, width: 14 },
-          { header: 'Áfa', accessor: (r: MovementRow) => r.vat, width: 16 },
-          { header: 'Vevő', accessor: (r: MovementRow) => r.customerName, width: 22 },
-          { header: 'Fizetve', accessor: (r: MovementRow) => r.paymentStatus, width: 14 },
-        ]),
-    { header: 'Eladási státusz', accessor: (r) => r.saleStatus, width: 16 },
-    { header: 'Állapot', accessor: (r) => r.cancelledInfo, width: 18 },
-    { header: 'Megjegyzés', accessor: (r) => r.note, width: 24 },
+      : ([
+          { header: 'Partner (szállító / vevő)', accessor: (r) => r.partner, width: 24 },
+          { header: 'Egységár', accessor: (r) => r.egysegar, width: 12 },
+          { header: 'Szállítási költség', accessor: (r) => r.szallitas, width: 14 },
+          { header: 'Pénznem', accessor: (r) => r.penznem, width: 10 },
+          { header: 'Árfolyam', accessor: (r) => r.arfolyam, width: 10 },
+          { header: 'Egységköltség (Ft)', accessor: (r) => r.egysegkoltseg, width: 16 },
+          { header: 'Érték (Ft): beszerzés / árbevétel', accessor: (r) => r.ertek, width: 18 },
+          { header: 'ELÁBÉ (Ft)', accessor: (r) => r.elabe, width: 16 },
+          { header: 'Árrés (Ft)', accessor: (r) => r.arres, width: 16 },
+          { header: 'Készleten (tételből)', accessor: (r) => r.maradek, width: 16 },
+          { header: 'Áfa', accessor: (r) => r.afa, width: 18 },
+          { header: 'Fizetve', accessor: (r) => r.fizetve, width: 16 },
+        ] as Oszlop[])),
+    { header: 'Eladási státusz', accessor: (r) => r.eladasStatusz, width: 16 },
+    { header: 'Állapot', accessor: (r) => r.allapot, width: 18 },
+    { header: 'Megjegyzés', accessor: (r) => r.megjegyzes, width: 24 },
   ]
 
   const rows = filtered.map(toRow)

@@ -50,10 +50,68 @@ export interface MozgasExportKornyezet {
   location?: Location
   customer?: Customer
   supplier?: Supplier
+  /** Kimenő sornál: melyik beszerzésből fogyott (fifoForrasok). */
+  forras?: FifoForras[]
   formatDate: (d: string) => string
 }
 
+export interface FifoForras {
+  datum: string
+  mennyiseg: number
+}
+
+/** Kimenő mozgásonként: mely beszerzési tételekből fogyott az áru, FIFO szerint (a legrégebbi beszerzés előbb).
+ * A tételfelhasználást a program nem tárolja mozgásonként, ezért a mozgások időrendjéből számoljuk újra:
+ * minden kimenő mozgás, amelynek van rögzített önköltsége (elfogadáskor fogyott a tételekből), a még meglévő
+ * legrégebbi beszerzésekből vesz. A beszerzési tétel nélküli rész (pl. a tételkövetés előtti készlet) „korábbi
+ * készlet”. */
+export function fifoForrasok(movements: Movement[], lots: PurchaseLot[]): Map<string, FifoForras[]> {
+  const ki = new Map<string, FifoForras[]>()
+  const maradek = new Map<string, number>()
+  const termekTetelei = new Map<string, PurchaseLot[]>()
+  for (const l of lots) {
+    maradek.set(l.id, l.quantity)
+    termekTetelei.set(l.productId, [...(termekTetelei.get(l.productId) ?? []), l])
+  }
+  for (const t of termekTetelei.values()) t.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt.localeCompare(b.createdAt)))
+  const kimenok = movements
+    .filter((m) => m.type === 'out' && m.unitCost !== undefined)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt.localeCompare(b.createdAt)))
+  for (const m of kimenok) {
+    let kell = m.quantity
+    const sor: FifoForras[] = []
+    for (const l of termekTetelei.get(m.productId) ?? []) {
+      if (kell <= 0) break
+      // Csak a mozgás napjáig beérkezett tétel adhat (a később rögzített beszerzés nem fogyhatott korábban).
+      if (l.date > m.date) break
+      const van = maradek.get(l.id) ?? 0
+      if (van <= 0) continue
+      const vesz = Math.min(van, kell)
+      maradek.set(l.id, van - vesz)
+      kell -= vesz
+      sor.push({ datum: l.date, mennyiseg: vesz })
+    }
+    if (kell > 0) sor.push({ datum: '', mennyiseg: kell })
+    ki.set(m.id, sor)
+  }
+  return ki
+}
+
+function forrasSzoveg(f: FifoForras[] | undefined, egyseg: string, formatDate: (d: string) => string): string {
+  if (!f || f.length === 0) return 'elfogadáskor számolódik'
+  return forrasLeiras(f, egyseg, formatDate)
+}
+
+/** „11. 07-i beszerzésből 45 kg; korábbi készletből 5 kg” */
+export function forrasLeiras(f: FifoForras[], egyseg: string, formatDate: (d: string) => string = sajatDatum): string {
+  return f
+    .map((x) => (x.datum ? `${formatDate(x.datum).replace(/\.$/, '')}-i beszerzésből ${formatNumber(x.mennyiseg)} ${egyseg}` : `korábbi készletből ${formatNumber(x.mennyiseg)} ${egyseg}`))
+    .join('; ')
+}
+
 const NINCS = 'nincs megadva'
+/** ÉÉÉÉ-HH-NN → „HH. NN.” (a felületen az év a sor dátumából látszik). */
+const sajatDatum = (d: string) => `${d.slice(5, 7)}. ${d.slice(8, 10)}.`
 const kerek = (n: number) => Math.round(n)
 
 export function mozgasExportSor(m: Movement, k: MozgasExportKornyezet): MozgasExportSor {
@@ -114,7 +172,7 @@ export function mozgasExportSor(m: Movement, k: MozgasExportKornyezet): MozgasEx
       partner: ne, egysegar: ne, szallitas: 0, penznem: 'HUF', arfolyam: 1,
       egysegkoltseg: m.unitCost !== undefined ? kerek(m.unitCost) : fuggo,
       ertek: m.unitCost !== undefined ? kerek(m.unitCost * m.quantity) : fuggo,
-      elabe: ne, arres: ne, maradek: 'nem beszerzés', afa: ne, fizetve: ne, eladasStatusz: ne,
+      elabe: ne, arres: ne, maradek: forrasSzoveg(k.forras, kozos.egyseg, k.formatDate), afa: ne, fizetve: ne, eladasStatusz: ne,
     }
   }
   return {
@@ -128,7 +186,7 @@ export function mozgasExportSor(m: Movement, k: MozgasExportKornyezet): MozgasEx
     ertek: e.arbevetel ?? NINCS,
     elabe: e.elabe ?? fuggo,
     arres: e.arres ?? fuggo,
-    maradek: 'nem beszerzés',
+    maradek: forrasSzoveg(k.forras, kozos.egyseg, k.formatDate),
     afa: afaKulcs === undefined ? NINCS : `${afaKulcs}%${m.vatRatePercent === undefined ? ' (a termék alapértéke)' : ''}`,
     fizetve: m.customerId ? (m.isPaid ? 'Fizetve' : 'Nem fizetett') : 'azonnal (vevő nélkül)',
     eladasStatusz: m.cancelled ? 'Visszavonva' : m.saleStatus ? ELADAS_STATUSZ[m.saleStatus] : ELADAS_STATUSZ.pending,

@@ -16,7 +16,7 @@ import { formatCurrency, formatDate, formatDateTime, formatMoney, formatNumber }
 import { isoDaysAgo, todayISO } from '../lib/dates'
 import { exportToExcel, exportToPdf, type ExportColumn } from '../lib/export'
 import { lotUnitCost } from '../lib/costing'
-import { eladasErtekek, mozgasExportSor, type MozgasExportSor } from '../lib/mozgasExport'
+import { eladasErtekek, fifoForrasok, forrasLeiras, mozgasExportSor, type MozgasExportSor } from '../lib/mozgasExport'
 import type { Movement, MovementReason, Product, PurchaseLot, SaleStatus } from '../types'
 import { KonyveloForras } from '../components/KozosTeendok'
 import { keretben } from '../keret/futas'
@@ -83,6 +83,7 @@ export function Movements() {
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers])
   const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
   const lotByMovementId = useMemo(() => new Map(lots.map((l) => [l.movementId, l])), [lots])
+  const forrasok = useMemo(() => fifoForrasok(movements, lots), [movements, lots])
 
   const filtered = useMemo(
     () =>
@@ -118,6 +119,7 @@ export function Movements() {
       location: locationById.get(m.locationId),
       customer: m.customerId ? customerById.get(m.customerId) : undefined,
       supplier: supplierId ? supplierById.get(supplierId) : undefined,
+      forras: forrasok.get(m.id),
       formatDate,
     })
   }
@@ -145,7 +147,7 @@ export function Movements() {
           { header: 'Érték (Ft): beszerzés / árbevétel', accessor: (r) => r.ertek, width: 18 },
           { header: 'ELÁBÉ (Ft)', accessor: (r) => r.elabe, width: 16 },
           { header: 'Árrés (Ft)', accessor: (r) => r.arres, width: 16 },
-          { header: 'Készleten (tételből)', accessor: (r) => r.maradek, width: 16 },
+          { header: 'Ebből a beszerzésből még raktáron / kimenőnél: honnan fogyott', accessor: (r) => r.maradek, width: 30 },
           { header: 'Áfa', accessor: (r) => r.afa, width: 18 },
           { header: 'Fizetve', accessor: (r) => r.fizetve, width: 16 },
         ] as Oszlop[])),
@@ -343,7 +345,7 @@ export function Movements() {
                                 {lot && <div>Egységköltség: {formatCurrency(Math.round(lotUnitCost(lot)))}</div>}
                                 {lot && (
                                   <div>
-                                    Készleten: {formatNumber(lot.remainingQuantity)} / {formatNumber(lot.quantity)} {product?.unit}
+                                    Ebből még raktáron: {formatNumber(lot.remainingQuantity)} / {formatNumber(lot.quantity)} {product?.unit}
                                   </div>
                                 )}
                               </div>
@@ -370,6 +372,7 @@ export function Movements() {
                                 {e.arres !== undefined && (
                                   <div className={e.arres < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}>Árrés: {formatCurrency(e.arres)}</div>
                                 )}
+                                {forrasok.get(m.id) && <div data-fifo-forras>Honnan fogyott: {forrasLeiras(forrasok.get(m.id)!, product?.unit ?? '')}</div>}
                               </div>
                             )
                           })()

@@ -1,6 +1,6 @@
 // A Mozgásnapló exportja: minden rögzített sor minden oszlopában van adat (a felhasználó kérése).
 import { describe, expect, it } from 'vitest'
-import { mozgasExportSor } from '../src/lib/mozgasExport'
+import { fifoForrasok, forrasLeiras, mozgasExportSor } from '../src/lib/mozgasExport'
 import type { Movement, Product, PurchaseLot } from '../src/types'
 
 const termek = { name: 'Alma', unit: 'kg', salePrice: 500, purchasePrice: 300, defaultVatRatePercent: 27 } as Product
@@ -26,9 +26,9 @@ describe('Mozgásnapló export', () => {
   })
 
   it('kimenő vevővel, ELÁBÉ-vel', () => {
-    const sor = mozgasExportSor({ ...alap, type: 'out', unitCost: 290, saleUnitPrice: 520, customerId: 'c', isPaid: true, saleStatus: 'shipping' } as Movement, { ...k, customer: { name: 'Vevő Kft.' } as never })
+    const sor = mozgasExportSor({ ...alap, type: 'out', unitCost: 290, saleUnitPrice: 520, customerId: 'c', isPaid: true, saleStatus: 'shipping' } as Movement, { ...k, customer: { name: 'Vevő Kft.' } as never, forras: [{ datum: '2026-11-07', mennyiseg: 10 }] })
     nincsUres(sor)
-    expect(sor).toMatchObject({ partner: 'Vevő Kft.', egysegar: 520, ertek: 5200, elabe: 2900, arres: 2300, penznem: 'HUF', arfolyam: 1, szallitas: 0, fizetve: 'Fizetve', eladasStatusz: 'Kiszállítás alatt', afa: '27% (a termék alapértéke)', maradek: 'nem beszerzés' })
+    expect(sor).toMatchObject({ partner: 'Vevő Kft.', egysegar: 520, ertek: 5200, elabe: 2900, arres: 2300, penznem: 'HUF', arfolyam: 1, szallitas: 0, fizetve: 'Fizetve', eladasStatusz: 'Kiszállítás alatt', afa: '27% (a termék alapértéke)', maradek: '2026-11-07-i beszerzésből 10 kg' })
   })
 
   it('kimenő vevő nélkül, még nincs önköltség', () => {
@@ -50,5 +50,21 @@ describe('PDF oszlopszélességek', () => {
     const sz = oszlopSzelessegek([10, 30], 100)
     expect(sz[0].cellWidth).toBe(25)
     expect(sz[1].cellWidth).toBe(75)
+  })
+})
+
+describe('honnan fogyott (FIFO)', () => {
+  const lot = (id: string, date: string, quantity: number) => ({ id, productId: 'p', movementId: 'b' + id, date, quantity, remainingQuantity: 0, createdAt: date }) as PurchaseLot
+  const ki = (id: string, date: string, quantity: number, unitCost?: number) => ({ ...alap, id, date, quantity, type: 'out', unitCost, createdAt: date }) as Movement
+  it('a legrégebbi beszerzésből fogy, a maradék a következőből; az el nem fogadott nem fogy', () => {
+    const f = fifoForrasok([ki('k2', '2026-11-10', 30, 1), ki('k1', '2026-11-08', 50, 1), ki('fuggo', '2026-11-09', 99)], [lot('b', '2026-11-05', 40), lot('a', '2026-11-01', 60)])
+    expect(f.get('k1')).toEqual([{ datum: '2026-11-01', mennyiseg: 50 }])
+    expect(f.get('k2')).toEqual([{ datum: '2026-11-01', mennyiseg: 10 }, { datum: '2026-11-05', mennyiseg: 20 }])
+    expect(f.has('fuggo')).toBe(false)
+  })
+  it('tétel nélküli rész: korábbi készlet; a később érkezett beszerzés nem fogyhat korábban', () => {
+    const f = fifoForrasok([ki('k', '2026-11-03', 15, 1)], [lot('a', '2026-11-01', 10), lot('b', '2026-11-05', 40)])
+    expect(f.get('k')).toEqual([{ datum: '2026-11-01', mennyiseg: 10 }, { datum: '', mennyiseg: 5 }])
+    expect(forrasLeiras(f.get('k')!, 'kg')).toBe('11. 01-i beszerzésből 10 kg; korábbi készletből 5 kg')
   })
 })

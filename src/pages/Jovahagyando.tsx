@@ -27,6 +27,7 @@ import { todayISO } from '../lib/dates'
 import { ApprovePurchaseOrderModal } from '../components/ApprovePurchaseOrderModal'
 import { ApproveSaleModal } from '../components/ApproveSaleModal'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
+import { Modal } from '../components/Modal'
 
 const HIBA: Record<string, string> = {
   'not-found': 'Ez a tétel már nincs meg (közben törölték?). Frissítse a listát.',
@@ -351,32 +352,34 @@ function Kartya({
             </>
           ) : (
             <>
-              <button type="button" className="btn btn-success btn-big btn-block" aria-expanded={!veglegesit ? biztos : undefined} onClick={() => (veglegesit ? elfogad() : setBiztos(true))}>
+              <button type="button" className="btn btn-success btn-big btn-block" onClick={() => (veglegesit ? elfogad() : setBiztos(true))}>
                 <CheckCircle2 size={22} aria-hidden="true" />{' '}
                 {veglegesit ? `Elfogadom${raktarSzerint !== null ? ` (${formatNumber(raktarSzerint)} ${egyseg})` : ''}` : t.rendben}
               </button>
               {!veglegesit && biztos && (
-                <div className="card card-muted flex flex-col gap-2" role="alertdialog" aria-label="Megerősítés" data-raktar-biztos>
-                  <p className="font-semibold">
-                    Biztosan {t.kesz}: {formatNumber(vart)} {egyseg} {termek?.name ?? ''}?
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" className="btn" onClick={() => setBiztos(false)}>
-                      Mégse
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-success"
-                      data-raktar-biztos-igen
-                      onClick={() => {
-                        setBiztos(false)
-                        visszaigazol(vart)
-                      }}
-                    >
-                      Igen, {t.kesz}
-                    </button>
+                <Modal title="Biztos benne?" onClose={() => setBiztos(false)}>
+                  <div className="flex flex-col gap-4" data-raktar-biztos>
+                    <p className="text-lg font-semibold">
+                      Biztosan {t.kesz}: {formatNumber(vart)} {egyseg} {termek?.name ?? ''}?
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" className="btn btn-big" onClick={() => setBiztos(false)}>
+                        Mégse
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-success btn-big"
+                        data-raktar-biztos-igen
+                        onClick={() => {
+                          setBiztos(false)
+                          visszaigazol(vart)
+                        }}
+                      >
+                        Igen, {t.kesz}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </Modal>
               )}
             </>
           )}

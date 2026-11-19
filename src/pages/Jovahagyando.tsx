@@ -11,7 +11,7 @@
 // komponensekből vannak (src/kozos/kozos.css: .btn, .card, .badge).
 import { useMemo, useState } from 'react'
 import { Link } from '../keret/router'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock, MinusCircle, Pencil, RefreshCw, XCircle } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useAuth } from '../hooks/useAuth'
 import { useVanRaktaros } from '../hooks/useVanRaktaros'
@@ -22,6 +22,8 @@ import type { Movement, Product } from '../types'
 import { bejelentesCimke, fajtaja, forrasa, SZOVEG } from '../lib/jovahagyando'
 import { allapota, ALLAPOT_SZOVEG, teendoje, varakozo, type Szerep, type Teendo } from '../lib/raktariBejelentes'
 import { KonyveloForras } from '../components/KozosTeendok'
+import { jovahagyandoDatumok } from '../lib/jovahagyandoDatumok'
+import { todayISO } from '../lib/dates'
 import { ApprovePurchaseOrderModal } from '../components/ApprovePurchaseOrderModal'
 import { ApproveSaleModal } from '../components/ApproveSaleModal'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
@@ -124,6 +126,11 @@ function Kartya({
   const beszerzes = m.type === 'in' && !m.ok && !egyLepesben
   const szallitoNeve = useSzallitoNeve(m, termek)
   const veglegesit = teendo === 'veglegesit'
+  // A várható dátumok (beérkezés, fizetés) minden szerepnél látszanak (a felhasználó kérése).
+  const szallitoId = m.supplierId ?? termek?.supplierId
+  const szallito = useStore((s) => (szallitoId ? s.suppliers.find((x) => x.id === szallitoId) : undefined))
+  const vevoAdat = useStore((s) => (m.customerId ? s.customers.find((x) => x.id === m.customerId) : undefined))
+  const datumok = jovahagyandoDatumok(m, { szallito, vevo: vevoAdat, beszerzes, ma: todayISO() })
 
   const nyit = (mod: 'kevesebb' | 'nem') => {
     setHiba(null)
@@ -215,6 +222,17 @@ function Kartya({
       <p className="text-3xl font-bold tabular-nums" aria-label={`Mennyiség: ${formatNumber(vart)} ${egyseg}`}>
         {formatNumber(vart)} <span className="text-xl font-semibold">{egyseg}</span>
       </p>
+      <ul className="flex flex-col gap-0.5 text-sm" data-varhato-datumok aria-label="Várható dátumok">
+        {datumok.map((d) => (
+          <li key={d.cim} className="flex flex-wrap items-baseline gap-x-1.5" data-datum={d.cim}>
+            <CalendarClock size={15} aria-hidden="true" className="muted shrink-0 self-center" />
+            <span className="muted">{d.cim}:</span>
+            {d.datum && <strong className={d.lejart ? 'text-[var(--szin-hiba)]' : undefined}>{formatDate(d.datum)}</strong>}
+            {d.lejart && <span className="text-[var(--szin-hiba)]">({d.lejart})</span>}
+            {d.megjegyzes && <span className="muted">{d.datum ? `(${d.megjegyzes})` : d.megjegyzes}</span>}
+          </li>
+        ))}
+      </ul>
       {beszerzes && (
         <p className="text-sm" data-szallito>
           <span className="muted">Szállító: </span>

@@ -58,6 +58,8 @@ export async function neveben<T>(pool: pg.Pool, felhasznalo: string, fn: (db: pg
     await db.query("begin");
     await db.query("set local role authenticated");
     await db.query("select set_config('request.jwt.claim.sub', $1, true)", [felhasznalo]);
+    // F38: a kétlépcsős azonosítás alapból kötelező; a tesztfelhasználó már túl van rajta (aal2).
+    await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: felhasznalo, aal: "aal2" })]);
     const r = await fn(db);
     await db.query("commit");
     return r;

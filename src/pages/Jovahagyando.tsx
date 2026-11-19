@@ -232,7 +232,7 @@ function Kartya({
           <CalendarClock size={26} aria-hidden="true" className="shrink-0" />
           <span>
             <span className="block text-sm">{datumok[0].cim}</span>
-            <strong className="text-2xl">{formatDate(datumok[0].datum)}</strong>
+            <strong className="text-2xl">{formatDate(datumok[0].datum ?? m.date)}</strong>
             {datumok[0].lejart ? <strong className="ml-2">({datumok[0].lejart})</strong> : null}
           </span>
         </p>

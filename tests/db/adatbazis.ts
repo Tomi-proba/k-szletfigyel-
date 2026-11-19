@@ -80,6 +80,8 @@ export async function nevebenFut<T>(pool: pg.Pool, felhasznaloId: string, fn: (d
     await db.query('begin')
     await db.query('set local role authenticated')
     await db.query("select set_config('request.jwt.claim.sub', $1, true)", [felhasznaloId])
+    // Kétlépcsős belépés (aal2), mint a program minden adatkérésénél; a csak jelszavas esetet a ketlepcsos teszt nézi.
+    await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: felhasznaloId, aal: 'aal2' })])
     await db.query("select set_config('request.headers', $1, true)", [JSON.stringify(ceg ? { 'x-keszlet-ceg': ceg } : {})])
     const eredmeny = await fn(db)
     await db.query('commit')

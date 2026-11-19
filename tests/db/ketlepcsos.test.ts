@@ -1,5 +1,5 @@
-// A kétlépcsős adatbázis-szabály (F21, az egységes sémában): kikapcsolva jön létre; csak akkor kapcsolható be, ha minden felhasználónak van ellenőrzött kétlépcsős
-// tényezője (senki nem zárhatja ki magát); bekapcsolva aal2 nélkül semmilyen cégadat nem érhető el;
+// A kétlépcsős adatbázis-szabály (F21; F38: alapból bekapcsolva): aal2 nélkül semmilyen cégadat nem érhető el, a felületet
+// megkerülve sem; az üzemeltető ki- és visszakapcsolhatja;
 // átállási lista; raktáros tétlenségi idő. Futtatás: KESZLET_TEST_DATABASE_URL=postgresql://…/keszlet_test npm test
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -45,11 +45,20 @@ afterAll(async () => {
 })
 
 leiras('kétlépcsős adatbázis-szabály (F21, az egységes sémában)', () => {
-  it('a sémában a szabály kikapcsolva jön létre: aal1-gyel is minden működik', async () => {
-    expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(1)
-    expect(await neveben(ceg, 'aal1', 'select public.my_role() as r')).toEqual([{ r: 'fo_iroda' }])
+  it('a sémában a szabály bekapcsolva jön létre: csak jelszóval (aal1) semmilyen cégadat nem érhető el', async () => {
+    expect((await pool.query('select ketlepcsos_kotelezo from public.biztonsagi_beallitas')).rows[0].ketlepcsos_kotelezo).toBe(true)
+    expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(0)
+    expect(await neveben(ceg, 'aal1', 'select id from public.products')).toHaveLength(0)
+    expect(await neveben(ceg, 'aal1', 'select user_id from public.company_members')).toHaveLength(0)
+    expect(await neveben(ceg, 'aal1', 'select public.my_company_id() as c')).toEqual([{ c: null }])
+    expect(await hibakod(neveben(ceg, 'aal1', "insert into public.locations (company_id, name) values ($1, 'X')", [ceg.companyId]))).toBe('42501')
+    expect(await hibakod(neveben(ceg, 'aal1', "select public.ceg_letrehozasa('Betörő Kft.')"))).toBe('42501')
+    // Kétlépcsős azonosítással minden működik.
+    expect(await neveben(ceg, 'aal2', 'select id from public.companies')).toHaveLength(1)
+    expect(await neveben(ceg, 'aal2', 'select public.my_role() as r')).toEqual([{ r: 'fo_iroda' }])
+    // A saját profilját aal1-gyel is látja (a program ebből tudja, hogy kódot kell kérnie).
+    expect(await neveben(ceg, 'aal1', 'select id from public.profiles where id = auth.uid()')).toHaveLength(1)
   })
-
 
   it('átállási lista: a fő iroda és a tulajdonos látja, ki nem állította még be; a raktáros nem', async () => {
     await tenyezo(ceg)
@@ -62,33 +71,18 @@ leiras('kétlépcsős adatbázis-szabály (F21, az egységes sémában)', () => 
     expect(await neveben(raktaros, 'aal2', 'select id from public.ketlepcsos_allapot()')).toHaveLength(0)
   })
 
-  it('a böngészőből nem kapcsolható be, és amíg valakinek hiányzik, az SQL-szerkesztőből sem', async () => {
+  it('a kapcsoló a böngészőből nem állítható és nem olvasható', async () => {
     expect(await hibakod(neveben(ceg, 'aal2', 'select public.ketlepcsos_kotelezove_tetel()'))).toBe('42501')
-    expect(await hibakod(pool.query('select public.ketlepcsos_kotelezove_tetel()'))).toBe('KF2FA')
-    expect((await pool.query('select public.ketlepcsos_hianyzik() as n')).rows[0].n).toBe(2)
-    expect((await pool.query('select ketlepcsos_kotelezo from public.biztonsagi_beallitas')).rows[0].ketlepcsos_kotelezo).toBe(false)
-    // A beállítás táblája a böngészőből nem olvasható.
+    expect(await hibakod(neveben(ceg, 'aal2', 'select public.ketlepcsos_kikapcsolasa()'))).toBe('42501')
     expect(await hibakod(neveben(ceg, 'aal2', 'select * from public.biztonsagi_beallitas'))).toBe('42501')
   })
 
-  it('ha mindenki beállította, bekapcsolható: aal2 nélkül semmilyen cégadat nem érhető el', async () => {
-    await pool.query("update auth.mfa_factors set status = 'verified' where user_id = $1", [raktaros.id])
-    await tenyezo(tulajdonos)
-    expect((await pool.query('select public.ketlepcsos_kotelezove_tetel() as u')).rows[0].u).toMatch(/bekapcsolva/)
-
-    expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(0)
-    expect(await neveben(ceg, 'aal1', 'select id from public.products')).toHaveLength(0)
-    expect(await neveben(ceg, 'aal1', 'select public.my_company_id() as c')).toEqual([{ c: null }])
-    expect(await hibakod(neveben(ceg, 'aal1', "insert into public.locations (company_id, name) values ($1, 'X')", [ceg.companyId]))).toBe('42501')
-    // Kétlépcsős azonosítással minden a régi.
-    expect(await neveben(ceg, 'aal2', 'select id from public.companies')).toHaveLength(1)
-    // A saját profilját aal1-gyel is látja (a program ebből tudja, hogy kódot kell kérnie).
-    expect(await neveben(ceg, 'aal1', 'select id from public.profiles where id = auth.uid()')).toHaveLength(1)
-  })
-
-  it('kikapcsolás az SQL-szerkesztőből', async () => {
+  it('ki- és visszakapcsolás az SQL-szerkesztőből (a visszakapcsolás akkor is megy, ha valakinek még nincs beállítva)', async () => {
     await pool.query('select public.ketlepcsos_kikapcsolasa()')
     expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(1)
+    expect((await pool.query('select public.ketlepcsos_hianyzik() as n')).rows[0].n).toBeGreaterThan(0)
+    expect((await pool.query('select public.ketlepcsos_kotelezove_tetel() as u')).rows[0].u).toMatch(/bekapcsolva/)
+    expect(await neveben(ceg, 'aal1', 'select id from public.companies')).toHaveLength(0)
   })
 
   it('raktáros tétlenségi idő: alapból 30 perc, a fő iroda 30 perc és 12 óra között állíthatja', async () => {

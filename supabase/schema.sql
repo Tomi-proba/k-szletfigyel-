@@ -76,9 +76,10 @@ alter table public.profiles enable row level security;
 -- --- Kétlépcsős adatbázis-szabály (F21) -------------------------------------
 create table if not exists public.biztonsagi_beallitas (
   id boolean primary key default true check (id),
-  ketlepcsos_kotelezo boolean not null default false,
-  bekapcsolva_ekkor timestamptz
+  ketlepcsos_kotelezo boolean not null default true,
+  bekapcsolva_ekkor timestamptz default now()
 );
+-- F38: alapból bekapcsolva - kétlépcsős azonosítás (aal2) nélkül semmilyen cégadat nem érhető el, a felületet megkerülve sem.
 insert into public.biztonsagi_beallitas (id) values (true) on conflict (id) do nothing;
 -- Nincs policy: a böngészőből nem olvasható és nem írható; csak a security definer függvények érik el.
 alter table public.biztonsagi_beallitas enable row level security;
@@ -2410,13 +2411,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  hianyzik integer := public.ketlepcsos_hianyzik();
 begin
-  if hianyzik > 0 then
-    raise exception 'A kétlépcsős szabály nem kapcsolható be: % felhasználónak még nincs beállítva (lásd a Csapat oldal átállási listáját).', hianyzik
-      using errcode = 'KF2FA';
-  end if;
+  -- F38: a „csak ha már mindenki beállította" feltétel kikerült: a program a kétlépcsős kód előtt nem kér cégadatot, a
+  -- beállítás (QR-kód) pedig nem az adatbázison megy át, így a bekapcsolás senkit nem zár ki.
   update public.biztonsagi_beallitas set ketlepcsos_kotelezo = true, bekapcsolva_ekkor = now() where id;
   return 'A kétlépcsős szabály bekapcsolva: kétlépcsős azonosítás nélkül semmilyen cégadat nem érhető el.';
 end;
@@ -2654,3 +2651,8 @@ begin
 end;
 $$;
 -- F29 vége
+
+-- F38: a kétlépcsős adatbázis-szabály bekapcsolása a meglévő telepítéseken (2026-11-19, a felhasználó kérése: a jelszó
+-- birtokában a felületet megkerülve se legyen olvasható a cégadat). Ismételten futtatható.
+update public.biztonsagi_beallitas set ketlepcsos_kotelezo = true, bekapcsolva_ekkor = coalesce(bekapcsolva_ekkor, now()) where id and not ketlepcsos_kotelezo;
+-- F38 vége

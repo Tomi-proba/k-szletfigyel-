@@ -10,7 +10,8 @@ import { fetchBusinessData, fuggoMentesekBeszamitasa, integracioFrissitesLetolte
 import { mentesiSor } from '../lib/mentes'
 import { helyiTartosTarolo } from '../lib/tartosTarolo'
 import { computeDueRecurringOccurrences } from '../lib/ledger'
-import { szabadKeszlet } from '../lib/raktariBejelentes'
+import { szabadKeszlet, varakozo } from '../lib/raktariBejelentes'
+import { ELFOGADAS_HIBA, zarasElfogadasTerv } from '../lib/zarasElfogadas'
 import type { PendingChange, PendingChangeAction, PendingChangeEntityType, UserRole } from '../types/auth'
 import {
   DEFAULT_LEDGER_CATEGORIES,
@@ -210,6 +211,11 @@ export type DeleteLedgerEntryMode = 'correction' | 'soft-delete'
 export type CancelSaleResult =
   | { ok: true; wasPaid: boolean }
   | { ok: false; reason: 'not-found' | 'not-a-sale' | 'already-cancelled' | 'not-approved' | 'forbidden' }
+
+/** F39: a napi zárás jóváhagyása a nap várakozó tételeinek egyben elfogadásával. */
+export type ZarasJovahagyasEredmeny =
+  | { ok: true; elfogadva: string[]; kihagyott: { id: string; ok: string }[] }
+  | { ok: false; reason: 'not-found' }
 
 export type SubmitDailyClosingResult =
   | { ok: true; closingId: string }
@@ -471,6 +477,8 @@ interface AppState {
   submitDailyClosing: (locationId: string, date: string) => SubmitDailyClosingResult
   markDailyClosingViewed: (id: string) => void
   approveDailyClosing: (id: string) => void
+  /** F39: a zárás jóváhagyása; a nap várakozó tételei (a raktár szerinti mennyiséggel) egyben elfogadódnak, ami nem fogadható el, az a Jóváhagyás oldalon marad. */
+  approveDailyClosingWithPending: (id: string) => ZarasJovahagyasEredmeny
   /** F35: a fő iroda a napi jelentés egy tételét javítja (az eredetit érvényteleníti, a javítottat rögzíti, ugyanarra
    * a napra), kötelező indoklással; a zárás „módosítva” lesz és újraszámolódik. */
   napiTetelJavitas: (movementId: string, uj: NapiTetelUj, indoklas: string) => NapiJavitasEredmeny
@@ -2035,7 +2043,9 @@ export const useStore = create<AppState>()(
           return { ok: false, reason: 'already-closed' }
         }
         const summary = buildDailyClosingSummary(get().movements, get().products, locationId, date)
-        if (summary.inCount === 0 && summary.outCount === 0) {
+        // F39: a még el nem fogadott tételekkel is beküldhető (a fő iroda a zárás jóváhagyásakor egyben elfogadhatja őket).
+        const vanVarakozo = get().movements.some((m) => varakozo(m) && m.locationId === locationId && m.date === date)
+        if (summary.inCount === 0 && summary.outCount === 0 && !vanVarakozo) {
           return { ok: false, reason: 'no-movements' }
         }
 
@@ -2170,6 +2180,40 @@ export const useStore = create<AppState>()(
           ],
         }))
         return { ok: true }
+      },
+
+      approveDailyClosingWithPending: (id) => {
+        const zaras = get().dailyClosings.find((c) => c.id === id)
+        if (!zaras) return { ok: false, reason: 'not-found' }
+        const terv = zarasElfogadasTerv(get().movements, get().products, zaras.locationId, zaras.date)
+        const elfogadva: string[] = []
+        const kihagyott = terv.kihagyott.map((k) => ({ id: k.m.id, ok: k.ok }))
+        for (const e of terv.elfogadhato) {
+          if (!veglegesithet(get())) {
+            kihagyott.push({ id: e.m.id, ok: ELFOGADAS_HIBA.forbidden })
+            continue
+          }
+          const vart = e.m.orderedQuantity ?? e.m.quantity
+          const megj = `Napi zárással elfogadva${e.m.raktarMegjegyzes ? `; a raktár megjegyzése: ${e.m.raktarMegjegyzes}` : ''}`
+          let r: { ok: boolean; reason?: string }
+          if (e.mod === 'beszerzes') {
+            r = get().approvePurchaseOrder(e.m.id, e.mennyiseg, e.mennyiseg !== vart || e.m.raktarMegjegyzes ? megj : undefined)
+          } else if (e.mod === 'integracio') {
+            r = get().approveIntegrationMovement(e.m.id, { actualQuantity: e.mennyiseg, note: e.mennyiseg !== vart ? megj : undefined })
+          } else {
+            const termek = get().products.find((p) => p.id === e.m.productId)
+            const vevo = e.m.customerId ? get().customers.find((c) => c.id === e.m.customerId) : undefined
+            r = get().approveSalePrep(e.m.id, {
+              vatRatePercent: e.m.vatRatePercent ?? termek?.defaultVatRatePercent,
+              // A raktáros jelölése, különben mint az elfogadó ablakban: határidő nélküli vevőnél fizetett.
+              isPaid: e.m.customerId ? (e.m.isPaid ?? (vevo?.paymentTermDays === undefined || vevo.paymentTermDays === 0)) : undefined,
+            })
+          }
+          if (r.ok) elfogadva.push(e.m.id)
+          else kihagyott.push({ id: e.m.id, ok: ELFOGADAS_HIBA[r.reason ?? ''] ?? 'nem sikerült elfogadni – fogadja el kézzel' })
+        }
+        get().approveDailyClosing(id)
+        return { ok: true, elfogadva, kihagyott }
       },
 
       approveDailyClosing: (id) =>

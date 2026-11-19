@@ -229,7 +229,11 @@ export function DailyClosingPage() {
         <Card className="mb-5">
           <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Előnézet - {formatDate(date)}</h2>
           {!preview || (preview.inCount === 0 && preview.outCount === 0) ? (
-            <EmptyState>Nincs rögzített mozgás ezen a napon ezen a telephelyen.</EmptyState>
+            <EmptyState>
+              {varakozok.length > 0
+                ? 'Még nincs elfogadott tétel ezen a napon. A zárás így is elküldhető: a fő iroda a jóváhagyáskor egyben elfogadhatja a várakozó tételeket.'
+                : 'Nincs rögzített mozgás ezen a napon ezen a telephelyen.'}
+            </EmptyState>
           ) : (
             <>
               <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-2">
@@ -282,7 +286,7 @@ export function DailyClosingPage() {
           )}
           {!isReadOnlyViewer && zarhat && (
             <div className="mt-4 flex justify-end">
-              <Button onClick={handleSubmit} disabled={!preview || (preview.inCount === 0 && preview.outCount === 0)}>
+              <Button onClick={handleSubmit} disabled={!preview || (preview.inCount === 0 && preview.outCount === 0 && varakozok.length === 0)}>
                 <Send size={16} /> Napi zárás elküldése
               </Button>
             </div>

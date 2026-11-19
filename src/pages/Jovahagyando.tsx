@@ -117,6 +117,8 @@ function Kartya({
   const [hiba, setHiba] = useState<string | null>(null)
   const [keszletHiany, setKeszletHiany] = useState(false)
   const [reszletek, setReszletek] = useState(false)
+  // A raktáros „Beérkezett / Kiadva” gombja előbb rákérdez (a felhasználó kérése: ne egyből fogadja el).
+  const [biztos, setBiztos] = useState(false)
   const allapot = allapota(m)
   const cimke = bejelentesCimke(m)
   // A Könyvelőből jött és a visszáru-tételt itt, egy koppintással lehet elfogadni; az irodai rendelésnél
@@ -222,6 +224,17 @@ function Kartya({
       <p className="text-3xl font-bold tabular-nums" aria-label={`Mennyiség: ${formatNumber(vart)} ${egyseg}`}>
         {formatNumber(vart)} <span className="text-xl font-semibold">{egyseg}</span>
       </p>
+      {beszerzes && !veglegesit && raktarSzerint === null && datumok[0]?.datum && (
+        // A raktárosnak nagyban: mikorra várható az iroda által rendelt áru.
+        <p className={`raktar-jelzes ${datumok[0].lejart ? 'raktar-jelzes--nem' : 'raktar-jelzes--var'}`} data-varhato-beerkezes>
+          <CalendarClock size={26} aria-hidden="true" className="shrink-0" />
+          <span>
+            <span className="block text-sm">{datumok[0].cim}</span>
+            <strong className="text-2xl">{formatDate(datumok[0].datum)}</strong>
+            {datumok[0].lejart ? <strong className="ml-2">({datumok[0].lejart})</strong> : null}
+          </span>
+        </p>
+      )}
       <ul className="flex flex-col gap-0.5 text-sm" data-varhato-datumok aria-label="Várható dátumok">
         {datumok.map((d) => (
           <li key={d.cim} className="flex flex-wrap items-baseline gap-x-1.5" data-datum={d.cim}>
@@ -335,10 +348,35 @@ function Kartya({
               )}
             </>
           ) : (
-            <button type="button" className="btn btn-success btn-big btn-block" onClick={() => (veglegesit ? elfogad() : visszaigazol(vart))}>
-              <CheckCircle2 size={22} aria-hidden="true" />{' '}
-              {veglegesit ? `Elfogadom${raktarSzerint !== null ? ` (${formatNumber(raktarSzerint)} ${egyseg})` : ''}` : t.rendben}
-            </button>
+            <>
+              <button type="button" className="btn btn-success btn-big btn-block" aria-expanded={!veglegesit ? biztos : undefined} onClick={() => (veglegesit ? elfogad() : setBiztos(true))}>
+                <CheckCircle2 size={22} aria-hidden="true" />{' '}
+                {veglegesit ? `Elfogadom${raktarSzerint !== null ? ` (${formatNumber(raktarSzerint)} ${egyseg})` : ''}` : t.rendben}
+              </button>
+              {!veglegesit && biztos && (
+                <div className="card card-muted flex flex-col gap-2" role="alertdialog" aria-label="Megerősítés" data-raktar-biztos>
+                  <p className="font-semibold">
+                    Biztosan {t.kesz}: {formatNumber(vart)} {egyseg} {termek?.name ?? ''}?
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" className="btn" onClick={() => setBiztos(false)}>
+                      Mégse
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      data-raktar-biztos-igen
+                      onClick={() => {
+                        setBiztos(false)
+                        visszaigazol(vart)
+                      }}
+                    >
+                      Igen, {t.kesz}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
           <div className="grid grid-cols-2 gap-2">
             {(!veglegesit || egyLepesben || m.type === 'in') && (

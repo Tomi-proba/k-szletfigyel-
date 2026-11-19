@@ -12,6 +12,7 @@ import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { buildDailyClosingSummary, type DailyClosingSummary } from '../lib/dailyClosing'
 import type { DailyClosing, DailyClosingStatus, Location } from '../types'
 import { Modal } from '../components/Modal'
+import { ZarasJovahagyas } from '../components/ZarasJovahagyas'
 import { NapiJelentesJavitas } from '../components/NapiJelentesJavitas'
 import { Button, Card, EmptyState, PageHeader, Select, Input } from '../components/ui'
 import { formatDate, formatDateTime, formatNumber } from '../lib/format'
@@ -46,7 +47,6 @@ export function DailyReports() {
   const movements = useStore((s) => s.movements)
   const dailyClosings = useStore((s) => s.dailyClosings)
   const markDailyClosingViewed = useStore((s) => s.markDailyClosingViewed)
-  const approveDailyClosing = useStore((s) => s.approveDailyClosing)
   const alerts = useAlerts()
 
   const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations])
@@ -77,6 +77,8 @@ export function DailyReports() {
   const [locationFilter, setLocationFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | DailyClosingStatus>('')
   const [megnyitott, setDetail] = useState<DailyClosing | null>(null)
+  // F39: a jóváhagyás előbb megerősítést kér (és egyben elfogadja a nap várakozó tételeit).
+  const [jovahagyando, setJovahagyando] = useState<DailyClosing | null>(null)
   // A megnyitott zárás mindig a friss adatból (a fő irodai javítás után is, F35).
   const detail = megnyitott ? (dailyClosings.find((c) => c.id === megnyitott.id) ?? megnyitott) : null
   const foIroda = useStore((s) => s.dataMode !== 'remote' || s.remoteRole === 'fo_iroda')
@@ -276,7 +278,7 @@ export function DailyReports() {
                           {c.status !== 'approved' && !isReadOnlyViewer && (
                             <button
                               type="button"
-                              onClick={() => approveDailyClosing(c.id)}
+                              onClick={() => setJovahagyando(c)}
                               aria-label="Jelentés jóváhagyása"
                               className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-black/5 hover:text-[var(--color-success)]"
                               title="Jóváhagyás"
@@ -352,7 +354,7 @@ export function DailyReports() {
             {detail.status !== 'approved' && !isReadOnlyViewer && (
               <Button
                 onClick={() => {
-                  approveDailyClosing(detail.id)
+                  setJovahagyando(detail)
                   setDetail(null)
                 }}
               >
@@ -418,6 +420,7 @@ export function DailyReports() {
           </div>
         </Modal>
       )}
+      {jovahagyando && <ZarasJovahagyas zaras={jovahagyando} foIroda={foIroda} onClose={() => setJovahagyando(null)} />}
     </div>
   )
 }

@@ -2603,3 +2603,54 @@ drop trigger if exists companies_uj_ceg_fifo on public.companies;
 create trigger companies_uj_ceg_fifo after insert on public.companies
   for each row execute function public.uj_ceg_fifo();
 -- F34b vége
+
+-- F29: valós idejű jelzés (2026-11-19, a felhasználó kérése). Ismételten futtatható, adatot nem töröl.
+-- Az adatbázis minden üzleti változáskor egy „változott valami" jelzést küld a cég privát Realtime-csatornájára
+-- (keszlet:<cég>), adat nélkül; a program erre a szokásos, jogosultság-ellenőrzött lekérdezéssel tölti újra az adatot.
+-- Tranzakciónként és cégenként egy jelzés. Ahol nincs Realtime (helyi PostgreSQL), nem csinál semmit; a jelzés
+-- hibája sosem akadályozza a mentést.
+create or replace function public.elo_jelzes()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_ceg uuid := case when tg_op = 'DELETE' then old.company_id else new.company_id end;
+begin
+  if v_ceg is null or to_regprocedure('realtime.send(jsonb,text,text,boolean)') is null then
+    return null;
+  end if;
+  if current_setting('keszlet.elo_' || replace(v_ceg::text, '-', ''), true) = '1' then
+    return null;
+  end if;
+  perform set_config('keszlet.elo_' || replace(v_ceg::text, '-', ''), '1', true);
+  begin
+    execute 'select realtime.send($1, $2, $3, true)'
+      using jsonb_build_object('tabla', tg_table_name), 'valtozas', 'keszlet:' || v_ceg::text;
+  exception when others then
+    null;
+  end;
+  return null;
+end;
+$$;
+revoke all on function public.elo_jelzes() from public, anon, authenticated;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['locations', 'products', 'purchase_lots', 'movements', 'daily_closings', 'pending_changes',
+                           'suppliers', 'customers', 'ledger_entries', 'recurring_ledger_entries', 'company_settings',
+                           'company_members'] loop
+    execute format('drop trigger if exists %I on public.%I', t || '_elo', t);
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function public.elo_jelzes()', t || '_elo', t);
+  end loop;
+  -- A jelzést csak a cég tagjai kapják (a privát csatornára feliratkozás a realtime.messages szabályán múlik).
+  if to_regclass('realtime.messages') is not null then
+    execute 'drop policy if exists "Készlet: a cég tagjai kapják a jelzést" on realtime.messages';
+    execute $p$create policy "Készlet: a cég tagjai kapják a jelzést" on realtime.messages
+      for select to authenticated using (
+        realtime.messages.extension = 'broadcast'
+        and public.ketlepcsos_rendben()
+        and exists (select 1 from public.company_members m where m.user_id = auth.uid() and 'keszlet:' || m.company_id::text = realtime.topic())
+      )$p$;
+  end if;
+end;
+$$;
+-- F29 vége

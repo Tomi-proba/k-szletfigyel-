@@ -7,6 +7,10 @@ import './kozos/dizajn-tokens.css'
 import './kozos/kozos.css'
 import App from './App.tsx'
 import { AuthProvider } from './hooks/useAuth.tsx'
+import { eloFrissitesBekotese } from './lib/eloKapcsolat'
+
+// Valós idejű frissítés (F29): a szerveres módban más felhasználók változásai újratöltés nélkül megjelennek.
+eloFrissitesBekotese()
 
 // HashRouter (not BrowserRouter): the app is served from a plain static
 // host and also loaded from a local file:// path in the desktop build,

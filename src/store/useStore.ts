@@ -6,7 +6,7 @@ import { consumeFifo, lotUnitCost, weightedAverageAfterReceipt } from '../lib/co
 import { hataridoNapbol, todayISO } from '../lib/dates'
 import { diffFields } from '../lib/audit'
 import { buildDailyClosingSummary } from '../lib/dailyClosing'
-import { fuggoMentesekBeszamitasa, integracioFrissitesLetoltese, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
+import { fetchBusinessData, fuggoMentesekBeszamitasa, integracioFrissitesLetoltese, mentesiTetel, valtozasokKiszamitasa, type BusinessSlices } from '../lib/remoteSync'
 import { mentesiSor } from '../lib/mentes'
 import { helyiTartosTarolo } from '../lib/tartosTarolo'
 import { computeDueRecurringOccurrences } from '../lib/ledger'
@@ -2539,6 +2539,34 @@ export async function integracioFrissites(): Promise<boolean> {
   // Közvetlen setState: ez letöltés, nem helyi módosítás, tehát nem megy vissza mentésként.
   useStore.setState((s) => ({ movements: csere(s.movements, movements), lots: csere(s.lots, lots) }))
   return true
+}
+
+/**
+ * F29: valós idejű frissítés - a szerver adatainak újratöltése egy „változott valami" jelzésre (lib/eloFrissites.ts).
+ * Csak akkor írja át a store-t, ha közben nem indult saját mentés (az még nincs a szerveren, és felülírnánk);
+ * ilyenkor a mentés utáni jelzés hozza a friss adatot. Közvetlen setState: letöltés, nem megy vissza mentésként.
+ */
+export async function eloAdatBetoltes(): Promise<void> {
+  const s = useStore.getState()
+  if (s.dataMode !== 'remote' || !s.remoteCompanyId) return
+  const ceg = s.remoteCompanyId
+  const slices = await fetchBusinessData(ceg, { naplot: s.remoteRole !== 'raktaros' })
+  if (mentesiSor.fuggoTetelek.length > 0 || useStore.getState().remoteCompanyId !== ceg) return
+  useStore.setState({
+    locations: slices.locations,
+    products: slices.products,
+    lots: slices.lots,
+    movements: slices.movements,
+    dailyClosings: slices.dailyClosings,
+    auditLog: slices.auditLog,
+    pendingChanges: slices.pendingChanges,
+    suppliers: slices.suppliers,
+    customers: slices.customers,
+    ledgerEntries: slices.ledgerEntries,
+    recurringLedgerEntries: slices.recurringLedgerEntries,
+    settings: slices.settings,
+    ledgerCategories: slices.ledgerCategories,
+  })
 }
 
 /** Igaz, amíg a módváltás miatt a helyi pillanatképet nem szabad írni (lásd a persist storage-ot). */

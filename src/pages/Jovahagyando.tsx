@@ -54,14 +54,14 @@ function varhatoAr(m: Movement, termek: Product | undefined): string | null {
 }
 
 /** A raktár válasza egy színes sávban: megjött (zöld), más mennyiség (sárga), nem jött meg (piros), még nem válaszolt (kék). */
-function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null }) {
+function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes, kesz = 'megjött' }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null; kesz?: string }) {
   const [fajta, Ikon, szoveg] =
     raktarSzerint === null
       ? (['var', Clock, 'A raktár még nem igazolta vissza'] as const)
       : raktarSzerint === 0
         ? (['nem', XCircle, 'A raktár szerint NEM jött meg'] as const)
         : raktarSzerint === vart
-          ? (['megjott', CheckCircle2, `A raktár visszaigazolta: megjött (${formatNumber(raktarSzerint)} ${egyseg})`] as const)
+          ? (['megjott', CheckCircle2, `A raktár visszaigazolta: ${kesz} (${formatNumber(raktarSzerint)} ${egyseg})`] as const)
           : (['elter', AlertTriangle, `A raktár szerint más mennyiség jött: ${formatNumber(raktarSzerint)} ${egyseg} (várt: ${formatNumber(vart)} ${egyseg})`] as const)
   return (
     <p className={`raktar-jelzes raktar-jelzes--${fajta}`} data-raktar-jelzes={fajta} role="status">
@@ -133,6 +133,8 @@ function Kartya({
   const szallito = useStore((s) => (szallitoId ? s.suppliers.find((x) => x.id === szallitoId) : undefined))
   const vevoAdat = useStore((s) => (m.customerId ? s.customers.find((x) => x.id === m.customerId) : undefined))
   const datumok = jovahagyandoDatumok(m, { szallito, vevo: vevoAdat, beszerzes, ma: todayISO() })
+  // A raktárosnak az iroda rendelésénél a várható beérkezés nagyban, külön sávban (a listában nem ismételjük).
+  const nagyBeerkezes = beszerzes && !veglegesit && raktarSzerint === null && Boolean(datumok[0]?.datum)
 
   const nyit = (mod: 'kevesebb' | 'nem') => {
     setHiba(null)
@@ -224,7 +226,7 @@ function Kartya({
       <p className="text-3xl font-bold tabular-nums" aria-label={`Mennyiség: ${formatNumber(vart)} ${egyseg}`}>
         {formatNumber(vart)} <span className="text-xl font-semibold">{egyseg}</span>
       </p>
-      {beszerzes && !veglegesit && raktarSzerint === null && datumok[0]?.datum && (
+      {nagyBeerkezes && (
         // A raktárosnak nagyban: mikorra várható az iroda által rendelt áru.
         <p className={`raktar-jelzes ${datumok[0].lejart ? 'raktar-jelzes--nem' : 'raktar-jelzes--var'}`} data-varhato-beerkezes>
           <CalendarClock size={26} aria-hidden="true" className="shrink-0" />
@@ -236,7 +238,7 @@ function Kartya({
         </p>
       )}
       <ul className="flex flex-col gap-0.5 text-sm" data-varhato-datumok aria-label="Várható dátumok">
-        {datumok.map((d) => (
+        {(nagyBeerkezes ? datumok.slice(1) : datumok).map((d) => (
           <li key={d.cim} className="flex flex-wrap items-baseline gap-x-1.5" data-datum={d.cim}>
             <CalendarClock size={15} aria-hidden="true" className="muted shrink-0 self-center" />
             <span className="muted">{d.cim}:</span>
@@ -271,7 +273,7 @@ function Kartya({
       )}
       {/* A raktár válasza egyértelmű színnel (a felhasználó kérése): zöld megjött, sárga eltér, piros nem, kék még vár. */}
       {(allapot === 'fo_irodara_var' || (allapot === 'raktarra_var' && vanRaktaros !== false)) && (
-        <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} />
+        <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} kesz={t.kesz === 'beérkezett' ? 'megjött' : t.kesz} />
       )}
       {allapot === 'elutasitva' && m.rejectReason && <p className="alert alert-danger text-sm">A fő iroda elutasította: {m.rejectReason}</p>}
 

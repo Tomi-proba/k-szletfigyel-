@@ -59,7 +59,7 @@ export function ZarasJovahagyas({ zaras, foIroda, onClose }: { zaras: DailyClosi
     <Modal title="Biztosan jóváhagyja a napi zárást?" onClose={onClose}>
       <div className="flex flex-col gap-3 text-sm" data-zaras-megerosites>
         <p>
-          {telephely}, {formatDate(zaras.date)}.
+          {telephely}, {formatDate(zaras.date)}
         </p>
         {elfogadhato.length > 0 && (
           <div>

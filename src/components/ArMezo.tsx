@@ -41,7 +41,7 @@ export function useArMezo(product: Product | undefined) {
 export function ArMezo({ product, mennyiseg, allapot }: { product: Product; mennyiseg?: number; allapot: ReturnType<typeof useArMezo> }) {
   const { szoveg, setAr, indok, setIndok, olcsobban, listaBrutto, brutto } = allapot
   return (
-    <div className="flex flex-col gap-1" data-ar-mezo>
+    <div className="mb-4 flex flex-col gap-1" data-ar-mezo>
       <label className="flex flex-col gap-1">
         <span className="font-medium">Mennyiért ment ki?</span>
         <span className="flex items-center gap-2">

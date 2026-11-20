@@ -7,7 +7,7 @@
 //    indoklással elutasítja. Az iroda és a tulajdonos a listát csak látja.
 //
 // A raktáros többnyire telefonról dolgozik: nagy, egyértelmű gombok, egyszerű szavak („Beérkezett”,
-// „Kevesebb jött”, „Nem érkezett meg”), egy koppintás a szokásos esetre. A gombok és kártyák a közös
+// „Eltérés van”, „Nem érkezett meg”), egy koppintás a szokásos esetre. A gombok és kártyák a közös
 // komponensekből vannak (src/kozos/kozos.css: .btn, .card, .badge).
 import { useMemo, useState } from 'react'
 import { Link } from '../keret/router'
@@ -55,15 +55,19 @@ function varhatoAr(m: Movement, termek: Product | undefined): string | null {
 }
 
 /** A raktár válasza egy színes sávban: megjött (zöld), más mennyiség (sárga), nem jött meg (piros), még nem válaszolt (kék). */
-function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes, kesz = 'megjött' }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null; kesz?: string }) {
+function RaktarJelzes({ raktarSzerint, vart, egyseg, megjegyzes, kesz = 'megjött', selejt }: { raktarSzerint: number | null; vart: number; egyseg: string; megjegyzes?: string | null; kesz?: string; selejt?: number }) {
   const [fajta, Ikon, szoveg] =
     raktarSzerint === null
       ? (['var', Clock, 'A raktár még nem igazolta vissza'] as const)
       : raktarSzerint === 0
         ? (['nem', XCircle, 'A raktár szerint NEM jött meg'] as const)
-        : raktarSzerint === vart
+        : raktarSzerint === vart && !selejt
           ? (['megjott', CheckCircle2, `A raktár visszaigazolta: ${kesz} (${formatNumber(raktarSzerint)} ${egyseg})`] as const)
-          : (['elter', AlertTriangle, `A raktár szerint más mennyiség jött: ${formatNumber(raktarSzerint)} ${egyseg} (várt: ${formatNumber(vart)} ${egyseg})`] as const)
+          : ([
+              'elter',
+              AlertTriangle,
+              `A raktár szerint ${raktarSzerint === vart ? `megjött: ${formatNumber(raktarSzerint)} ${egyseg}` : `más mennyiség jött: ${formatNumber(raktarSzerint)} ${egyseg} (várt: ${formatNumber(vart)} ${egyseg})`}${selejt ? `, ebből sérült / romlott: ${formatNumber(selejt)} ${egyseg} (elfogadáskor selejtként kimegy)` : ''}`,
+            ] as const)
   return (
     <p className={`raktar-jelzes raktar-jelzes--${fajta}`} data-raktar-jelzes={fajta} role="status">
       <Ikon size={22} aria-hidden="true" className="shrink-0" />
@@ -114,6 +118,7 @@ function Kartya({
   const raktarSzerint = m.raktarVisszaigazolva ? (m.raktarMennyiseg ?? m.quantity) : null
   const nyitva = panel?.id === m.id ? panel.mod : null
   const [mennyiseg, setMennyiseg] = useState('')
+  const [selejt, setSelejt] = useState('')
   const [megjegyzes, setMegjegyzes] = useState('')
   const [hiba, setHiba] = useState<string | null>(null)
   const [keszletHiany, setKeszletHiany] = useState(false)
@@ -135,6 +140,8 @@ function Kartya({
   const vevoAdat = useStore((s) => (m.customerId ? s.customers.find((x) => x.id === m.customerId) : undefined))
   const datumok = jovahagyandoDatumok(m, { szallito, vevo: vevoAdat, beszerzes, ma: todayISO() })
   // A raktárosnak az iroda rendelésénél a várható beérkezés nagyban, külön sávban (a listában nem ismételjük).
+  // Beérkezéskor a raktáros a sérült / romlott részt is megadhatja (a felhasználó kérése: „Eltérés van”).
+  const selejtMezo = !veglegesit && fajtaja(m) === 'beerkezes' && !egyLepesben
   const nagyBeerkezes = beszerzes && !veglegesit && raktarSzerint === null && Boolean(datumok[0]?.datum)
 
   const nyit = (mod: 'kevesebb' | 'nem') => {
@@ -142,6 +149,7 @@ function Kartya({
     setKeszletHiany(false)
     setMegjegyzes(mod === 'nem' && veglegesit && raktarSzerint === 0 ? (m.raktarMegjegyzes ?? '') : '')
     setMennyiseg(mod === 'kevesebb' ? String(raktarSzerint || vart) : '')
+    setSelejt('')
     setPanel(nyitva === mod ? null : { id: m.id, mod })
   }
 
@@ -155,11 +163,13 @@ function Kartya({
   }
 
   // 1. lépés: a raktár visszaigazolja, mi történt.
-  const visszaigazol = (q: number, note?: string, allowNegativeStock = false) => {
-    const r = confirm(m.id, { quantity: q, note }, { allowNegativeStock })
+  const visszaigazol = (q: number, note?: string, allowNegativeStock = false, serult = 0) => {
+    const r = confirm(m.id, { quantity: q, note, selejt: serult || undefined }, { allowNegativeStock })
     if (r.ok) {
       setPanel(null)
-      onKesz(`Elküldve a fő irodának: ${termek?.name ?? 'tétel'} – ${q === 0 ? t.nem.toLowerCase() : `${formatNumber(q)} ${egyseg} ${t.kesz}`}.`)
+      onKesz(
+        `Elküldve a fő irodának: ${termek?.name ?? 'tétel'} – ${q === 0 ? t.nem.toLowerCase() : `${formatNumber(q)} ${egyseg} ${t.kesz}`}${serult ? `, ebből sérült ${formatNumber(serult)} ${egyseg}` : ''}.`,
+      )
     } else hibaKiir(r)
   }
 
@@ -191,10 +201,15 @@ function Kartya({
   const kevesebbRogzites = () => {
     const q = Number(mennyiseg.replace(',', '.'))
     if (!Number.isFinite(q) || q <= 0) return setHiba(HIBA['invalid-quantity'])
-    if (!veglegesit && q >= vart) return setHiba(`Ez nem kevesebb a vártnál (${formatNumber(vart)} ${egyseg}). Ha minden megvan, nyomja meg: „${t.rendben}”.`)
-    if (q !== vart && !megjegyzes.trim()) return setHiba(HIBA['note-required'])
+    const s = selejtMezo && selejt.trim() ? Number(selejt.replace(',', '.')) : 0
+    if (!Number.isFinite(s) || s < 0) return setHiba(HIBA['invalid-quantity'])
+    if (s > q) return setHiba(`A sérült rész nem lehet több annál, ami jött (${formatNumber(q)} ${egyseg}).`)
+    if (!veglegesit && q > vart) return setHiba(`Ez több a vártnál (${formatNumber(vart)} ${egyseg}). Írja meg a megjegyzésben, és szóljon az irodának.`)
+    if (!veglegesit && q === vart && s === 0)
+      return setHiba(`Nincs eltérés: a várt mennyiség jött, és nincs sérült. Ha minden rendben, nyomja meg: „${t.rendben}”.`)
+    if ((q !== vart || s > 0) && !megjegyzes.trim()) return setHiba(HIBA['note-required'])
     if (veglegesit) elfogad(q, megjegyzes, keszletHiany)
-    else visszaigazol(q, megjegyzes, keszletHiany)
+    else visszaigazol(q, megjegyzes, keszletHiany, s)
   }
 
   const nemRogzites = () => {
@@ -274,7 +289,7 @@ function Kartya({
       )}
       {/* A raktár válasza egyértelmű színnel (a felhasználó kérése): zöld megjött, sárga eltér, piros nem, kék még vár. */}
       {(allapot === 'fo_irodara_var' || (allapot === 'raktarra_var' && vanRaktaros !== false)) && (
-        <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} kesz={t.kesz === 'beérkezett' ? 'megjött' : t.kesz} />
+        <RaktarJelzes raktarSzerint={raktarSzerint} vart={vart} egyseg={egyseg} megjegyzes={m.raktarMegjegyzes} kesz={t.kesz === 'beérkezett' ? 'megjött' : t.kesz} selejt={m.raktarSelejt} />
       )}
       {allapot === 'elutasitva' && m.rejectReason && <p className="alert alert-danger text-sm">A fő iroda elutasította: {m.rejectReason}</p>}
 
@@ -416,6 +431,25 @@ function Kartya({
               </span>
               <span id={`vart-${m.id}`} className="muted text-sm">
                 Várt mennyiség: {formatNumber(vart)} {egyseg}
+              </span>
+            </label>
+          )}
+          {nyitva === 'kevesebb' && selejtMezo && (
+            <label className="flex flex-col gap-1" data-selejt-mezo>
+              <span className="font-medium">Ebből sérült / romlott (selejt)</span>
+              <span className="flex items-center gap-2">
+                <input
+                  className="w-32 rounded-lg border border-[var(--szin-keret)] bg-[var(--szin-hatter)] px-3 py-3 text-2xl font-semibold tabular-nums"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={selejt}
+                  onChange={(e) => setSelejt(e.target.value)}
+                  aria-describedby={`selejt-${m.id}`}
+                />
+                <span className="text-lg">{egyseg}</span>
+              </span>
+              <span id={`selejt-${m.id}`} className="muted text-sm">
+                Ha minden ép, hagyja üresen. A sérült rész nem kerül a polcra: a fő iroda elfogadásakor selejtként kimegy.
               </span>
             </label>
           )}

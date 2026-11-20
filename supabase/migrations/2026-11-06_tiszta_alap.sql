@@ -2325,7 +2325,11 @@ grant execute on function public.integracio_konyvelo_nyitott() to authenticated;
 alter table public.movements
   add column if not exists raktar_visszaigazolva timestamptz,
   add column if not exists raktar_mennyiseg numeric,
-  add column if not exists raktar_megjegyzes text;
+  add column if not exists raktar_megjegyzes text,
+  -- Sérülten / romlottan érkezett rész a raktar_mennyiseg-en belül; a fő iroda elfogadásakor selejtként kimegy.
+  add column if not exists raktar_selejt numeric check (raktar_selejt is null or raktar_selejt >= 0),
+  -- A sérült áru reklamációja a szállítónál lezárva (a fő iroda teendője).
+  add column if not exists reklamacio_lezarva timestamptz;
 
 create or replace function public.mozgas_jovahagyas_vedelem()
 returns trigger language plpgsql set search_path = public as $$

@@ -268,6 +268,11 @@ export interface Movement extends SoftDeletable {
   raktarVisszaigazolva?: string
   raktarMennyiseg?: number
   raktarMegjegyzes?: string
+  /** Sérülten / romlottan érkezett mennyiség a raktarMennyiseg-en belül (csak bejövőnél). A fő iroda elfogadásakor a
+   * teljes mennyiség bevételeződik, ennyi pedig rögtön selejtként kimegy; a fő iroda reklamációs teendőt kap. */
+  raktarSelejt?: number
+  /** Mikor zárta le a fő iroda a sérült áru reklamációját a szállítónál. */
+  reklamacioLezarva?: string
 }
 
 export type MovementReason = 'normal' | 'leltar_hiany' | 'leltar_tobblet' | 'selejt'

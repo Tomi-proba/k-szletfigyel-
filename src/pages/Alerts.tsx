@@ -12,7 +12,7 @@ import { formatCurrency, formatDate, formatNumber } from '../lib/format'
 import { EgyIgazsagAllapot, EgyIgazsagLista } from '../components/EgyIgazsagLista'
 import type { EgyIgazsagSor } from '../lib/egyIgazsag'
 
-type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott' | 'hianyzo-zaras'
+type FilterKey = 'alacsony' | 'rendeles' | 'lassan' | 'athelyezes' | 'kifizetetlen' | 'fizetesi' | 'nyitott' | 'hianyzo-zaras' | 'reklamacio'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'alacsony', label: 'Alacsony készlet' },
@@ -23,6 +23,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'fizetesi', label: 'Fizetési kötelezettség' },
   { key: 'nyitott', label: 'Nyitott eladás' },
   { key: 'hianyzo-zaras', label: 'Hiányzó napi zárás' },
+  { key: 'reklamacio', label: 'Reklamáció' },
 ]
 
 const OPEN_SALE_STATUS_LABELS: Record<SaleStatus, string> = { pending: 'Kiadásra vár', shipping: 'Kiszállítás alatt', delivered: 'Kézbesítve/átadva' }
@@ -43,6 +44,9 @@ export function Alerts() {
   const setMovementPaid = useStore((s) => s.setMovementPaid)
   const setLotPaid = useStore((s) => s.setLotPaid)
   const setLedgerEntryPaid = useStore((s) => s.setLedgerEntryPaid)
+  const reklamacioLezarasa = useStore((s) => s.reklamacioLezarasa)
+  const termekek = useStore((s) => s.products)
+  const szallitok = useStore((s) => s.suppliers)
   // A Könyvelő által követett fizetés kézzel nem állítható (KK6).
   const allMovements = useStore((s) => s.movements)
   const allLots = useStore((s) => s.lots)
@@ -98,7 +102,8 @@ export function Alerts() {
     alerts.kintlevoseg.db +
     alerts.fizetendoRiaszt.db +
     alerts.openSales.length +
-    alerts.missingClosings.length
+    alerts.missingClosings.length +
+    alerts.reklamaciok.length
 
   return (
     <div>
@@ -363,6 +368,40 @@ export function Alerts() {
                     </div>
                   </Card>
                 ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(showAll || active === 'reklamacio') && (
+          <section data-reklamaciok>
+            <h2 className="mb-3 text-base font-semibold text-[var(--color-text)]">Reklamáció: sérülten érkezett áru</h2>
+            {alerts.reklamaciok.length === 0 ? (
+              <EmptyState>Nincs reklamálandó sérült áru.</EmptyState>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {alerts.reklamaciok.map((m) => {
+                  const p = termekek.find((x) => x.id === m.productId)
+                  const sz = szallitok.find((x) => x.id === (m.supplierId ?? p?.supplierId))
+                  return (
+                    <Card key={m.id} className="border-l-4 border-l-[var(--color-warning)]">
+                      <div className="font-semibold text-[var(--color-text)]">{p?.name ?? 'Törölt termék'}</div>
+                      <div className="mt-1 text-sm text-[var(--color-text-muted)]">
+                        {formatDate(m.date)} · {formatNumber(m.raktarSelejt ?? 0)} {p?.unit ?? 'db'} sérülten érkezett (selejtként kiment)
+                        {sz ? ` · Szállító: ${sz.name}` : ''}
+                        {m.raktarMegjegyzes ? ` · ${m.raktarMegjegyzes}` : ''}
+                      </div>
+                      <div className="mt-1 text-sm">Reklamálja a szállítónál (jóváírás vagy pótlás).</div>
+                      {!isReadOnlyViewer && (
+                        <div className="mt-2 flex justify-end">
+                          <Button variant="secondary" onClick={() => reklamacioLezarasa(m.id)}>
+                            <CheckCircle2 size={16} /> Reklamáltam, lezárom
+                          </Button>
+                        </div>
+                      )}
+                    </Card>
+                  )
+                })}
               </div>
             )}
           </section>

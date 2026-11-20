@@ -109,6 +109,12 @@ export function ApprovePurchaseOrderModal({ movement, onClose }: { movement: Mov
           ? `A raktár szerint ${movement.raktarMennyiseg ?? movement.quantity} ${product?.unit ?? ''} érkezett${movement.raktarMegjegyzes ? ` (${movement.raktarMegjegyzes})` : ''}.`
           : 'A raktár még nem igazolta vissza, mennyi érkezett. Csak akkor fogadja el, ha biztosan tudja.'}
       </p>
+      {movement.raktarSelejt ? (
+        <p className="alert alert-warning mb-3 text-sm" data-serult-reszlet>
+          Ebből sérült / romlott: {movement.raktarSelejt} {product?.unit ?? ''}. Elfogadáskor a teljes mennyiség bevételeződik (a számlán rajta van), a
+          sérült rész rögtön selejtként kimegy, és a Riasztások között reklamációs teendő lesz a szállító felé.
+        </p>
+      ) : null}
 
       {kellSzallito && (
         <Field label="Szállító">

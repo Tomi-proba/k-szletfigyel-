@@ -15,10 +15,10 @@ export const SZOVEG: Record<Fajta, { cim: string; rendben: string; kevesebb: str
   beerkezes: {
     cim: 'Beérkezésre vár',
     rendben: 'Beérkezett',
-    kevesebb: 'Kevesebb jött',
+    kevesebb: 'Eltérés van',
     nem: 'Nem érkezett meg',
-    kevesebbKerdes: 'Mennyi jött ténylegesen?',
-    okok: ['Hiányzott', 'Sérült', 'Más termék jött'],
+    kevesebbKerdes: 'Ennyi jött összesen',
+    okok: ['Hiányzott', 'Sérült / romlott volt', 'Más termék jött'],
     nemOkok: ['Nem jött meg', 'Visszaküldtük'],
     kesz: 'beérkezett',
   },

@@ -333,6 +333,7 @@ export function Layout() {
     alerts.kintlevoseg.db +
     alerts.fizetendoRiaszt.db +
     alerts.openSales.length +
+    alerts.reklamaciok.length +
     // Ami a bejelentkezett felhasználóra vár a jóváhagyásban (DOCUMENTATION.md 31. fejezet): raktárosnál a
     // visszaigazolandók és az elutasított bejelentései, a fő irodánál az elfogadandók.
     alerts.jovahagyasraVar.length +

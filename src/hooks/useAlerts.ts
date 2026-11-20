@@ -57,6 +57,8 @@ export interface AlertsData {
   jovahagyasraVar: Movement[]
   /** Az összes még el nem fogadott tétel (tájékoztatásul, szereptől függetlenül). */
   varakozoTetelek: Movement[]
+  /** Sérülten érkezett áru: a fő iroda reklamációs teendője a szállító felé, amíg le nem zárja (raktárosnál üres). */
+  reklamaciok: Movement[]
   /**
    * Egy igazság (TERV.md F19, KK10): ha a cégnek van Könyvelője, a fizetési kötelezettségek és a kintlévőség a
    * Könyvelő nyitott tételeiből és a Készlet három csoportba sorolt saját tételeiből; null, ha nincs Könyvelő
@@ -123,6 +125,9 @@ export function useAlerts(): AlertsData {
       vanRaktaros,
     }
     const varakozoTetelek = movements.filter(varakozo)
+    const reklamaciok = isWarehouseUser
+      ? []
+      : movements.filter((m) => m.type === 'in' && m.approvalStatus === 'approved' && !m.deletedAt && (m.raktarSelejt ?? 0) > 0 && !m.reklamacioLezarva)
     const jovahagyasraVar = movements.filter(
       (m) => teendoje(m, szerep) !== null || (isWarehouseUser && allapota(m) === 'elutasitva' && Boolean(m.raktarVisszaigazolva)),
     )
@@ -158,6 +163,7 @@ export function useAlerts(): AlertsData {
       missingClosings,
       jovahagyasraVar,
       varakozoTetelek,
+      reklamaciok,
     }
   }, [
     products,

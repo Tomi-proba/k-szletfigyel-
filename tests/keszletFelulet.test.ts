@@ -141,7 +141,7 @@ describe('jóváhagyási lista: szavak és szerepkörök', () => {
   const foIroda = { raktaros: false, foIroda: true, csakOlvas: false, helyi: false }
 
   it('egyszerű, a helyzethez illő feliratok', () => {
-    expect(SZOVEG[fajtaja(m({ integracioEsemenyId: 'e' }))]).toMatchObject({ rendben: 'Beérkezett', kevesebb: 'Kevesebb jött', nem: 'Nem érkezett meg' })
+    expect(SZOVEG[fajtaja(m({ integracioEsemenyId: 'e' }))]).toMatchObject({ rendben: 'Beérkezett', kevesebb: 'Eltérés van', nem: 'Nem érkezett meg' })
     expect(SZOVEG[fajtaja(m({ type: 'out', integracioEsemenyId: 'e' }))]).toMatchObject({ rendben: 'Kiadva', kevesebb: 'Kevesebb ment ki', nem: 'Nem ment ki' })
     expect(SZOVEG[fajtaja(m({ returnOfMovementId: 'o' }))].rendben).toBe('Visszajött')
     expect(SZOVEG[fajtaja(m({ type: 'out', returnOfMovementId: 'o' }))].rendben).toBe('Visszaküldve')

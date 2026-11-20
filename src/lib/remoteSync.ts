@@ -220,6 +220,8 @@ function movementFromRow(row: Record<string, unknown>): Movement {
     raktarVisszaigazolva: (row.raktar_visszaigazolva as string | null) ?? undefined,
     raktarMennyiseg: row.raktar_mennyiseg === null || row.raktar_mennyiseg === undefined ? undefined : Number(row.raktar_mennyiseg),
     raktarMegjegyzes: (row.raktar_megjegyzes as string | null) ?? undefined,
+    raktarSelejt: row.raktar_selejt === null || row.raktar_selejt === undefined ? undefined : Number(row.raktar_selejt),
+    reklamacioLezarva: (row.reklamacio_lezarva as string | null) ?? undefined,
   }
 }
 // Az integracio_* és a fizetes_konyvelobol mezőt csak az integrációs szolgáltatás írja: a böngésző nem küldi.
@@ -267,6 +269,9 @@ function movementToRow(companyId: string, m: Movement) {
     raktar_visszaigazolva: m.raktarVisszaigazolva ?? null,
     raktar_mennyiseg: m.raktarMennyiseg ?? null,
     raktar_megjegyzes: m.raktarMegjegyzes ?? null,
+    // Csak ha van: így a régebbi adatbázis (az oszlopok nélkül) is fogadja a többi mentést.
+    ...(m.raktarSelejt !== undefined ? { raktar_selejt: m.raktarSelejt } : {}),
+    ...(m.reklamacioLezarva !== undefined ? { reklamacio_lezarva: m.reklamacioLezarva } : {}),
   }
 }
 

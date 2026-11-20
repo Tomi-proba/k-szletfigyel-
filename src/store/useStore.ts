@@ -446,7 +446,10 @@ interface AppState {
   /** A raktáros közvetlen rögzítése helyett: jóváhagyásra váró bejelentés, a készlet nem változik. */
   createWarehouseReport: (input: WarehouseReportInput, opts?: { allowNegativeStock?: boolean }) => WarehouseReportResult
   /** A raktáros visszaigazolja egy irodától/Könyvelőből jött várakozó tétel tényleges mennyiségét. */
-  confirmByWarehouse: (id: string, input: { quantity: number; note?: string }, opts?: { allowNegativeStock?: boolean }) => ConfirmByWarehouseResult
+  /** selejt: bejövőnél a mennyiségen belül sérülten / romlottan érkezett rész (megjegyzés kötelező). */
+  confirmByWarehouse: (id: string, input: { quantity: number; note?: string; selejt?: number }, opts?: { allowNegativeStock?: boolean }) => ConfirmByWarehouseResult
+  /** A sérülten érkezett áru reklamációja a szállítónál kész (a fő iroda teendője lezárul). */
+  reklamacioLezarasa: (id: string) => { ok: boolean }
   /** A várakozó bejövő tétel szállítója (F28): csak a fő iroda adhatja meg vagy írhatja át. */
   setMovementSupplier: (id: string, supplierId: string | undefined) => { ok: boolean }
   /** A fő iroda elutasít egy várakozó tételt (bármelyik fajtát), indoklással. */
@@ -1570,6 +1573,22 @@ export const useStore = create<AppState>()(
               : []),
           ],
         }))
+        // Sérülten érkezett rész: bevételeztük (a számlán rajta van), és rögtön selejtként ki is megy; a reklamáció a
+        // fő iroda teendője (a Riasztások között, amíg le nem zárja).
+        const selejt = Math.min(movement.raktarSelejt ?? 0, finalQuantity)
+        if (selejt > 0) {
+          get().recordMovement(
+            {
+              productId: product.id,
+              type: 'out',
+              quantity: selejt,
+              date: movement.date,
+              ok: 'selejt',
+              note: `Sérülten érkezett (beérkezés: ${movement.date})${movement.raktarMegjegyzes ? ` - ${movement.raktarMegjegyzes}` : ''}`,
+            },
+            { allowNegativeStock: true },
+          )
+        }
         return { ok: true }
       },
 
@@ -1991,9 +2010,11 @@ export const useStore = create<AppState>()(
         if (movement.raktarVisszaigazolva) return { ok: false, reason: 'already-confirmed' }
         const { quantity } = input
         if (!Number.isFinite(quantity) || quantity < 0) return { ok: false, reason: 'invalid-quantity' }
+        const selejt = movement.type === 'in' && input.selejt ? input.selejt : 0
+        if (!Number.isFinite(selejt) || selejt < 0 || selejt > quantity) return { ok: false, reason: 'invalid-quantity' }
         const expected = movement.orderedQuantity ?? movement.quantity
         const trimmed = input.note?.trim() || undefined
-        if (quantity !== expected && !trimmed) return { ok: false, reason: 'note-required' }
+        if ((quantity !== expected || selejt > 0) && !trimmed) return { ok: false, reason: 'note-required' }
         const product = get().products.find((p) => p.id === movement.productId)
         if (movement.type === 'out' && quantity > 0 && product && !opts?.allowNegativeStock) {
           const szabad = szabadKeszlet(product, get().movements, movement.id)
@@ -2002,9 +2023,11 @@ export const useStore = create<AppState>()(
         const now = new Date().toISOString()
         const unit = product?.unit ?? 'db'
         const label = `${product?.name ?? 'Törölt termék'} (${quantity} ${unit})`
-        const mi = quantity === 0 ? 'nem történt meg' : `${quantity} ${unit}`
+        const mi = quantity === 0 ? 'nem történt meg' : `${quantity} ${unit}${selejt > 0 ? `, ebből sérült ${selejt} ${unit}` : ''}`
         set((state) => ({
-          movements: state.movements.map((m) => (m.id === id ? { ...m, raktarVisszaigazolva: now, raktarMennyiseg: quantity, raktarMegjegyzes: trimmed } : m)),
+          movements: state.movements.map((m) =>
+            m.id === id ? { ...m, raktarVisszaigazolva: now, raktarMennyiseg: quantity, raktarMegjegyzes: trimmed, raktarSelejt: selejt > 0 ? selejt : undefined } : m,
+          ),
           auditLog: [
             ...state.auditLog,
             auditEntry(
@@ -2015,6 +2038,19 @@ export const useStore = create<AppState>()(
               `A raktár visszaigazolta: ${mi}${quantity !== expected ? ` (várt: ${expected})` : ''}${trimmed ? ` - ${trimmed}` : ''}; a fő iroda elfogadására vár`,
             ),
           ],
+        }))
+        return { ok: true }
+      },
+
+      reklamacioLezarasa: (id) => {
+        const movement = get().movements.find((m) => m.id === id)
+        if (!movement || !movement.raktarSelejt || movement.reklamacioLezarva) return { ok: false }
+        if (!veglegesithet(get())) return { ok: false }
+        const product = get().products.find((p) => p.id === movement.productId)
+        const label = `${product?.name ?? 'Törölt termék'} (${movement.raktarSelejt} ${product?.unit ?? 'db'} sérült)`
+        set((state) => ({
+          movements: state.movements.map((m) => (m.id === id ? { ...m, reklamacioLezarva: new Date().toISOString() } : m)),
+          auditLog: [...state.auditLog, auditEntry('movement', id, label, 'update', `Reklamáció lezárva - ${label}`)],
         }))
         return { ok: true }
       },

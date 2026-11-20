@@ -12,6 +12,7 @@ import { kettosRogzites, raktarJovahagyasLathato, szabadKeszlet } from '../lib/r
 import { useVanRaktaros } from '../hooks/useVanRaktaros'
 import { ProductPicker } from './ProductPicker'
 import { SzallitoValaszto } from './SzallitoValaszto'
+import { ArMezo, useArMezo } from './ArMezo'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Button, Checkbox, Field, FieldGroup, Input, Select, Textarea } from './ui'
 
@@ -110,6 +111,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   const [kettos, setKettos] = useState<ReturnType<typeof kettosRogzites> | null>(null)
 
   const product = products.find((p) => p.id === productId) ?? null
+  // A raktáros eladásnál megadja, mennyiért ment ki (a felhasználó kérése).
+  const arMezo = useArMezo(product ?? undefined)
+  const raktarosEladas = isWarehouseUser && type === 'out' && !leltar && Boolean(product)
   const szabad = product ? szabadKeszlet(product, movements) : null
   const qtyNumber = Number(quantity.replace(',', '.'))
   const unitPriceNumber = unitPrice.trim() === '' ? undefined : Number(unitPrice.replace(',', '.'))
@@ -156,6 +160,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
   }
 
   function urit() {
+    arMezo.visszaallit()
     setPendingNegative(null)
     setSzabadHiany(null)
     setKettos(null)
@@ -227,6 +232,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
 
     if (isWarehouseUser) {
       // A raktáros bejelentést tesz: a készlet csak a fő iroda elfogadásakor változik.
+      const ar = raktarosEladas ? arMezo.ertek() : {}
+      if ('hiba' in ar) return setError(ar.hiba)
       const r = createWarehouseReport(
         {
           productId,
@@ -237,6 +244,7 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           ok: leltar ? ok : undefined,
           customerId: kiadasPartnernek ? customerId : undefined,
           isPaid: kiadasPartnernek ? (raktarFizetett ?? undefined) : undefined,
+          ...ar,
         },
         { allowNegativeStock },
       )
@@ -247,7 +255,9 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           ? 'Írja be a megjegyzésbe, mi történt (leltári eltérésnél és selejtnél kötelező).'
           : r.reason === 'invalid-reason'
             ? 'Ez az ok ehhez az irányhoz nem választható.'
-            : 'A bejelentés nem küldhető el.',
+            : r.reason === 'price-reason-required'
+              ? 'Olcsóbban ment ki, mint a termék ára: válassza ki, miért.'
+              : 'A bejelentés nem küldhető el.',
       )
       return
     }
@@ -644,6 +654,8 @@ export function MovementForm({ onDone, defaultProductId = null }: MovementFormPr
           </span>
         </Field>
       )}
+
+      {raktarosEladas && product && <ArMezo product={product} mennyiseg={qtyNumber > 0 ? qtyNumber : undefined} allapot={arMezo} />}
 
       {type === 'out' && isWarehouseUser && !leltar && (
         // A raktáros kiválasztja, ki vitte el az árut (F30): magánszemély (sima eladás) vagy a fő iroda által felvett

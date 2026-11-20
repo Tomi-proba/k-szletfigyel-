@@ -1,3 +1,4 @@
+import { arMegjegyzes, olcsobb } from '../lib/raktariAr'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { createId } from './id'
@@ -177,16 +178,20 @@ export interface WarehouseReportInput {
   customerId?: string
   /** Partnernek szóló eladásnál a raktáros jelzi, fizetett-e (F34); a fő iroda elfogadáskor felülírhatja. */
   isPaid?: boolean
+  /** Eladásnál: mennyiért ment ki egy egység, áfa nélkül (a felület a raktáros által beírt, áfás árból számolja). */
+  eladasiAr?: number
+  /** Ha a termék eladási áránál olcsóbban ment ki: miért (kötelező). */
+  arIndok?: string
 }
 
 export type WarehouseReportResult =
   | { ok: true; id: string }
-  | { ok: false; reason: 'invalid-quantity' | 'product-not-found' | 'invalid-reason' | 'insufficient-stock' | 'note-required'; available?: number }
+  | { ok: false; reason: 'invalid-quantity' | 'product-not-found' | 'invalid-reason' | 'insufficient-stock' | 'note-required' | 'price-reason-required'; available?: number }
 
 /** A raktár visszaigazolja egy várakozó tétel tényleges mennyiségét (0 = nem történt meg). */
 export type ConfirmByWarehouseResult =
   | { ok: true }
-  | { ok: false; reason: 'not-found' | 'not-pending' | 'already-confirmed' | 'invalid-quantity' | 'note-required' | 'insufficient-stock'; available?: number }
+  | { ok: false; reason: 'not-found' | 'not-pending' | 'already-confirmed' | 'invalid-quantity' | 'note-required' | 'insufficient-stock' | 'price-reason-required'; available?: number }
 
 export type RejectPendingResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' | 'reason-required' | 'forbidden' }
 
@@ -278,7 +283,7 @@ export interface CreatePendingSaleInput {
 
 export type ApproveSaleResult =
   | { ok: true }
-  | { ok: false; reason: 'not-found' | 'not-pending' | 'insufficient-stock' | 'forbidden'; resultingStock?: number }
+  | { ok: false; reason: 'not-found' | 'not-pending' | 'insufficient-stock' | 'forbidden' | 'invalid-price'; resultingStock?: number }
 
 export type RejectSaleResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pending' | 'forbidden' }
 
@@ -432,7 +437,8 @@ interface AppState {
   createPendingSalePrep: (input: CreatePendingSaleInput, opts?: { allowNegativeStock?: boolean }) => RecordMovementResult
   approveSalePrep: (
     id: string,
-    input?: { vatRatePercent?: number; isPaid?: boolean; invoiceNumber?: string; customerId?: string | null },
+    /** saleUnitPrice: az eladás ára egységenként, áfa nélkül; üresen a raktáros által megadott, különben a termék eladási ára. */
+    input?: { vatRatePercent?: number; isPaid?: boolean; invoiceNumber?: string; customerId?: string | null; saleUnitPrice?: number },
     opts?: { allowNegativeStock?: boolean },
   ) => ApproveSaleResult
   rejectSalePrep: (id: string, reason?: string) => RejectSaleResult
@@ -447,7 +453,7 @@ interface AppState {
   createWarehouseReport: (input: WarehouseReportInput, opts?: { allowNegativeStock?: boolean }) => WarehouseReportResult
   /** A raktáros visszaigazolja egy irodától/Könyvelőből jött várakozó tétel tényleges mennyiségét. */
   /** selejt: bejövőnél a mennyiségen belül sérülten / romlottan érkezett rész (megjegyzés kötelező). */
-  confirmByWarehouse: (id: string, input: { quantity: number; note?: string; selejt?: number }, opts?: { allowNegativeStock?: boolean }) => ConfirmByWarehouseResult
+  confirmByWarehouse: (id: string, input: { quantity: number; note?: string; selejt?: number; eladasiAr?: number; arIndok?: string }, opts?: { allowNegativeStock?: boolean }) => ConfirmByWarehouseResult
   /** A sérülten érkezett áru reklamációja a szállítónál kész (a fő iroda teendője lezárul). */
   reklamacioLezarasa: (id: string) => { ok: boolean }
   /** A várakozó bejövő tétel szállítója (F28): csak a fő iroda adhatja meg vagy írhatja át. */
@@ -1633,6 +1639,7 @@ export const useStore = create<AppState>()(
         if (!movement) return { ok: false, reason: 'not-found' }
         if (movement.type !== 'out' || movement.approvalStatus !== 'pending') return { ok: false, reason: 'not-pending' }
         if (!veglegesithet(get())) return { ok: false, reason: 'forbidden' }
+        if (input?.saleUnitPrice !== undefined && (!Number.isFinite(input.saleUnitPrice) || input.saleUnitPrice < 0)) return { ok: false, reason: 'invalid-price' }
         const product = get().products.find((p) => p.id === movement.productId)
         if (!product) return { ok: false, reason: 'not-found' }
 
@@ -1665,7 +1672,7 @@ export const useStore = create<AppState>()(
               ? {
                   ...m,
                   unitCost: movementUnitCost,
-                  saleUnitPrice: eladas ? product.salePrice : undefined,
+                  saleUnitPrice: eladas ? (input?.saleUnitPrice ?? m.saleUnitPrice ?? product.salePrice) : undefined,
                   customerId,
                   isPaid,
                   dueDate,
@@ -1945,12 +1952,16 @@ export const useStore = create<AppState>()(
         const { productId, type, quantity, date, note, ok: reason, customerId, isPaid } = input
         if (!Number.isFinite(quantity) || quantity <= 0) return { ok: false, reason: 'invalid-quantity' }
         const inventoryReason = reason && reason !== 'normal' ? reason : undefined
+        const eladasiAr = type === 'out' && !inventoryReason ? input.eladasiAr : undefined
+        if (eladasiAr !== undefined && (!Number.isFinite(eladasiAr) || eladasiAr < 0)) return { ok: false, reason: 'invalid-quantity' }
         if (inventoryReason && (inventoryReason === 'leltar_tobblet') !== (type === 'in')) return { ok: false, reason: 'invalid-reason' }
         const trimmed = note?.trim() || undefined
         // Leltári eltérésnél és selejtnél a fő irodának tudnia kell, mi történt.
         if (inventoryReason && !trimmed) return { ok: false, reason: 'note-required' }
         const product = get().products.find((p) => p.id === productId)
         if (!product) return { ok: false, reason: 'product-not-found' }
+        if (eladasiAr !== undefined && olcsobb(eladasiAr, product.salePrice) && !input.arIndok?.trim()) return { ok: false, reason: 'price-reason-required' }
+        const arSor = eladasiAr !== undefined ? arMegjegyzes(eladasiAr, product.salePrice, input.arIndok) : undefined
         if (type === 'out' && !opts?.allowNegativeStock) {
           const szabad = szabadKeszlet(product, get().movements)
           if (quantity > szabad + 1e-9) return { ok: false, reason: 'insufficient-stock', available: szabad }
@@ -1979,8 +1990,9 @@ export const useStore = create<AppState>()(
               type,
               quantity,
               orderedQuantity: type === 'in' ? quantity : undefined,
-              note: trimmed,
+              note: [trimmed, arSor].filter(Boolean).join(' · ') || undefined,
               createdAt: now,
+              saleUnitPrice: eladasiAr,
               customerId: type === 'out' && !inventoryReason ? customerId || undefined : undefined,
               isPaid: type === 'out' && !inventoryReason && customerId ? isPaid : undefined,
               ok: inventoryReason,
@@ -2016,6 +2028,11 @@ export const useStore = create<AppState>()(
         const trimmed = input.note?.trim() || undefined
         if ((quantity !== expected || selejt > 0) && !trimmed) return { ok: false, reason: 'note-required' }
         const product = get().products.find((p) => p.id === movement.productId)
+        const eladasiAr = movement.type === 'out' && !movement.ok && quantity > 0 ? input.eladasiAr : undefined
+        if (eladasiAr !== undefined && (!Number.isFinite(eladasiAr) || eladasiAr < 0)) return { ok: false, reason: 'invalid-quantity' }
+        if (eladasiAr !== undefined && product && olcsobb(eladasiAr, product.salePrice) && !input.arIndok?.trim()) return { ok: false, reason: 'price-reason-required' }
+        const arSor = eladasiAr !== undefined && product ? arMegjegyzes(eladasiAr, product.salePrice, input.arIndok) : undefined
+        const raktarMegj = [trimmed, arSor].filter(Boolean).join(' · ') || undefined
         if (movement.type === 'out' && quantity > 0 && product && !opts?.allowNegativeStock) {
           const szabad = szabadKeszlet(product, get().movements, movement.id)
           if (quantity > szabad + 1e-9) return { ok: false, reason: 'insufficient-stock', available: szabad }
@@ -2026,7 +2043,16 @@ export const useStore = create<AppState>()(
         const mi = quantity === 0 ? 'nem történt meg' : `${quantity} ${unit}${selejt > 0 ? `, ebből sérült ${selejt} ${unit}` : ''}`
         set((state) => ({
           movements: state.movements.map((m) =>
-            m.id === id ? { ...m, raktarVisszaigazolva: now, raktarMennyiseg: quantity, raktarMegjegyzes: trimmed, raktarSelejt: selejt > 0 ? selejt : undefined } : m,
+            m.id === id
+              ? {
+                  ...m,
+                  raktarVisszaigazolva: now,
+                  raktarMennyiseg: quantity,
+                  raktarMegjegyzes: raktarMegj,
+                  raktarSelejt: selejt > 0 ? selejt : undefined,
+                  ...(eladasiAr !== undefined ? { saleUnitPrice: eladasiAr } : {}),
+                }
+              : m,
           ),
           auditLog: [
             ...state.auditLog,

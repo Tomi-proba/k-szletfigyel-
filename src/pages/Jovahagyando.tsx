@@ -27,6 +27,7 @@ import { todayISO } from '../lib/dates'
 import { ApprovePurchaseOrderModal } from '../components/ApprovePurchaseOrderModal'
 import { ApproveSaleModal } from '../components/ApproveSaleModal'
 import { ResubmitSaleModal } from '../components/ResubmitSaleModal'
+import { ArMezo, useArMezo } from '../components/ArMezo'
 import { Modal } from '../components/Modal'
 
 const HIBA: Record<string, string> = {
@@ -41,6 +42,7 @@ const HIBA: Record<string, string> = {
   forbidden: 'Ezt csak a fő iroda fogadhatja el.',
   'not-integration': 'Ezt a tételt a megnyíló ablakban kell elfogadni.',
   'supplier-required': 'Adja meg a szállítót az elfogadás előtt.',
+  'price-reason-required': 'Olcsóbban ment ki, mint a termék ára: válassza ki, miért.',
 }
 
 type Panel = { id: string; mod: 'kevesebb' | 'nem' } | null
@@ -142,6 +144,10 @@ function Kartya({
   // A raktárosnak az iroda rendelésénél a várható beérkezés nagyban, külön sávban (a listában nem ismételjük).
   // Beérkezéskor a raktáros a sérült / romlott részt is megadhatja (a felhasználó kérése: „Eltérés van”).
   const selejtMezo = !veglegesit && fajtaja(m) === 'beerkezes' && !egyLepesben
+  // Kiadásnál a raktáros megadja, mennyiért ment ki (a felhasználó kérése); a Könyvelőből jött tételnél az ár a számláé.
+  const arKell = !veglegesit && fajtaja(m) === 'kiadas' && !m.ok && !egyLepesben && Boolean(termek)
+  const arMezo = useArMezo(termek)
+  const [biztosHiba, setBiztosHiba] = useState<string | null>(null)
   const nagyBeerkezes = beszerzes && !veglegesit && raktarSzerint === null && Boolean(datumok[0]?.datum)
 
   const nyit = (mod: 'kevesebb' | 'nem') => {
@@ -164,7 +170,12 @@ function Kartya({
 
   // 1. lépés: a raktár visszaigazolja, mi történt.
   const visszaigazol = (q: number, note?: string, allowNegativeStock = false, serult = 0) => {
-    const r = confirm(m.id, { quantity: q, note, selejt: serult || undefined }, { allowNegativeStock })
+    const ar = arKell && q > 0 ? arMezo.ertek() : {}
+    if ('hiba' in ar) {
+      setHiba(ar.hiba)
+      return
+    }
+    const r = confirm(m.id, { quantity: q, note, selejt: serult || undefined, ...ar }, { allowNegativeStock })
     if (r.ok) {
       setPanel(null)
       onKesz(
@@ -372,11 +383,23 @@ function Kartya({
                 {veglegesit ? `Elfogadom${raktarSzerint !== null ? ` (${formatNumber(raktarSzerint)} ${egyseg})` : ''}` : t.rendben}
               </button>
               {!veglegesit && biztos && (
-                <Modal title="Biztos benne?" onClose={() => setBiztos(false)}>
+                <Modal
+                  title="Biztos benne?"
+                  onClose={() => {
+                    setBiztos(false)
+                    setBiztosHiba(null)
+                  }}
+                >
                   <div className="flex flex-col gap-4" data-raktar-biztos>
                     <p className="text-lg font-semibold">
                       Biztosan {t.kesz}: {formatNumber(vart)} {egyseg} {termek?.name ?? ''}?
                     </p>
+                    {arKell && termek && <ArMezo product={termek} mennyiseg={vart} allapot={arMezo} />}
+                    {biztosHiba && (
+                      <p className="alert alert-danger text-sm" role="alert">
+                        {biztosHiba}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <button type="button" className="btn btn-big" onClick={() => setBiztos(false)}>
                         Mégse
@@ -386,6 +409,9 @@ function Kartya({
                         className="btn btn-success btn-big"
                         data-raktar-biztos-igen
                         onClick={() => {
+                          const ar = arKell ? arMezo.ertek() : {}
+                          if ('hiba' in ar) return setBiztosHiba(ar.hiba)
+                          setBiztosHiba(null)
                           setBiztos(false)
                           visszaigazol(vart)
                         }}
@@ -433,6 +459,9 @@ function Kartya({
                 Várt mennyiség: {formatNumber(vart)} {egyseg}
               </span>
             </label>
+          )}
+          {nyitva === 'kevesebb' && arKell && termek && (
+            <ArMezo product={termek} mennyiseg={Number(mennyiseg.replace(',', '.')) || undefined} allapot={arMezo} />
           )}
           {nyitva === 'kevesebb' && selejtMezo && (
             <label className="flex flex-col gap-1" data-selejt-mezo>

@@ -28,6 +28,9 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
   const [isPaid, setIsPaid] = useState(movement.isPaid ?? (customer?.paymentTermDays === undefined || customer.paymentTermDays === 0))
   const hatarido = !isPaid ? hataridoNapbol(movement.date, customer?.paymentTermDays) : undefined
   const [invoiceNumber, setInvoiceNumber] = useState(movement.invoiceNumber ?? '')
+  // Az eladás egységára áfa nélkül: a raktáros által megadott, különben a termék eladási ára; a fő iroda átírhatja.
+  const [egysegAr, setEgysegAr] = useState(String(movement.saleUnitPrice ?? product?.salePrice ?? 0))
+  const egysegArSzam = Number(egysegAr.replace(/\s/g, '').replace(',', '.'))
   const [rejectReason, setRejectReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pendingNegative, setPendingNegative] = useState<{ resultingStock: number } | null>(null)
@@ -42,9 +45,16 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
     if (vatRate.trim() !== '' && (!Number.isFinite(vatRateNumber) || (vatRateNumber ?? 0) < 0)) {
       return setError('Az áfakulcs nem lehet negatív.')
     }
+    if (eladas && (!Number.isFinite(egysegArSzam) || egysegArSzam < 0)) return setError('Adja meg az eladási egységárat.')
     const result = approveSalePrep(
       movement.id,
-      { vatRatePercent: vatRateNumber, isPaid: vevoId ? isPaid : undefined, invoiceNumber, customerId: vevoId || null },
+      {
+        vatRatePercent: vatRateNumber,
+        isPaid: vevoId ? isPaid : undefined,
+        invoiceNumber,
+        customerId: vevoId || null,
+        saleUnitPrice: eladas ? egysegArSzam : undefined,
+      },
       { allowNegativeStock },
     )
     if (result.ok) return onClose()
@@ -69,7 +79,7 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
         <div className="font-medium text-[var(--color-text)]">{product?.name ?? 'Törölt termék'}</div>
         <div className="text-xs text-[var(--color-text-muted)]">
           Mennyiség: {formatNumber(movement.quantity)} {product?.unit}
-          {eladas && <> · Eladási ár: {formatCurrency(product?.salePrice ?? 0)}</>}
+          {eladas && <> · A termék eladási ára: {formatCurrency(product?.salePrice ?? 0)} (áfa nélkül)</>}
           {okFelirat && <> · {okFelirat}</>}
           {movement.customerId && <> · A raktár szerint: {customers.find((c) => c.id === movement.customerId)?.name ?? 'törölt vevő'}</>}
         </div>
@@ -81,6 +91,19 @@ export function ApproveSaleModal({ movement, onClose }: { movement: Movement; on
         <>
           {eladas && (
             <>
+              <Field label={`Eladási egységár (Ft / ${product?.unit ?? 'db'}, áfa nélkül)`}>
+                <Input inputMode="decimal" value={egysegAr} onChange={(e) => setEgysegAr(e.target.value)} data-eladasi-ar />
+                {movement.saleUnitPrice !== undefined && (
+                  <span className="mt-1 block text-xs text-[var(--color-text-muted)]">A raktáros szerint: {formatCurrency(movement.saleUnitPrice)} / {product?.unit} (áfa nélkül).</span>
+                )}
+                {product && Number.isFinite(egysegArSzam) && egysegArSzam < product.salePrice - 0.01 && (
+                  <span className="mt-1 block text-sm font-semibold text-[var(--color-danger)]" data-olcsobb-jelzes>
+                    Olcsóbb a termék áránál ({formatCurrency(product.salePrice)}): {formatCurrency(product.salePrice - egysegArSzam)} / {product.unit} engedmény,
+                    összesen {formatCurrency((product.salePrice - egysegArSzam) * movement.quantity)}.
+                  </span>
+                )}
+              </Field>
+
               <Field label="Áfakulcs (%, opcionális)">
                 <Input inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="pl. 27" />
               </Field>
